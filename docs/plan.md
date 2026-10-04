@@ -1,10 +1,10 @@
-# Plan: Deep Work philosophy in aiwa
+# Plan: Deep Work philosophy in proki
 
-> 2026-09-28: aiwa is used through the tray app; `aiwa` alone starts it. The CLI
+> 2026-09-28: proki is used through the tray app; `proki` alone starts it. The CLI
 > subcommands remain as developer tools. A GUI comes only after all features.
 
 ## Context
-aiwa (`~/Documents/aiwa`) is a tray daemon: every 60 s it reads window events from
+proki (`~/Documents/proki`) is a tray daemon: every 60 s it reads window events from
 ActivityWatch, runs rules, and nudges through a rate-limiting policy. Today it has one rule
 (fragmentation), ignores AFK, and has no notion of deep vs. shallow work, sessions, plans or
 goals. `docs/deep-work.md` lists 35 Deep Work ideas to integrate. This plan turns them into
@@ -21,16 +21,16 @@ phased, shippable steps that use only what ActivityWatch and openjev can actuall
   if the user opts in).
 - Anything needing text generation (weekly summaries) uses templates for now.
 
-## Architecture changes (all in `src/core/` unless noted)
+## Architecture changes (all in `proki/core/` unless noted)
 | New module | Purpose | Reuses |
 |---|---|---|
 | `timeline.py` | Merge window + AFK + web (+ editor) buckets into `Segment(start, end, app, title, url, category, away)` | `collector.py` (extend `Collector` to read AFK/web buckets; keep the allowlist → `(untracked)` masking) |
-| `categories.py` | User rules (app/title/url regex → `deep` / `shallow` / `distraction` / `neutral`); unknown activities are rated once and cached | `config.py` `TrackRule` pattern |
+| `categories.py` | User rules (app/title/url regex → `deep` / `shallow` / `distraction` / `neutral`); unknown activities are rated once and cached | `legacy/config.py` `TrackRule` pattern |
 | `sessions.py` | Focus sessions (duration, allowed categories, goal, mode: normal / sprint / grand-gesture) and day-plan blocks (deep / shallow / collab / distraction-window) | `store.py` |
 | `metrics.py` | Focus intensity of a moment, measured over sliding windows of several sizes (working set, hit rate, deep share; see "Focus metric" below); deep hours built from it; hours per goal | — |
 | `decider.py` | `Decider` protocol: `decide(summary) -> (interrupt_p, nudge)`. Implementations: `RulesDecider` (default) and `OpenjevDecider` (optional) | `policy.py` calls it after a rule fires |
-| `rules/*.py` | One file per pattern (see phases) | `analyzer.py` `Rule` protocol, `rules/fragmentation.py` as the template |
-| `ui/*.py` | Scoreboard in tray; popups: plan day, start session, rate activity, shutdown, weekly review | `ui/popup.py`, `ui/tray.py`, `ui/inbox.py` |
+| `legacy/rules/*.py` | One file per pattern (see phases) | `analyzer.py` `Rule` protocol, `legacy/rules/fragmentation.py` as the template |
+| `legacy/ui/*.py` | Scoreboard in tray; popups: plan day, start session, rate activity, shutdown, weekly review | `legacy/ui/popup.py`, `legacy/ui/tray.py`, `legacy/ui/inbox.py` |
 
 Rules change from `check(events, now)` to `check(ctx, now)`, where `ctx` bundles the timeline,
 the active session/plan block and metrics. The policy gains: never nudge while away, no
@@ -46,7 +46,7 @@ Store: new tables `categories`, `sessions`, `plan_blocks`, `goals`, `daily_score
 - Categories + one-time rating of unknown activities: a popup asks "deep / shallow /
   distraction?" and shows openjev's guess (`choice`) if enabled. [App categories, Deep vs.
   shallow, Measure the depth of each activity]
-- `aiwa check` prints the timeline with categories.
+- `proki check` prints the timeline with categories.
 
 **Phase 0.5: Classification loop** (decided 2026-09-28)
 - Classification table keyed by **domain** for browsers (never the full URL), by app otherwise:
@@ -60,7 +60,7 @@ Store: new tables `categories`, `sessions`, `plan_blocks`, `goals`, `daily_score
 - Privacy note: with openjev on, every new tracked domain is sent (domain only).
 
 **Phase 1: Measure (scoreboard)**
-- Focus metric (below) in `metrics.py`, `aiwa focus` to inspect it on real data.
+- Focus metric (below) in `metrics.py`, `proki focus` to inspect it on real data.
 - Deep hours = time where 10-min focus intensity ≥ threshold; in the tray; daily score in
   `daily_scores`. [Quality = time × intensity, 4DX 2 lead measures, 4DX 3 scoreboard]
 - Report: top activities by deep hours. [Law of the vital few]
@@ -117,20 +117,20 @@ Deep work still involves switching, but within a small set of related items (a
 **Docs only:** deep work hypothesis, memory training, making senders do more work, not responding to everything.
 
 ## Critical files
-- Modify: `src/core/collector.py`, `core/analyzer.py`, `core/policy.py`, `core/store.py`,
-  `rules/__init__.py`, `config.py`, `app.py`, `cli.py`, `ui/tray.py`, `ui/popup.py`
-- New: `core/timeline.py`, `categories.py`, `sessions.py`, `metrics.py`, `decider.py`,
-  `rules/interruptions.py`, `rules/lull.py`, `ui/plan.py`, `ui/review.py`
+- Modify: `proki/legacy/collector.py`, `legacy/core/analyzer.py`, `legacy/core/policy.py`, `legacy/core/store.py`,
+  `legacy/rules/__init__.py`, `legacy/config.py`, `legacy/app.py`, `legacy/cli.py`, `legacy/ui/tray.py`, `legacy/ui/popup.py`
+- New: `legacy/core/timeline.py`, `categories.py`, `sessions.py`, `metrics.py`, `decider.py`,
+  `legacy/rules/interruptions.py`, `legacy/rules/lull.py`, `legacy/ui/plan.py`, `legacy/ui/review.py`
 - Track progress in `docs/deep-work.md` (update the checkboxes per phase).
 
 ## Verification
 - Unit tests per module with synthetic timelines (`tests/`), extending `tests/test_core.py`
   style; openjev mocked (no network in tests).
-- `aiwa check`: prints timeline, categories, metrics and findings on real ActivityWatch data.
-- New `aiwa replay --date YYYY-MM-DD`: replays a real day and lists the nudges that *would*
+- `proki check`: prints timeline, categories, metrics and findings on real ActivityWatch data.
+- New `proki replay --date YYYY-MM-DD`: replays a real day and lists the nudges that *would*
   have fired, to tune thresholds without being interrupted.
 - `scripts/try_openjev.py`-style smoke test for `OpenjevDecider`.
-- Manual: run `uv run aiwa start`, walk through each new popup on macOS.
+- Manual: run `uv run proki start`, walk through each new popup on macOS.
 
 
 ## Decisions 2026-09-28: focus sessions
@@ -141,7 +141,7 @@ Deep work still involves switching, but within a small set of related items (a
   then pokes every minute if they keep going.
 - 50 min+: "time to wrap up", repeated every 2 min until stopped.
 - Away 5 min during a session: alarm sound, every minute until back.
-- Away 10 min (or the Mac asleep / aiwa not running that long): the session ends by
+- Away 10 min (or the Mac asleep / proki not running that long): the session ends by
   itself, as of when the user left (added after a session ran overnight).
 - The global "one nudge per 20 min" and "never while away" rules were Claude's
   defaults, not the user's; sessions ignore them. Non-session nudges (fragmentation,
@@ -149,7 +149,7 @@ Deep work still involves switching, but within a small set of related items (a
 
 **Later:**
 - "Low focus" as a **personal quantile** of the user's own history instead of a
-  fixed 0.35, so the bar rises as their focus capacity improves (`core/session.py`
+  fixed 0.35, so the bar rises as their focus capacity improves (`legacy/core/session.py`
   `LowFocus` is the swap point).
 - A **full-screen mascot** instead of the popup, so continuing with a distraction
   isn't possible. Popups first, to test the behaviour.
@@ -159,11 +159,11 @@ Deep work still involves switching, but within a small set of related items (a
 - **Depth philosophies are configuration, not labels.** All four stay on the list;
   **rhythmic** is built first (daily block + chain, done).
 - **Evening prompt changes:** instead of "plan tomorrow" (time, task, warm-up), ask
-  **"What needs to be done tomorrow?"**; the user lists things freely and aiwa turns
+  **"What needs to be done tomorrow?"**; the user lists things freely and proki turns
   them into tasks in **its own to-do list**. The block time comes from the rhythm settings.
 - **No warm-up reminder** before the block (to be removed from the current version).
 - **Tasks come up when a session starts**, one at a time: finish one, get the next.
-- **Planning service** (`core/planning.py`, one interface): turn free text into tasks,
+- **Planning service** (`legacy/core/planning.py`, one interface): turn free text into tasks,
   break big tasks into small steps, pick the next task. A rule-based version first;
   an AI version later.
 - **AI integration later:** a text-generating model (now Google Gemini 3.5 Flash, 2026-09-29; NVIDIA's hosted models were unresponsive) for
@@ -220,7 +220,7 @@ Build order: morning start → routine questions → offline tasks → consisten
   computer?". When a task is handed over in a session, the popup offers "Start offline" /
   "At the computer" (offline first when openjev thinks so); the answer is stored on the
   task. Away on an offline task: no alarm, no auto-end (also across laptop sleep); back →
-  the time is recorded as deep minutes ("Offline" in the scoreboard) and aiwa asks whether
+  the time is recorded as deep minutes ("Offline" in the scoreboard) and proki asks whether
   the task is done; no "what was that?" question for that absence. Away longer than the
   estimate + 30 min → only the estimate is credited and the normal away rules apply.
   Absences answered "offline work" outside a session: only recorded, as an insight to
@@ -242,7 +242,7 @@ Build order: morning start → routine questions → offline tasks → consisten
 ## Decisions 2026-09-29: capture instead of focus nudges
 - **No focus nudges outside sessions.** The daily quota is the pressure; outside sessions
   the user isn't pushed to stay focused. The parked fragmentation/bouncing rules stay off.
-- **Capture:** outside sessions, aiwa asks "anything worth noting?":
+- **Capture:** outside sessions, proki asks "anything worth noting?":
   - on a shallow app/site (email, chat) after 15 s, once per visit (switching away and
     back is a new visit);
   - after 5 min in distraction (feeds, video; any mix of them; a break of 1+ min ends the
@@ -275,7 +275,7 @@ Build order: morning start → routine questions → offline tasks → consisten
     absences longer than 3 hours (the user stops interacting with the computer), after
     5+ days of data.
   - A session ended by the user within 30 min of the off time → "wrap up the day?"
-  - Wrap-up missed on 3+ of the last 5 workdays (aiwa running) → in the 20 min before the
+  - Wrap-up missed on 3+ of the last 5 workdays (proki running) → in the 20 min before the
     off time, offer a daily wrap-up alarm (off time − 15 or − 30 min; at most weekly).
     The alarm rings (after any session) until the offer is answered.
 - Steps: each of today's unreviewed notes (Make it a task / Keep as note) → "Wrap up
@@ -335,7 +335,7 @@ Build order: morning start → routine questions → offline tasks → consisten
 - "Around 12:30 is usually time for a meal. Time for it now?" → Going now / Later /
   Skip today (Going now and Skip today: no more reminders for it today).
 
-## Decisions 2026-09-29: rules as one abstraction (`rules/`)
+## Decisions 2026-09-29: rules as one abstraction (`legacy/rules/`)
 - A rule = a quantity (`measure(context)`) against a **threshold**, with a **softness**
   (width of the S-curve; 0 = hard), a **direction** (above/below), a **range** (where
   it's active at all; `active(context)` for conditions beyond the quantity), and
@@ -353,7 +353,7 @@ Build order: morning start → routine questions → offline tasks → consisten
   - routine reminders: share of past days already started, threshold 0.5, softness 0.2;
   - capture: time on a shallow visit ≥ 15 s, in distraction ≥ 5 min (hard);
   - thinking-walk suggestion: session deep minutes, threshold 35, softness 8, from 25.
-- Layout: `rules/base.py` (the abstraction) and one module per rule in `rules/`;
+- Layout: `legacy/rules/base.py` (the abstraction) and one module per rule in `legacy/rules/`;
   the feature modules keep their params and use the rules (never the other way round).
 - Still plain hard checks inside the session state machine: away alarm (5 min), auto-end
   (10 min), wrap-up (50 min), and the offline grace.
@@ -364,7 +364,7 @@ Build order: morning start → routine questions → offline tasks → consisten
   descriptions). Update before wider sharing.
 - Windows polish: closing tabs/windows from "Did you finish…?" (currently "close it
   yourself"); default tracked apps with Windows program names.
-- Waiting for data (in the aiwa task list, due 2026-10-13): personal low-focus
+- Waiting for data (in the proki task list, due 2026-10-13): personal low-focus
   threshold (quantile of the user's 2-min scores); calibration report in the tray (20+
   ratings).
 
@@ -377,7 +377,7 @@ Build order: morning start → routine questions → offline tasks → consisten
   email 0.19. Sharper once the kind layer gives openjev the site's kind.
 
 ## Decisions 2026-09-29: site kinds (the user's taxonomy idea)
-- Two layers: **kind** (what it is: video streaming, email, IDE…, `core/kinds.py`, 26
+- Two layers: **kind** (what it is: video streaming, email, IDE…, `legacy/core/kinds.py`, 26
   kinds in 5 groups + "Something else") and **category** (how it counts). Each kind has
   a default category; one site can count differently.
 - openjev picks the kind from the fixed list (tested on 20 real sites: 19 right at
@@ -399,7 +399,7 @@ Build order: morning start → routine questions → offline tasks → consisten
   min, auto-end 45 min); at the end "what did you get done?" → a note.
 
 ## Decisions 2026-09-29: kinds at work, reports, sprint, hub-and-spoke
-- **Watching is not away** (`core/interpret.py`, in `prepare`): away time right after a
+- **Watching is not away** (`legacy/core/interpret.py`, in `prepare`): away time right after a
   video-streaming or video-call site counts as time on that site, with its category, up
   to 3 h. Affects the scoreboard, shallow budget, absences, session away alarm.
 - **Tools** (new kind group: search engine, AI assistant) take the category of the work
@@ -415,7 +415,7 @@ Build order: morning start → routine questions → offline tasks → consisten
 - Depth philosophies other than rhythmic: not now.
 
 ## Decisions 2026-09-30: craftsman check (testing the idea)
-- **Which windows serve which goal is learned** (the user's design, `core/association.py`):
+- **Which windows serve which goal is learned** (the user's design, `legacy/core/association.py`):
   pairs (T, W) over the last 4 weeks; T = the active task's goal group (the session's
   group), or "open" without an active task; W = the window (domain/app). Minutes per
   pair; open minutes weigh 0.25 (task time says more). lift = P(W | T) / P(W); rule
@@ -445,17 +445,17 @@ Build order: morning start → routine questions → offline tasks → consisten
   *counts* (intensity), not presence.
 - "Be lazy": late work after the shutdown, counted and shown in the weekly review only.
 - Proposed, not decided: the task list (scheduling, dependencies, blockers), calendar
-  (read-only; aiwa as an MCP server), protected time slots, earned breaks.
+  (read-only; proki as an MCP server), protected time slots, earned breaks.
 
 ## Decisions 2026-10-01: decision pipelines, input, tasks, adapters
-- **Pipelines** (`rules/pipeline.py`): numbered levels of atomic rules that vote; a
+- **Pipelines** (`legacy/rules/pipeline.py`): numbered levels of atomic rules that vote; a
   level approves with a majority by default (or a given number, e.g. all); level n+1
   only votes if level n approved; the action runs when all levels approve. Levels have
   no semantics yet, just numbers. Rules read named **signals**; `Signal` is the generic
   rule on one signal (threshold / softness / direction / range): rules as data, the
   start of a config-defined system ("a minimal compiler").
 - First pipeline: suggest a session when focus builds up outside one
-  (`rules/suggest_session.py`): level 1 (all): not in session, not after shutdown,
+  (`legacy/rules/suggest_session.py`): level 1 (all): not in session, not after shutdown,
   no popup, ≥ 45 min (±10) since the last suggestion; level 2 (majority): 2-min focus
   rose ≥ 0.15 (±0.05) over 2 min, 5-min focus ≥ 0.5 (±0.1), on a deep site/app.
   Checked once a minute.
@@ -465,7 +465,7 @@ Build order: morning start → routine questions → offline tasks → consisten
 - Tasks: use **taskchampion-py** (Taskwarrior's engine) for dependencies, waiting,
   scheduling.
 - **Creating vs. consuming** (the user's idea): aw-watcher-input (bundled with the
-  ActivityWatch app; started by aiwa when found) counts key presses and clicks every 5 s
+  ActivityWatch app; started by proki when found) counts key presses and clicks every 5 s
   (counts only). Input actions/min = presses / 2 (down and up are both counted) + clicks.
   Depth weight × mode: creating 1, consuming 0.8, soft in between (rule: 50% creating at
   10 actions/min, softness 4). No input data → as before. Ranking: creating > consuming

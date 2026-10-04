@@ -1,4 +1,4 @@
-"""Direction check of aiwa's focus metric on the public SWELL-KW dataset.
+"""Direction check of proki's focus metric on the public SWELL-KW dataset.
 
 SWELL-KW (Koldijk et al., ICMI 2014; DANS, doi:10.17026/dans-x55-69zp, CC BY-NC-SA 4.0):
 25 people did office work (reports, presentations, research) in three conditions:
@@ -24,9 +24,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from aiwa.core.events import Category, Segment
-from aiwa.core.focus import FocusParams, moment
-from aiwa.core.timeline import merge
+from proki.core.events import Category, Segment
+from proki.core.focus import FocusParams, moment
+from proki.core.timeline import merge
 
 LAB_TIME = ZoneInfo("Europe/Amsterdam")  # the experiment ran in the Netherlands
 AWAY_AFTER = timedelta(minutes=3)  # like ActivityWatch: no input for 3 min → away

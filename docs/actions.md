@@ -1,7 +1,7 @@
-# Actions in aiwa today, and how to generalize them
+# Actions in proki today, and how to generalize them
 
 A survey of every prompt, alarm and side effect (2026-10-01): ~60 call sites in 15
-modules. The goal: one action model that the `.aiwa` definition file can describe.
+modules. The goal: one action model that the `.proki` definition file can describe.
 
 ## 1. What triggers an action
 
@@ -67,7 +67,7 @@ ACTION <name>(
 - **options** map to built-in effects (section 3) or to another `ACTION` (follow-ups), so a
   dialog is a small graph of actions.
 - **flows stay in Python** at first (sessions, morning, bedtime, shutdown ritual, sprint):
-  they emit named events; the `.aiwa` file decides the message, options and alarm for each.
+  they emit named events; the `.proki` file decides the message, options and alarm for each.
 - **background steps** (openjev) become an effect that runs and then picks the next action by
   its result, e.g. `classify_todo(text) -> (yes: offer_task, no: none)`.
 

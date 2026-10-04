@@ -1,6 +1,6 @@
-# Deep Work → aiwa
+# Deep Work → proki
 
-Every idea from Cal Newport's *Deep Work*, with a first idea for how aiwa could
+Every idea from Cal Newport's *Deep Work*, with a first idea for how proki could
 support it. We design and build these one at a time; each `→` line is a
 starting point to refine, not a decision.
 
@@ -77,7 +77,7 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
   → after a long session, suggest a walk with one problem to think about; ask for the result afterwards
   *(built 2026-09-29: thinking walk after good sessions or from the tray; counts as offline deep work; the outcome is kept as a note)*
 - [ ] **Memory training**
-  → out of scope for aiwa; mention in docs only
+  → out of scope for proki; mention in docs only
 
 ## Rule 3: Quit social media
 
@@ -87,7 +87,7 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
   → show which few activities produce most of the deep hours
   *(built 2026-09-29: "Most deep hours" in the weekly review: top 3 deep sites/apps)*
 - [x] **30-day test**
-  → user picks a service to quit for 30 days; aiwa tracks slips and asks the two questions at the end
+  → user picks a service to quit for 30 days; proki tracks slips and asks the two questions at the end
   *(built 2026-09-29: tray → 30-day test…; slips = 10 s on it per visit, reminder with Close it; Newport's two questions on day 30; two noes → quit for good)*
 - [ ] **Don't use the internet to entertain yourself**
   → evening/weekend report of entertainment browsing; optional planned-leisure prompt
@@ -107,7 +107,7 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
 - [ ] **Become hard to reach**
   → batch Slack/mail into scheduled windows; small-task inbox collects what comes up in between
 - [ ] **Make senders do more work / process-centric email**
-  → out of aiwa's reach (no email access); tips in docs only
+  → out of proki's reach (no email access); tips in docs only
 - [ ] **Don't respond to everything**
   → out of scope; docs only
 

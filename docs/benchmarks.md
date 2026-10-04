@@ -2,7 +2,7 @@
 
 ## SWELL-KW direction check (2026-09-28)
 
-**Question:** does aiwa's focus intensity drop when people are interrupted?
+**Question:** does proki's focus intensity drop when people are interrupted?
 
 **Data:** [SWELL-KW](https://ssh.datastations.nl/dataset.xhtml?persistentId=doi:10.17026/dans-x55-69zp)
 (Koldijk et al., ICMI 2014; CC BY-NC-SA 4.0, not redistributed here). 25 people
@@ -10,7 +10,7 @@ did office work (reports, presentations, research) under three conditions,
 every minute labelled: **N** normal, **I** email interruptions, **T** time pressure.
 
 **Method** (`benchmarks/swell_kw.py`): the raw uLog computer logs are turned
-into aiwa segments like ActivityWatch would record them (focused app changes
+into proki segments like ActivityWatch would record them (focused app changes
 only on window activation; 3 min without input = away). Word, PowerPoint and
 Internet Explorer count as deep, Outlook as shallow, everything else neutral.
 Every labelled minute whose whole window lies in one condition is scored with
