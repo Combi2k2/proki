@@ -1,7 +1,7 @@
 [project]
-name = "aiwa"
+name = "proki"
 version = "0.1.0"
-description = "AI watcher: watches how you work and nudges you at the right moment."
+description = "procrastination killer: watches how you work and nudges you at the right moment."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,10 +9,11 @@ dependencies = [
     "python-dotenv>=1",
     "requests>=2.31",
     "PySide6>=6.6",
+    "numpy>=2.4.6",
 ]
 
 [project.scripts]
-aiwa = "aiwa.cli:main"
+proki = "proki.legacy.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
@@ -22,15 +23,27 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# the code lives in src/ and is imported as `aiwa` (tests/test_packaging.py checks this list)
-package-dir = {"aiwa" = "src"}
+# tests/test_packaging.py checks this list
 packages = [
-    "aiwa", "aiwa.commands", "aiwa.core", "aiwa.flows", "aiwa.metrics", "aiwa.platforms", "aiwa.rules",
-    "aiwa.services", "aiwa.signals", "aiwa.signals.focus", "aiwa.ui",
+    "proki",
+    "proki.core",
+    "proki.core.ops",
+    "proki.core.signals",
+    "proki.platforms",
+    "proki.services",
+    "proki.services.activitywatch",
+    "proki.legacy",
+    "proki.legacy.commands",
+    "proki.legacy.core",
+    "proki.legacy.flows",
+    "proki.legacy.focus",
+    "proki.legacy.metrics",
+    "proki.legacy.rules",
+    "proki.legacy.ui",
 ]
 
 [tool.setuptools.package-data]
-aiwa = ["assets/sounds/*"]
+proki = ["assets/sounds/*", "assets/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
