@@ -345,3 +345,14 @@ def test_a_signal_added_while_running_is_filled_in_from_the_tables():
     Primitive.run(at(10.5), Record.of(at(-1440), at(10.5), {}))
     assert late.history(at(-1440)) == early.history(at(-1440))  # the same day, from `keys`' table
     assert late.current() == early.current()
+
+
+def test_input_rates_take_every_event_in_the_frame():
+    """Events every 5 s, cycles every 10 s: both events of a frame count, not just one."""
+    from proki.core.signals import Keys
+
+    keys = Keys()
+    typing = [Event(at(i / 12), at((i + 1) / 12), {"presses": 2 * 6 if i % 2 else 0}) for i in range(24)]
+    Stream.now = at(0)
+    Primitive.run(at(2), Record.of(at(0), at(2), {"os.hid.input": typing}))
+    assert keys.current() == pytest.approx(36)  # 6 presses in one 5 s event of each 10 s: 36 a minute

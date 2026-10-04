@@ -62,8 +62,8 @@ def test_hopping_between_video_and_chat_is_not(signals):
     run_to(10)
     assert signals["deep_share"].current() == pytest.approx(0.125)  # video (0) and chat (0.25), nothing deep
     assert signals["switches"].current() == 4  # a switch every 30 s
-    assert signals["engaged"].current() < 0.5  # a click now and then
-    assert signals["focus"].current() == 0
+    assert signals["engaged"].current() == 1  # a click now and then: at the computer
+    assert signals["focus"].current() < 0.1  # low all the same: nothing deep, and hopping
 
 
 def test_it_drops_as_the_hopping_starts(signals):

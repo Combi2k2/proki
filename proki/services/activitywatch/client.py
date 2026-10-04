@@ -74,6 +74,15 @@ class Events:
         i = bisect_left(self._starts, t)
         return self.events[i - 1] if i else None
 
+    def overlapping(self, a: datetime, b: datetime) -> list[Event]:
+        """The events that overlap (a, b], oldest first."""
+        i = bisect_left(self._starts, b)
+        found = []
+        while i > 0 and self.events[i - 1].end > a:
+            i -= 1
+            found.append(self.events[i])
+        return found[::-1]
+
 
 class ActivityWatchClient:
     def __init__(self, host: str = "127.0.0.1", port: int = 5600, timeout: float = 10):

@@ -22,7 +22,7 @@
     {"name": "last_suggested", "value": "time - 10000"}
   ],
   "signals": [
-    {"name": "active", "expr": "keys + mouse_click + mouse_scroll > 0"},
+    {"name": "active", "expr": "ts_max(keys + mouse_click + mouse_scroll + mouse_move, 3) > 0"},
     {"name": "engaged", "expr": "ts_mean(active, 2)"},
     {"name": "deep_share", "expr": "ts_mean(depth, 2)"},
     {"name": "switches", "expr": "ts_count(app, 2)"},

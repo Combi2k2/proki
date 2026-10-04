@@ -13,14 +13,14 @@ keeps, is the config's "inputs" (proki/compiler.py).
         url            the tab's address, while a browser is in focus   browser extension
         sector         what the app or page is ("video_streaming", "chat", ...), from the
                        app and the window title (in a browser, the title names the page)
-        depth          how deep it is, from its label's category (core/labels.py)
+        depth          how deep it is, from its label's category (`Depth.depth_of`, set by the app)
 
     about the time (of the cycle, not from ActivityWatch)
         clock          minutes since local midnight (0 to 1440)
         weekday        0 Monday to 6 Sunday, local
         time           minutes since 1970 (never wraps: `time - last_suggested`)
 
-    about input, per minute (aw-watcher-input, an event every ~5 s)
+    about input, per minute over each cycle's time frame (aw-watcher-input, an event every ~5 s)
         keys           key presses (the watcher counts down and up: its `presses` / 2)
         mouse_move     mouse movement, in pixels
         mouse_click    mouse clicks
@@ -213,12 +213,26 @@ class Time(Moment):
 
 
 class InputRate(Primitive, kind=False):
-    """Per minute, from the input event covering the moment."""
+    """Per minute, over the cycle's time frame (t − cycle, t]: every input event in it,
+    each counted for the part of it inside the frame, over the time they cover (the
+    newest event may not be written yet). With none in the frame, the event covering the
+    moment (input holds a while: `aw.HOLD`)."""
 
     def count(self, data: dict) -> float:
         raise NotImplementedError
 
     def read(self, rec: aw.Record, t: datetime) -> Any:
+        a = t - Stream.cycle
+        weighted = known = 0.0
+        for e in rec[aw.INPUT].overlapping(a, t):
+            length = (e.end - e.start).total_seconds()
+            if length <= 0:
+                continue
+            inside = (min(e.end, t) - max(e.start, a)).total_seconds()
+            weighted += self.count(e.data) / (length / 60) * inside  # its rate, for its time inside
+            known += inside
+        if known:
+            return weighted / known
         e = rec[aw.INPUT].covering(t)
         if e is None or e.end <= e.start:
             return None
