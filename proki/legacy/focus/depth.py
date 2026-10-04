@@ -11,7 +11,7 @@ against you. None when the window has only neutral time.
 
 from __future__ import annotations
 
-from proki.core.events import Category
+from proki.legacy.core.events import Category
 from proki.legacy.focus.params import FocusParams
 from proki.legacy.focus.window import Window
 from proki.legacy.rules.base import RuleParams, chance_at

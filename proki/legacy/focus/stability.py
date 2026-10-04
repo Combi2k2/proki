@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
-from proki.core.events import Category
+from proki.legacy.core.events import Category
 from proki.legacy.focus.params import FocusParams
 from proki.legacy.focus.window import Switch, Window
 

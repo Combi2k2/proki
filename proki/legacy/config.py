@@ -14,7 +14,7 @@ from platformdirs import user_config_path, user_data_path
 from proki.legacy.core.ai import AISettings
 from proki.legacy.core.bedtime import BedtimeParams
 from proki.legacy.core.budget import BudgetParams
-from proki.core.events import Category
+from proki.legacy.core.events import Category
 from proki.legacy.focus.params import FocusParams
 from proki.legacy.metrics.quota import QuotaParams
 from proki.legacy.core.sampling import SamplingParams

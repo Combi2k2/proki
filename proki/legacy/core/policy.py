@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from proki.core.events import Finding, Level
+from proki.legacy.core.events import Finding, Level
 
 
 class NudgePolicy:

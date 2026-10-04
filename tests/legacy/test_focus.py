@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from proki.legacy.config import parse
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.focus import FocusParams, moment, series, summarize
 from proki.legacy.focus.continuity import continuity, mean_dwell_seconds
 from proki.legacy.focus.depth import depth

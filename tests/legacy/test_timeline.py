@@ -4,7 +4,7 @@ import requests
 
 from proki.legacy.config import UNTRACKED, parse
 from proki.legacy.core.categories import Categorizer, prepare, unknown
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.core.jev import suggest_category
 from proki.services.jev import Jev
 from proki.legacy.rules.fragmentation import Fragmentation

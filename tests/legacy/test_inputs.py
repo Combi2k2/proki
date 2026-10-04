@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.focus.depth import depth, mode
 from proki.legacy.focus.params import FocusParams
 from proki.legacy.focus.window import slice_window

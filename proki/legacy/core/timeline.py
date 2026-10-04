@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.platforms import current as platform
 
 BROWSER_APPS = platform().BROWSER_APPS

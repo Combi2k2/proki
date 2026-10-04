@@ -17,10 +17,10 @@ from proki.legacy.config import CONFIG_PATH, DATA_DIR, DB_PATH, LABELS_PATH, JSO
 from proki.legacy.core.analyzer import Analyzer
 from proki.legacy.core.categories import Categorizer, prepare
 from proki.legacy.core.classifier import ClassificationLoop, Question
-from proki.core import labeling
-from proki.core.labels import LabelRegistry, migrate
+from proki.legacy.core import labeling
+from proki.legacy.core.labels import LabelRegistry, migrate
 from proki.legacy.core.collector import Collector
-from proki.core.events import Category, Finding, Level, Segment
+from proki.legacy.core.events import Category, Finding, Level, Segment
 from proki.legacy.focus import moment
 from proki.legacy.core.sampling import SamplingSchedule
 from proki.legacy.metrics.keeper import ScoreKeeper

@@ -11,7 +11,7 @@ from typing import Callable
 from proki import platforms
 from proki.legacy.flows.base import Flow, FlowContext
 from proki.legacy.core.backlog import minutes_text
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.core.experiment import DAYS, Experiment, SlipWatch, verdict
 from proki.legacy.core.store import Store
 from proki.legacy.ui.background import Background

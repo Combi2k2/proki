@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, time
 from typing import Callable
 
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.focus import FocusParams
 from proki.legacy.metrics.day import DayScore, day_bounds, summarize_day
 from proki.legacy.metrics.ledger import MINUTE, score_minutes

@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from proki.legacy.core.capture import CaptureWatch, FollowUps, Source
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 
 T0 = datetime(2026, 9, 30, 14, 0, tzinfo=timezone.utc)
 SHALLOW, DISTRACTION, DEEP = Category.SHALLOW, Category.DISTRACTION, Category.DEEP

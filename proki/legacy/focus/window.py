@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 
 
 @dataclass(frozen=True)

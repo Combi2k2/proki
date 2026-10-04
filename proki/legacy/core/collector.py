@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 from proki.legacy.config import Config
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.core.timeline import BROWSER_APPS, Tab, attach_inputs, build, input_actions
 
 

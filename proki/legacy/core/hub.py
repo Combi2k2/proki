@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.rules.base import RuleParams
 from proki.legacy.rules.capture import TimeOnIt
 

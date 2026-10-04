@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from proki.legacy.core.categories import label
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.focus import FocusParams, moment
 
 MINUTE = timedelta(minutes=1)

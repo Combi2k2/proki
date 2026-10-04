@@ -8,10 +8,10 @@ from datetime import timedelta
 
 from proki import platforms
 from proki.legacy.config import UNTRACKED, CategoryRule, Config
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.core.store import Store
 from proki.legacy.core.interpret import tools_take_context, watching_is_not_away
-from proki.core.labeling import Labeler
+from proki.legacy.core.labeling import Labeler
 from proki.legacy.core.timeline import BROWSER_APPS, merge
 
 

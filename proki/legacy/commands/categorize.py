@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from proki.legacy import config as config_mod
-from proki.core.events import Category
+from proki.legacy.core.events import Category
 from proki.legacy.core.store import Store
 
 

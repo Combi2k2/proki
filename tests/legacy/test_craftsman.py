@@ -2,7 +2,7 @@ import random
 from datetime import datetime, timedelta, timezone
 
 from proki.legacy.core.craftsman import SiteWeek, WorthAsking, pick, site_weeks
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 
 T0 = datetime(2026, 9, 28, 9, tzinfo=timezone.utc)
 

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.core.interpret import tools_take_context, watching_is_not_away
 
 T0 = datetime(2026, 9, 30, 20, tzinfo=timezone.utc)

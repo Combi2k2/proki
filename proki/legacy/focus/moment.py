@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.focus.continuity import continuity, mean_dwell_seconds
 from proki.legacy.focus.depth import depth
 from proki.legacy.focus.params import FocusParams

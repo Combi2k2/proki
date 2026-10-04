@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 
 from proki.legacy.core.calibration import evaluate, spearman, sweep
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.focus import FocusParams
 from proki.legacy.core.sampling import SamplingParams, SamplingSchedule, plan_day
 from proki.legacy.core.store import Store

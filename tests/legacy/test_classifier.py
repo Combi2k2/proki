@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from proki.legacy.config import parse
 from proki.legacy.core.classifier import ClassificationLoop, Question
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.core.store import Store
 
 T0 = datetime(2026, 9, 28, 9, 0, tzinfo=timezone.utc)
@@ -60,7 +60,7 @@ def test_ignore_apps_setting_and_system_windows_are_never_asked_about(tmp_path):
 
     from proki.legacy.config import Config
     from proki.legacy.core.classifier import ClassificationLoop
-    from proki.core.events import Segment
+    from proki.legacy.core.events import Segment
     from proki.legacy.core.store import Store
 
     config = Config(ignore_apps=["Raycast"])

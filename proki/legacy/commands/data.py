@@ -7,7 +7,7 @@ from datetime import datetime
 from proki.legacy import config as config_mod
 from proki.legacy.core.categories import Categorizer, prepare
 from proki.legacy.core.collector import Collector
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.core.store import Store
 
 

@@ -13,7 +13,7 @@ import sys
 from dotenv import load_dotenv
 
 from proki.legacy import config as config_mod
-from proki.core.events import Category
+from proki.legacy.core.events import Category
 
 
 def main(argv: list[str] | None = None) -> int:

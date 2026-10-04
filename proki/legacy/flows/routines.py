@@ -14,7 +14,7 @@ from typing import Callable
 from proki.legacy.flows.base import Flow, FlowContext
 from proki.legacy.core.backlog import minutes_text
 from proki.legacy.core.routines import ACTIVITY_LABEL, Absence, AbsenceTracker, confident_activity, likely_options, overnight
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.rules.absence import StillThere
 from proki.legacy.core.store import Store
 from proki.legacy.ui.background import Background

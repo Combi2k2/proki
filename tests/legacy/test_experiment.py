@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.core.experiment import Experiment, SlipWatch, verdict
 
 T0 = datetime(2026, 10, 1, 20, tzinfo=timezone.utc)

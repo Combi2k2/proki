@@ -20,10 +20,10 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-from proki.core.events import Category
+from proki.legacy.core.events import Category
 from proki.utils import slugify
 
-TAXONOMY = Path(__file__).resolve().parent.parent / "assets" / "labels.json"
+TAXONOMY = Path(__file__).resolve().parents[2] / "assets" / "labels.json"
 OTHER_GROUP = "Other"
 
 # how deep each category is: the `depth` primitive (core/signals/primitive.py)

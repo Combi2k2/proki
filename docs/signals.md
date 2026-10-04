@@ -44,7 +44,7 @@ or a reduction of it.
   event holding at that moment; a value holds until the next event, at most 15 s past its
   event's end. Primitives: recorded (false where ActivityWatch had nothing: it or proki was
   off), app, title, url, sector (the label), depth (the label's category as a level,
-  core/labels.py `DEPTH`); keys, mouse_move, mouse_click, mouse_scroll (per minute).
+  legacy/core/labels.py `DEPTH`); keys, mouse_move, mouse_click, mouse_scroll (per minute).
 - The focus score is a signal like any other, in config.json: `focus = deep_share * steady *
   engaged` (each of those an expression over the primitives), then `focus_2m`, `focus_5m`,
   `focus_rise = focus - delay(focus, 2)`, `on_deep = depth == 1`, and `focus_history =

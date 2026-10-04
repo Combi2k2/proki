@@ -6,9 +6,9 @@ import pytest
 
 from proki.legacy.config import parse
 from proki.legacy.core.categories import Categorizer
-from proki.core.events import Category, Segment
-from proki.core.labeling import Labeler, LabelLoop, Question
-from proki.core.labels import LabelRegistry, migrate, title_key
+from proki.legacy.core.events import Category, Segment
+from proki.legacy.core.labeling import Labeler, LabelLoop, Question
+from proki.legacy.core.labels import LabelRegistry, migrate, title_key
 from proki.utils import slugify
 from proki.legacy.core.store import Store
 

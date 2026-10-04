@@ -11,7 +11,7 @@ from typing import Callable
 from proki import platforms
 from proki.legacy.flows.base import Flow, FlowContext
 from proki.legacy.core.capture import CaptureParams, CaptureWatch, FollowUps, Source
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.core.store import Store
 from proki.legacy.flows.tasks import TasksFlow
 from proki.legacy.ui.background import Background

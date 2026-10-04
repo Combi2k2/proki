@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from proki.legacy.config import parse
-from proki.core.events import Finding, Level, Segment
+from proki.legacy.core.events import Finding, Level, Segment
 from proki.legacy.core.policy import NudgePolicy
 from proki.legacy.rules.fragmentation import Fragmentation
 

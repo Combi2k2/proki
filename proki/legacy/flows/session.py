@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from proki.legacy.core.backlog import minutes_text
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 from proki.legacy.core.grand import grand_session
 from proki.legacy.core.meditation import is_walk
 from proki.legacy.core.offline import OfflineWork

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from proki.core.events import Finding, Segment
+from proki.legacy.core.events import Finding, Segment
 
 
 class Rule(Protocol):

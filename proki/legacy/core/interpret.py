@@ -15,7 +15,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Callable
 
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 
 WATCH_KINDS = {"video_streaming", "video_calls"}
 TOOL_KINDS = {"search_engine", "ai_assistant"}

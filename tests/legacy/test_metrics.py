@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.focus import FocusParams
 from proki.legacy.metrics.day import day_bounds, summarize_day
 from proki.legacy.metrics.keeper import ScoreKeeper

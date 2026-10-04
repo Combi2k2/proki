@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from proki.legacy.core.association import OPEN, Pair, Contributes, contributions, lifts, pair_minutes
-from proki.core.events import Segment
+from proki.legacy.core.events import Segment
 
 T0 = datetime(2026, 9, 28, 9, tzinfo=timezone.utc)
 

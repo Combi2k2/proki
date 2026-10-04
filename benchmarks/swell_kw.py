@@ -24,9 +24,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from proki.core.events import Category, Segment
-from proki.core.focus import FocusParams, moment
-from proki.core.timeline import merge
+from proki.legacy.core.events import Category, Segment
+from proki.legacy.focus import FocusParams, moment
+from proki.legacy.core.timeline import merge
 
 LAB_TIME = ZoneInfo("Europe/Amsterdam")  # the experiment ran in the Netherlands
 AWAY_AFTER = timedelta(minutes=3)  # like ActivityWatch: no input for 3 min → away

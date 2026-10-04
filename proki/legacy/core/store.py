@@ -10,7 +10,7 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any
 
-from proki.core.events import Category, Finding
+from proki.legacy.core.events import Category, Finding
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS nudges (

@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable
 
-from proki.core.labels import LabelRegistry, title_key
+from proki.legacy.core.labels import LabelRegistry, title_key
 from proki.platforms import current as platform
 from proki.utils import cosine, grams, vector
 

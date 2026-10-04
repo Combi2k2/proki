@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import requests
 
-from proki.core.events import Category
+from proki.legacy.core.events import Category
 from proki.services.jev import Jev
 
 CATEGORY_CRITERIA = {

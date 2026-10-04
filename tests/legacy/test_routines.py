@@ -126,7 +126,7 @@ def test_openjev_can_veto_the_question_when_sure_the_user_stayed():
 
 
 def test_context_for_openjev_has_no_titles():
-    from proki.core.events import Category, Segment
+    from proki.legacy.core.events import Category, Segment
     from proki.legacy.flows.routines import RoutinesFlow
 
     watching = Segment(at(0), at(1), "Google Chrome", "Episode 12 – secret title", "https://www.youtube.com/watch?v=x",

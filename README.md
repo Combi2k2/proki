@@ -123,8 +123,7 @@ proki/
                   primitives read from ActivityWatch and the clock, the cycles
                   (primitive.py); variables, the app's state (variable.py)
     ops/          time-series operators, one file each (TsMean → ts_mean.py, `ts_mean(...)`)
-    rules.py      Rule: one signal against a soft threshold, the chance of firing now
-    labels.py, labeling.py   what's in focus; events.py
+    rules.py      Rule: a soft comparison of two expressions, the chance of firing now
   compiler.py     compiles config.json (inputs, variables, signals, rules) into streams
   utils.py        small helpers that know nothing about proki (snake, slugify, grams, ...)
   services/       ActivityWatch (`aw`: run it, read it) and jev (structured decisions)

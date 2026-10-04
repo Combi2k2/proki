@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.core.rules import Rule
 from proki.core.signals import Value
 

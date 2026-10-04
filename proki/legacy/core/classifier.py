@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 
 from proki import platforms
 from proki.legacy.config import Config
-from proki.core.events import Category, Segment
+from proki.legacy.core.events import Category, Segment
 from proki.legacy.core.store import Store
 
 ASK_LATER = timedelta(hours=2)
