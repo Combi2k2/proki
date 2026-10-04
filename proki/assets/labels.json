@@ -1,0 +1,160 @@
+{
+  "labels": {
+    "ide": {
+      "name": "Code editor / IDE",
+      "description": "Writing and editing code",
+      "group": "Work tools",
+      "category": "deep"
+    },
+    "terminal": {
+      "name": "Terminal",
+      "description": "Command line, shells",
+      "group": "Work tools",
+      "category": "deep"
+    },
+    "code_hosting": {
+      "name": "Code hosting & review",
+      "description": "Repositories, pull requests, issues (e.g. GitHub, GitLab)",
+      "group": "Work tools",
+      "category": "deep"
+    },
+    "ai_assistant": {
+      "name": "AI assistant",
+      "description": "Chatting with an AI assistant (e.g. ChatGPT, Claude, Gemini)",
+      "group": "Tools",
+      "category": "deep"
+    },
+    "docs_reference": {
+      "name": "Documentation & reference",
+      "description": "Technical docs, manuals, API references, Q&A sites",
+      "group": "Work tools",
+      "category": "deep"
+    },
+    "writing": {
+      "name": "Writing & documents",
+      "description": "Writing or editing documents, notes, papers (e.g. Word, Google Docs, Overleaf, Notion)",
+      "group": "Work tools",
+      "category": "deep"
+    },
+    "spreadsheets": {
+      "name": "Spreadsheets & data",
+      "description": "Spreadsheets, data analysis, notebooks",
+      "group": "Work tools",
+      "category": "deep"
+    },
+    "design": {
+      "name": "Design tools",
+      "description": "Graphic, UI or 3D design (e.g. Figma, Photoshop, Blender)",
+      "group": "Work tools",
+      "category": "deep"
+    },
+    "devops": {
+      "name": "Cloud & devops",
+      "description": "Cloud consoles, servers, deployment, monitoring",
+      "group": "Work tools",
+      "category": "deep"
+    },
+    "project_mgmt": {
+      "name": "Project management",
+      "description": "Task boards and trackers (e.g. Jira, Trello, Linear)",
+      "group": "Work tools",
+      "category": "shallow"
+    },
+    "email": {
+      "name": "Email",
+      "description": "Reading and writing email",
+      "group": "Contact",
+      "category": "shallow"
+    },
+    "team_chat": {
+      "name": "Chat & messaging",
+      "description": "Team chat and messengers (e.g. Slack, Teams, WhatsApp, Messenger)",
+      "group": "Contact",
+      "category": "shallow"
+    },
+    "video_calls": {
+      "name": "Video calls",
+      "description": "Meetings and calls (e.g. Zoom, Meet)",
+      "group": "Contact",
+      "category": "shallow"
+    },
+    "calendar": {
+      "name": "Calendar",
+      "description": "Calendars and scheduling",
+      "group": "Contact",
+      "category": "shallow"
+    },
+    "search_engine": {
+      "name": "Search engine",
+      "description": "Web search (e.g. Google, Bing, DuckDuckGo)",
+      "group": "Tools",
+      "category": "neutral"
+    },
+    "research": {
+      "name": "Research & papers",
+      "description": "Academic papers, journals, preprints, reading PDFs",
+      "group": "Learning & research",
+      "category": "deep"
+    },
+    "education": {
+      "name": "Courses & education",
+      "description": "Online courses, lectures, university portals, learning platforms",
+      "group": "Learning & research",
+      "category": "deep"
+    },
+    "news": {
+      "name": "News",
+      "description": "News sites and aggregators",
+      "group": "Leisure",
+      "category": "distraction"
+    },
+    "social_media": {
+      "name": "Social media",
+      "description": "Feeds and social networks (e.g. Instagram, Facebook, X, Reddit, TikTok)",
+      "group": "Leisure",
+      "category": "distraction"
+    },
+    "video_streaming": {
+      "name": "Video streaming",
+      "description": "Watching videos, films, series or anime (e.g. YouTube, Netflix)",
+      "group": "Leisure",
+      "category": "distraction"
+    },
+    "music_audio": {
+      "name": "Music & audio",
+      "description": "Music, podcasts, radio",
+      "group": "Leisure",
+      "category": "neutral"
+    },
+    "games": {
+      "name": "Games",
+      "description": "Playing games",
+      "group": "Leisure",
+      "category": "distraction"
+    },
+    "shopping": {
+      "name": "Shopping",
+      "description": "Online shops and marketplaces",
+      "group": "Leisure",
+      "category": "distraction"
+    },
+    "finance": {
+      "name": "Finance & banking",
+      "description": "Banking, payments, taxes",
+      "group": "Other",
+      "category": "shallow"
+    },
+    "maps_travel": {
+      "name": "Maps & travel",
+      "description": "Maps, bookings, transport",
+      "group": "Other",
+      "category": "shallow"
+    },
+    "system": {
+      "name": "System & utilities",
+      "description": "System settings, file manager, utilities",
+      "group": "Other",
+      "category": "neutral"
+    }
+  }
+}
