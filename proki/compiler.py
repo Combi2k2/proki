@@ -138,8 +138,42 @@ def compile_config(path: Path = CONFIG) -> Program:
 
 
 def editable_copy(path: Path) -> Path:
-    """`path`, made from the shipped defaults the first time (it's yours to edit then)."""
+    """`path`, made from the shipped defaults the first time (it's yours to edit then), and
+    kept in sync with them: what the shipped config has and yours doesn't (an entry of a
+    section, by name, or a setting like "cycle") is added to yours; what you have stays as
+    you wrote it, changed or removed entries of the shipped config don't touch yours."""
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(CONFIG, path)
+        return path
+    mine, added = merge(json.loads(path.read_text()), json.loads(CONFIG.read_text()))
+    if added:
+        path.write_text(dump(mine))
     return path
+
+
+def merge(mine: dict, shipped: dict) -> tuple[dict, list[str]]:
+    """`mine` with what `shipped` has and it doesn't; and what was added."""
+    merged, added = dict(mine), []
+    for key, value in shipped.items():
+        if key not in merged:
+            merged[key] = value
+            added.append(key)
+        elif isinstance(value, list) and isinstance(merged[key], list):
+            have = {entry.get("name") for entry in merged[key] if isinstance(entry, dict)}
+            new = [entry for entry in value if entry.get("name") not in have]
+            merged[key] = merged[key] + new
+            added += [f"{key}.{entry['name']}" for entry in new]
+    return merged, added
+
+
+def dump(config: dict) -> str:
+    """The config as JSON, one entry a line (like the shipped file)."""
+    parts = []
+    for key, value in config.items():
+        if isinstance(value, list):
+            entries = ",\n".join(f"    {json.dumps(entry)}" for entry in value)
+            parts.append(f'  {json.dumps(key)}: [\n{entries}\n  ]' if value else f'  {json.dumps(key)}: []')
+        else:
+            parts.append(f"  {json.dumps(key)}: {json.dumps(value)}")
+    return "{\n" + ",\n".join(parts) + "\n}\n"

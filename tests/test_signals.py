@@ -66,8 +66,8 @@ def test_configs_are_checked(tmp_path):
 def test_an_editable_copy_is_made_once(tmp_path):
     mine = editable_copy(tmp_path / "config.json")
     assert mine.read_text() == CONFIG.read_text()
-    mine.write_text('{"signals": []}')
-    assert editable_copy(mine).read_text() == '{"signals": []}'  # yours is kept
+    mine.write_text(mine.read_text().replace('"cycle": 10', '"cycle": 30'))
+    assert '"cycle": 30' in editable_copy(mine).read_text()  # yours is kept
 
 
 def test_inputs_keep_the_backfill_they_ask_for(tmp_path):
@@ -106,3 +106,26 @@ def test_the_cycle_is_checked(tmp_path):
         config.write_text('{"cycle": %s}' % cycle)
         with pytest.raises(ValueError, match="cycle is in seconds"):
             compile_config(config)
+
+
+def test_your_copy_gets_what_the_shipped_config_adds(tmp_path):
+    import json
+
+    mine = tmp_path / "config.json"
+    shipped = json.loads(CONFIG.read_text())
+    edited = {"inputs": [{"name": "keys", "backfill": 5}],  # yours: changed
+              "signals": [{"name": "mine", "expr": "keys * 2"}],  # yours: added
+              "rules": []}
+    mine.write_text(json.dumps(edited))
+    editable_copy(mine)
+    synced = json.loads(mine.read_text())
+    inputs = {e["name"]: e for e in synced["inputs"]}
+    assert inputs["keys"] == {"name": "keys", "backfill": 5}  # your version stays
+    assert set(inputs) == {e["name"] for e in shipped["inputs"]}  # the rest are added
+    assert synced["signals"][0]["name"] == "mine"  # yours first, kept
+    assert {e["name"] for e in synced["rules"]} == {e["name"] for e in shipped["rules"]}
+    assert synced["cycle"] == shipped["cycle"] and synced["variables"] == shipped["variables"]
+
+    before = mine.stat().st_mtime_ns, mine.read_text()
+    editable_copy(mine)  # nothing new: left alone
+    assert (mine.stat().st_mtime_ns, mine.read_text()) == before
