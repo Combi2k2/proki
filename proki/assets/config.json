@@ -1,0 +1,56 @@
+{
+  "cycle": 10,
+  "inputs": [
+    {"name": "recorded", "backfill": 1440},
+    {"name": "app", "backfill": 1440},
+    {"name": "title", "backfill": 1440},
+    {"name": "url", "backfill": 1440},
+    {"name": "sector", "backfill": 1440},
+    {"name": "depth", "backfill": 1440},
+    {"name": "keys", "backfill": 1440},
+    {"name": "mouse_move", "backfill": 1440},
+    {"name": "mouse_click", "backfill": 1440},
+    {"name": "mouse_scroll", "backfill": 1440},
+    {"name": "clock"},
+    {"name": "weekday"},
+    {"name": "time"}
+  ],
+  "variables": [
+    {"name": "in_session", "value": false},
+    {"name": "popup_open", "value": false},
+    {"name": "shutdown_done", "value": false},
+    {"name": "last_suggested", "value": "time - 10000"}
+  ],
+  "signals": [
+    {"name": "active", "expr": "keys + mouse_click + mouse_scroll > 0"},
+    {"name": "engaged", "expr": "ts_mean(active, 2)"},
+    {"name": "deep_share", "expr": "ts_mean(depth, 2)"},
+    {"name": "switches", "expr": "ts_count(app, 2)"},
+    {"name": "steady", "expr": "1 / (1 + switches / 4)"},
+    {"name": "focus", "expr": "deep_share * steady * engaged"},
+    {"name": "focus_2m", "expr": "ts_mean(focus, 2)"},
+    {"name": "focus_5m", "expr": "ts_mean(focus, 5)"},
+    {"name": "focus_rise", "expr": "focus - delay(focus, 2)"},
+    {"name": "on_deep", "expr": "depth == 1"},
+    {"name": "focus_history", "expr": "every(focus, 5)", "backfill": true, "window": 10080, "persist": true},
+    {"name": "focus_2m_rise", "expr": "focus_2m - delay(focus_2m, 0.5)"},
+    {"name": "since_suggested", "expr": "time - last_suggested"}
+  ],
+  "rules": [
+    {"name": "suggest_not_in_session", "lhs": "in_session", "cmp": "eq", "rhs": 0, "level": 5},
+    {"name": "suggest_not_shut_down", "lhs": "shutdown_done", "cmp": "eq", "rhs": 0, "level": 4},
+    {"name": "suggest_no_popup", "lhs": "popup_open", "cmp": "eq", "rhs": 0, "level": 3},
+    {"name": "suggest_not_lately", "lhs": "since_suggested", "cmp": "gt", "rhs": 45, "softness": 10, "level": 2},
+    {"name": "focus_rising", "lhs": "focus_rise", "cmp": "gt", "rhs": 0.15, "softness": 0.05, "level": 1},
+    {"name": "focus_high", "lhs": "focus_5m", "cmp": "gt", "rhs": 0.5, "softness": 0.1, "level": 1},
+    {"name": "deep_now", "lhs": "depth", "cmp": "eq", "rhs": 1, "level": 1},
+
+    {"name": "shutdown_window", "lhs": "clock", "cmp": "ge", "rhs": 900, "level": 4},
+    {"name": "shutdown_time", "lhs": "clock", "cmp": "gt", "rhs": 1080, "softness": 27.31, "level": 3},
+    {"name": "shutdown_not_focused", "lhs": "focus_5m", "cmp": "lt", "rhs": 0.6, "level": 2},
+    {"name": "shutdown_low_focus", "lhs": "focus_5m", "cmp": "lt", "rhs": 0.3, "softness": 0.07, "level": 1},
+
+    {"name": "session_low_focus", "lhs": "focus_2m", "cmp": "lt", "rhs": 0.35, "level": 2},
+    {"name": "session_not_recovering", "lhs": "focus_2m_rise", "cmp": "le", "rhs": 0.05, "level": 1}
+  ]
+}
