@@ -16,7 +16,8 @@ keeps, is the config's "inputs" (proki/compiler.py).
         title          the window title                           window watcher
         url            the tab's address, while a browser is in focus   browser extension
         label          what the app or page is ("video_streaming", "chat", ...), from the
-                       app and the window title (in a browser, the title names the page)
+                       app and the window title (in a browser, the title names the page);
+                       "" for a window without a label yet
         depth          how deep it is, from its label's category (`Depth.depth_of`, set by the app)
 
     about the time (of the cycle, not from ActivityWatch)

@@ -34,6 +34,7 @@ from typing import ClassVar
 import numpy as np
 
 from proki.core.signals import Signal
+from proki.errors import ConfigError, RuleError
 from proki.utils import bell, chance, is_number, sigmoid
 
 COMPARE = {
@@ -56,14 +57,18 @@ class Rule:
         softness: float = 0.0,
         level: int = 1,
     ):
-        if not name:    raise ValueError("rule name can't be empty")
+        if not name:    raise RuleError("rule name can't be empty")
         try:
-            if lhs is None: raise ValueError("lhs is missing")
-            if rhs is None: raise ValueError("rhs is missing")
+            if lhs is None: raise RuleError("lhs is missing")
+            if rhs is None: raise RuleError("rhs is missing")
             if cmp is None or cmp not in COMPARE:
-                raise ValueError(f"compare operator has to be one of {', '.join(COMPARE)}")
+                raise RuleError(f"compare operator has to be one of {', '.join(COMPARE)}")
+            if isinstance(softness, bool) or not isinstance(softness, int | float):
+                raise RuleError(f"softness is a number ({softness!r})")
             if softness < 0:
-                raise ValueError("softness can't be negative")
+                raise RuleError("softness can't be negative")
+            if isinstance(level, bool) or not isinstance(level, int):
+                raise RuleError(f"level is a whole number ({level!r})")
 
             self.name = name
             self.lhs = Signal(f"{name}.lhs", str(lhs)); self.lhs.inputs
@@ -71,8 +76,8 @@ class Rule:
             self.cmp = cmp
             self.softness = softness
             self.level = level
-        except ValueError as e:
-            raise ValueError(f"rule {name!r}: {e}") from None
+        except ConfigError as e:
+            raise e.within(f"rule {name!r}") from None
         Rule.registry[name] = self
 
     def chance(self) -> float:
