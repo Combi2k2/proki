@@ -7,7 +7,7 @@ from collections import deque
 from datetime import datetime, timedelta
 from typing import Any, ClassVar
 
-from proki.core.signals import NEVER, Stream
+from proki.core.signals.stream import NEVER, Stream
 from proki.utils import snake
 
 Operand = Stream | float | int | bool | str | None
@@ -53,7 +53,8 @@ class Queued(Operator, function=False):
     def advance(self, t: datetime) -> None:
         super().advance(t)
         x = self.inputs[0]
-        self.period, self.fresh = x.period, x.fresh
+        self.period = x.period
+        self.fresh  = x.fresh
         if not self.started:
             self.started = True
             for when, v in x.history(t - self.span):

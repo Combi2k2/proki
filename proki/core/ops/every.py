@@ -3,26 +3,29 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from proki.core.ops.base import Operand, Operator, as_stream
-from proki.core.signals import Stream
+from proki.core.signals.stream import Stream
+from proki.errors import ExprError
 from proki.utils import minutes
 
-EPOCH = datetime(2000, 1, 3, tzinfo=timezone.utc)  # a Monday, midnight UTC: spans line up from here
+EPOCH = datetime(2000, 1, 3)  # a Monday, midnight: spans line up from here, on the local clock
 
 
 class Every(Operator):
     """`x` resampled: one value per `p` minutes, the `how` (mean, sum, max, min, last) of
-    x's known values in each clock-aligned span (None when none was known). It's fresh
-    on the first cycle of the next span, and holds the value until the one after."""
+    x's known values in each clock-aligned span (None when none was known). Spans follow
+    the local clock: a day is midnight to midnight where you are, a week starts Monday.
+    It's fresh on the first cycle of the next span, and holds the value until the one
+    after. Mean and sum take numbers; max, min and last any values that compare (text)."""
 
     HOWS = ("mean", "sum", "max", "min", "last")
 
     def __init__(self, x: Operand, p: float, how: str = "mean"):
         if how not in self.HOWS:
-            raise ValueError(f"every: `how` is one of {', '.join(self.HOWS)}, not {how!r}")
+            raise ExprError(f"every: `how` is one of {', '.join(self.HOWS)}, not {how!r}")
         self.inputs, self.period, self.how = [as_stream(x)], minutes(p), how
         self.span: int | None = None  # which span the running totals are for
         self.value: Any = None
@@ -33,7 +36,7 @@ class Every(Operator):
 
     def advance(self, t: datetime) -> None:
         super().advance(t)
-        span = (t - EPOCH) // self.period
+        span = (t.astimezone().replace(tzinfo=None) - EPOCH) // self.period  # on the local clock
         self.fresh = self.span is not None and span != self.span
         if self.fresh:
             self.value = None if not self.n else {
@@ -49,7 +52,8 @@ class Every(Operator):
         v = x.current() if x.fresh else None
         if v is not None:
             self.n += 1
-            self.total += float(v)
+            if self.how in ("mean", "sum"):
+                self.total += float(v)
             self.top = v if self.top is None or v > self.top else self.top
             self.bottom = v if self.bottom is None or v < self.bottom else self.bottom
             self.last = v

@@ -6,31 +6,26 @@ A `Variable` is a stream whose value is whatever it was last set to: `set`, `add
 every cycle reads it like a primitive, so expressions can use it (`time - last_suggested`).
 
 Its starting `value` is a constant (a number, true / false, null) or an expression,
-worked out once on its first cycle: `"time - clock + 1440"` is the next midnight. Every
+worked out once on its first live cycle (not while the startup replays the past; it's
+unknown till then): `"time - clock + 1440"` is the next midnight. Every
 variable keeps its latest value in `Variable.store` (a key-value store), saved when it
 changes and read back when it's made, so it carries on after a restart; the starting
 value counts only while nothing is saved (or what's saved is of another kind than a
 constant starting value: a number where text is expected). Resetting is up to flows
 (`{"set": {"daily_metric": 0}}` when a day ends), not the variable.
-
-An `Update` is a change written in the config: `set`, `add` or `sub` of one or more
-variables, each by an expression's value at the moment it's applied:
-`{"set": {"deadline_eod": "deadline_eod + 1440", "daily_metric": 0}}`. Its expressions
-are hidden signals (made up front, so their windows move on every cycle), all worked out
-before any is assigned (`{"set": {"a": "b", "b": "a"}}` swaps them).
+The config changes one with the set / add / sub actions (core/actions/), each by an
+expression's value at the moment.
 """
 
 from __future__ import annotations
 
-import itertools
 from datetime import datetime
 from typing import Any, ClassVar, Protocol
 
-from proki.core.signals.base import Signal, Stream
+from proki.core.signals.signal import Signal
+from proki.core.signals.stream import Stream
 from proki.utils import kind, same
-
-OPS = ("set", "add", "sub")
-
+from proki.errors import VariableError
 
 class VariableStore(Protocol):
     """Where variables keep their latest value, by name (the app gives one: core/store.py)."""
@@ -43,7 +38,7 @@ class Variable(Stream):
     store: ClassVar[VariableStore | None] = None
 
     def __init__(self, name: str, value: Any = None):
-        if not name:    raise ValueError("variable name can't be empty")
+        if not name:    raise VariableError("variable name can't be empty")
         self.name = name
         self.value: Any = None if isinstance(value, str) else value
         self.start: Signal | None = None  # a starting expression, until its first cycle
@@ -70,7 +65,7 @@ class Variable(Stream):
 
     def advance(self, t: datetime) -> None:
         super().advance(t)
-        if self.start is not None:  # its first cycle: the starting expression, once
+        if self.start is not None and (Stream.live is None or t + Stream.cycle > Stream.live):  # its first live cycle: the starting expression, once
             start, self.start, self.inputs = self.start, None, []
             del Stream.registry[start.name]
             self._keep(start.current())
@@ -81,7 +76,7 @@ class Variable(Stream):
     def set(self, value: Any) -> None:
         if not same(value, self.value):
             self._keep(value)
-        self._cached = False
+            Stream.epoch += 1  # what was worked out from it this cycle is stale
 
     def add(self, amount: Any) -> None:
         """Add `amount`; an unknown amount or value (None) changes nothing."""
@@ -99,36 +94,3 @@ class Variable(Stream):
 
     def __repr__(self) -> str:
         return f"<Variable {self.name} = {self.value!r}>"
-
-
-class Update:
-    """`op` (set, add, sub) of each variable in `changes` by its expression's value when
-    applied (null: unknown)."""
-
-    _ids: ClassVar[itertools.count] = itertools.count(1)
-
-    def __init__(self, op: str, changes: dict[str, str | float | bool | None]):
-        if op not in OPS:
-            raise ValueError(f"an update is one of {', '.join(OPS)} ({op!r})")
-        if not changes:
-            raise ValueError(f"{op} what? ({{\"{op}\": {{variable: expr}}}})")
-        self.op = op
-        self.changes: list[tuple[Variable, Signal | None]] = []
-        for name, expr in changes.items():
-            target = Stream.registry.get(name)
-            if not isinstance(target, Variable):
-                raise ValueError(f"no variable is called {name!r}")
-            value = None
-            if expr is not None:
-                value = Signal(f"{name}.{op}.{next(Update._ids)}", str(expr))
-                value.inputs  # every name it reads is defined
-            self.changes.append((target, value))
-
-    def apply(self) -> None:
-        values = [value.current() if value else None for _, value in self.changes]  # all first
-        for (variable, _), v in zip(self.changes, values):
-            getattr(variable, self.op)(v)
-
-    def __repr__(self) -> str:
-        changes = ", ".join(f"{v.name}: {e.expr if e else None}" for v, e in self.changes)
-        return f"<Update {self.op} {{{changes}}}>"

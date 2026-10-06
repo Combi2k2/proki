@@ -1,0 +1,28 @@
+"""`url`: the tab's address, while a browser is in focus (browser extension)."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from proki.core.primitives.aw.base import focused
+from proki.core.primitives.base import Primitive
+from proki.platforms import current as platform
+from proki.services import aw
+
+
+BROWSER_APPS = platform().BROWSER_APPS
+
+
+class Url(Primitive):
+    """The tab in focus. The extension reports a tab change right away but only updates a
+    tab you stay on now and then, so the current tab is the latest event, however old."""
+
+    buckets = (aw.WINDOW, aw.WEBTAB)
+
+    def read(self, rec: aw.Record | None, t: datetime) -> Any:
+        e = focused(rec, t)
+        if e is None or e.data.get("app") not in BROWSER_APPS:
+            return None
+        tab = rec[aw.WEBTAB].latest(t)
+        return tab.data.get("url") if tab else None

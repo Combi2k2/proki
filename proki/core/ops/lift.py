@@ -1,5 +1,5 @@
-"""`f` of the operands' values each cycle; None (unknown) when any of them is. Plain
-values count as constant streams."""
+"""`f` of the operands' values each cycle; None (unknown) when any of them is, or when `f`
+can't work them out (text where a number goes). Plain values count as constant streams."""
 
 from __future__ import annotations
 
@@ -15,8 +15,9 @@ from proki.core.ops.base import (
 
 
 class Lift(Operator, function=False):  # reached through + - * /, comparisons, and / or / not
-    def __init__(self, f: Callable[..., Any], *xs: Operand):
+    def __init__(self, f: Callable[..., Any], *xs: Operand, unknown: bool = False):
         self.f, self.inputs = f, [as_stream(x) for x in xs]
+        self.unknown = unknown  # `f` takes unknown values itself (and / or)
 
     def advance(self, t: datetime) -> None:
         super().advance(t)
@@ -26,4 +27,9 @@ class Lift(Operator, function=False):  # reached through + - * /, comparisons, a
 
     def compute(self) -> Any:
         values = [x.current() for x in self.inputs]
-        return None if any(v is None for v in values) else self.f(*values)
+        if not self.unknown and any(v is None for v in values):
+            return None
+        try:
+            return self.f(*values)
+        except (TypeError, ValueError, ArithmeticError):  # `app > 3`: unknown, not a failed cycle
+            return None

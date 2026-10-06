@@ -1,5 +1,6 @@
 """ts_count(x, w): how many times x changed to a new value over the last w minutes
-(true / false: how many times it became true)."""
+(true / false: how many times it became true). An unknown value (None) is skipped: x
+before and after it are compared; the first value known isn't a change."""
 
 from __future__ import annotations
 
@@ -18,8 +19,9 @@ class TsCount(Queued):
         self.changes, self.last = 0, None
 
     def take(self, t: datetime, v: Any) -> None:
-        changed = not same(v, self.last) and v is not None and v is not False
-        self.last = v
+        changed = v is not None and v is not False and self.last is not None and not same(v, self.last)
+        if v is not None:
+            self.last = v
         super().take(t, changed)
         self.changes += changed
 

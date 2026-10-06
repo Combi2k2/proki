@@ -6,7 +6,7 @@ is a time series with one value per cycle (None: unknown). Three kinds of stream
 
     Primitive   read from what ActivityWatch recorded, or from the clock (primitive/)
     operator    made by an operator from other streams; a window keeps a queue (core/ops/)
-    Signal      a name and an `expr`, a time-series expression over other streams (signal.py)
+    Signal      a name and an `expr`, a time-series expression over other streams (signal.py, expr.py)
 
 Every named stream is kept in `Stream.registry` by name; an expression's names are looked
 up there. Rules (core/rules.py) read signals.
@@ -62,6 +62,7 @@ class Stream:
     registry: ClassVar[dict[str, Stream]] = {}  # every named stream (signals, primitives), by name (the newest of a name)
     storage: ClassVar[Storage | None] = None
     now: ClassVar[datetime | None] = None  # the current cycle's time (`tick` sets it)
+    live: ClassVar[datetime | None] = None  # what the cycles run up to (`Primitive.run`); those before replay the past
     cycle: ClassVar[timedelta] = timedelta(seconds=10)  # the time between cycles (the config's "cycle")
     epoch: ClassVar[int] = 0  # moves on when a variable changes: every cached value is stale then
 

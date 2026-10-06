@@ -1,4 +1,4 @@
-"""Time-series operators: they take streams and return streams (signals/base.py).
+"""Time-series operators: they take streams and return streams (signals/stream.py).
 
 Our own operators, not Polars, without a dependency; one file per operator, named after
 its class (`ts_mean.py`: `TsMean`). Python calls the class (`TsMean(keys, 5)`), an

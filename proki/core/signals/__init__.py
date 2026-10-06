@@ -1,41 +1,14 @@
-"""The signal language: streams, signals and their expressions (base.py), and the
-primitives read from ActivityWatch, with the cycles (primitive.py)."""
+"""The signal language: streams and the cycles (stream.py), expressions (expr.py), signals
+(signal.py), and variables, the app's state (variable.py). The primitives they read are
+core/primitives/."""
 
-from proki.core.signals.base import (
-    NEVER,
-    ExprError,
-    Signal,
-    Storage,
-    Stream,
-    Value,
-    compile_expr,
-    parse,
-)
-from proki.core.signals.primitive import (
-    App,
-    Clock,
-    Depth,
-    InputRate,
-    Keys,
-    Moment,
-    MouseClick,
-    MouseMove,
-    MouseScroll,
-    Primitive,
-    Recorded,
-    Sector,
-    Time,
-    Title,
-    Url,
-    Weekday,
-    Window,
-)
-from proki.core.signals.variable import Update, Variable, VariableStore
+from proki.core.signals.stream import NEVER, Storage, Stream, Value
+from proki.core.signals.expr import compile_expr, parse
+from proki.core.signals.signal import Signal
+from proki.core.signals.variable import Variable, VariableStore
 
 __all__ = [
-    "NEVER",
-    "ExprError", "Signal", "Storage", "Stream", "Value", "compile_expr", "parse",
-    "App", "Depth", "InputRate", "Keys", "MouseClick", "MouseMove", "MouseScroll", "Primitive",
-    "Recorded", "Sector", "Title", "Url", "Window", "Clock", "Weekday", "Time", "Moment",
-    "Update", "Variable", "VariableStore",
+    "NEVER", "Storage", "Stream", "Value",
+    "Signal", "compile_expr", "parse",
+    "Variable", "VariableStore",
 ]
