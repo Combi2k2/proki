@@ -28,11 +28,24 @@ def slugify(name: str) -> str:
 
 # values
 
+def fill(text: str, values: dict[str, Any]) -> str:
+    """`text` with its {name} / {name:format} filled in from `values` (as it is, where it can't)."""
+    try:
+        return text.format_map(values)
+    except (KeyError, IndexError, ValueError, TypeError):
+        return text
+
+
 def same(a: Any, b: Any) -> bool:
     return type(a) is type(b) and a == b  # True and 1 stay apart
 
 
 def minutes(m: float) -> timedelta:
+    """`m` minutes; a number, not negative (true / false aren't numbers here)."""
+    if isinstance(m, bool) or not isinstance(m, int | float):
+        raise TypeError(f"minutes are a number, not {m!r}")
+    if m < 0:
+        raise ValueError(f"minutes can't be {m:g}")
     return timedelta(minutes=m)
 
 

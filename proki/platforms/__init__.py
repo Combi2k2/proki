@@ -16,6 +16,8 @@
 import sys
 from types import ModuleType
 
+from proki.errors import PlatformError
+
 
 def current() -> ModuleType:
     if sys.platform == "darwin":
@@ -25,5 +27,5 @@ def current() -> ModuleType:
     elif sys.platform.startswith("linux"):
         from proki.platforms import linux as mod
     else:
-        raise RuntimeError(f"Unsupported platform: {sys.platform}")
+        raise PlatformError(f"Unsupported platform: {sys.platform}")
     return mod
