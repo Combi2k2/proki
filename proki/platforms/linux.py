@@ -14,7 +14,7 @@ DESKTOP_FILE = user_config_path("autostart") / "proki.desktop"
 ACTIVITYWATCH_DIRS = [Path.home() / "activitywatch", Path("/opt/activitywatch"), Path("/usr/lib/activitywatch")]
 EXECUTABLE_SUFFIX = ""
 
-# the browsers, as ActivityWatch names them (the window's class); not yet tested
+# the browsers, as ActivityWatch names them (the window's class). Not yet tested
 BROWSER_APPS = {
     "Google-chrome", "Microsoft-edge", "Brave-browser", "Chromium", "Vivaldi-stable", "firefox", "Opera",
     "Google Chrome", "Microsoft Edge", "Brave Browser", "Vivaldi", "Firefox",
@@ -23,7 +23,7 @@ BROWSER_APPS = {
 # the lock screen / screen saver: time on it is time away
 LOCK_APPS = set()
 
-# system windows that come and go on their own; never worth a question
+# system windows that come and go on their own. Never worth a question
 SYSTEM_APPS = {"gnome-shell", "plasmashell", "xfdesktop", "unknown"}
 
 

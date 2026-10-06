@@ -1,8 +1,12 @@
-"""`Primitive`: a stream read at each cycle's moment, and `run`, which drives the cycles.
+"""`Primitive`, the base of every primitive, and `run`, which drives the cycles.
 
-Every subclass of `Primitive` is a kind (never a class between `Primitive` and a kind);
-what kinds of one source share is a mixin beside it, in that source's folder
-(aw/base.py, sys/base.py, proki/base.py), and stays in this package.
+Each subclass of `Primitive` is one primitive (a "kind"). There's no class in between.
+What several kinds from one source share is a mixin next to `Primitive`, in that
+source's folder (aw/base.py, sys/base.py, proki/base.py):
+
+    class Keys(InputRate, Primitive): ...      # InputRate: shared by keys and the mouse ones
+
+The mixins aren't exported outside this package.
 """
 
 from __future__ import annotations
@@ -17,15 +21,16 @@ from proki.utils import snake
 
 
 class Primitive(Stream):
-    """A stream read from the recording's events, at the cycle's moment. Each kind is
-    a subclass, named after it in snake case (`MouseMove`: "mouse_move"); defining one
-    registers it in `kinds`, creating one registers it in `Stream.registry`. What kinds
-    share is a mixin beside `Primitive`, not a class under it (`class Keys(InputRate,
-    Primitive)`, aw/base.py), so only kinds register. It keeps a table if asked (`backfill`, `window`)."""
+    """A stream read at each cycle's moment, from what was recorded (or the clock).
 
-    kinds: ClassVar[dict[str, type[Primitive]]] = {}
-    rec: ClassVar[aw.Record | None] = None     # the run's recording
-    buckets: ClassVar[tuple[str, ...]] = ()    # the bucket types it reads (fetched before the cycles)
+    Defining a subclass registers its kind in `kinds`, by its name in snake case
+    (`MouseMove` → "mouse_move"). The config's "inputs" pick kinds by that name. Making one
+    registers it in `Stream.registry`. It keeps a table if the config asks for one
+    (`backfill`, how far back: `window`)."""
+
+    kinds: ClassVar[dict[str, type[Primitive]]] = {}  # every kind, by name
+    rec: ClassVar[aw.Record | None] = None     # what ActivityWatch recorded, for the current run
+    buckets: ClassVar[tuple[str, ...]] = ()    # the ActivityWatch bucket types it reads (fetched before the cycles)
 
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
@@ -44,7 +49,7 @@ class Primitive(Stream):
         Stream.registry[self.name] = self
 
     def read(self, rec: aw.Record | None, t: datetime) -> Any:
-        """The value just before `t`, from the recorded events (`rec`: None before the
+        """The value at time `t`, from the recorded events (`rec` is None before the
         first fetch)."""
         raise NotImplementedError
 
@@ -61,10 +66,13 @@ class Primitive(Stream):
         host: str = "127.0.0.1",
         port: int = 5600
     ) -> None:
-        """Every stream, cycle by cycle, up to `now`: from the last cycle run; the first
-        time, from as far back as the longest table (of a stream that isn't persisted:
-        a persisted one loads what's older from storage), so every table starts full. A
-        stream added since keeps a table: it's filled in first, from its inputs' tables."""
+        """Run every stream, cycle by cycle, up to `now`.
+
+        It continues from the last cycle run. The first time, it starts as far back as
+        the longest table (persisted tables don't count: they load their past from
+        disk), so every table starts full. What ActivityWatch recorded is fetched before
+        the first cycle: if that fails, no stream has moved and the next run retries.
+        `rec`: a recording to use instead of fetching (tests)."""
         t = Stream.now
         if t is None or t > now:
             longest = max([timedelta(0), *(s.window for s in Stream.registry.values()

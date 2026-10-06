@@ -1,5 +1,9 @@
-"""What the operators share: the `Operator` base (which names each one for expressions),
-constants, and `Queued`, the (time, value) queue the window operators keep."""
+"""What the operators share:
+
+    Operator   the base: defining one names it for expressions (TsMean → ts_mean)
+    Constant   a plain value as a stream (the 5 in `keys > 5`)
+    Queued     the base of the window operators: a queue of (time, value) of the last w minutes
+"""
 
 from __future__ import annotations
 
@@ -14,9 +18,9 @@ Operand = Stream | float | int | bool | str | None
 
 
 class Operator(Stream):
-    """An operator: Python calls the class (`TsMean(keys, 5)`), an expression its name in
-    snake case (`ts_mean(keys, 5)`). Defining a subclass registers it in `functions`
-    (`function=False`: a base or an internal one, not called by name)."""
+    """An operator. Defining a subclass makes it callable from expressions by its name in
+    snake case (`TsMean` → `ts_mean(...)`), via `functions`. Pass `function=False` for a
+    base or an internal operator that expressions shouldn't call by name."""
 
     functions: ClassVar[dict[str, type[Operator]]] = {}
 
@@ -27,6 +31,8 @@ class Operator(Stream):
 
 
 class Constant(Stream):
+    """A value that never changes, as a stream."""
+
     period = NEVER
     fresh = False
 
@@ -42,8 +48,12 @@ def as_stream(x: Operand) -> Stream:
 
 
 class Queued(Operator, function=False):
-    """Takes its input's fresh values into a queue of (time, value); the first time, it
-    fills the queue from the input's table over the last `span` (if it keeps one)."""
+    """A window: a queue of (time, value) covering the last `span`.
+
+    Each cycle, if the input took a new value, it's added to the queue. Values older than
+    `span` are dropped (`drop`, `pop`). On its first cycle, the queue is filled from the
+    input's table, if the input keeps one, so the window starts full. Subclasses keep
+    running totals in `take` and `pop` so each cycle costs little."""
 
     def __init__(self, x: Operand, span: timedelta):
         self.inputs, self.span = [as_stream(x)], span
@@ -65,12 +75,13 @@ class Queued(Operator, function=False):
         self.drop(t - self.span)
 
     def take(self, t: datetime, v: Any) -> None:
+        """Add the input's new value `v`, taken at time `t`."""
         self.queue.append((t, v))
 
     def drop(self, before: datetime) -> None:
-        """Let go of what is no longer needed (at or before `before`, for a window)."""
+        """Drop the values at or before time `before` (out of the window)."""
         while self.queue and self.queue[0][0] <= before:
             self.pop(self.queue.popleft())
 
     def pop(self, row: tuple[datetime, Any]) -> None:
-        pass
+        """A row just left the window (subclasses update their totals here)."""

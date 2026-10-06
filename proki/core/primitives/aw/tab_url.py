@@ -15,8 +15,10 @@ BROWSER_APPS = platform().BROWSER_APPS
 
 
 class Url(Primitive):
-    """The tab in focus. The extension reports a tab change right away but only updates a
-    tab you stay on now and then, so the current tab is the latest event, however old."""
+    """The address of the tab in focus, while a browser app is in focus (else unknown).
+
+    The browser extension reports a tab change right away, but a tab you stay on only now
+    and then, so the current tab is its latest event, however old."""
 
     buckets = (aw.WINDOW, aw.WEBTAB)
 

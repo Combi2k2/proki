@@ -1,33 +1,33 @@
-"""Time-series operators: they take streams and return streams (signals/stream.py).
+"""Operators: functions over time series. Each takes streams and gives a stream.
 
-Our own operators, not Polars, without a dependency; one file per operator, named after
-its class (`ts_mean.py`: `TsMean`). Python calls the class (`TsMean(keys, 5)`), an
-expression its name in snake case (`ts_mean(keys, 5)`). They know no clock, only the time
-of each cycle (`advance(t)`): their queues hold (time, value), and a window over w
-minutes holds what came in the last w minutes, whatever the input's period.
+proki's own (no dependency), one file per operator, named after its class
+(`ts_mean.py`: `TsMean`). In Python you call the class, `TsMean(keys, 5)`. In an
+expression you write its name in snake case, `ts_mean(keys, 5)`.
 
-Time is in minutes: windows `w`, delays `d` and spans `p` are numbers of minutes.
+All times are in minutes: windows `w`, delays `d`, spans `p`.
 
-Pointwise (a value each cycle):
-    lift(f, x, y, ...)   f of the values; plain values count as constant streams
-    delay(x, d)          x as it was `d` ago
+Every cycle (one value per cycle):
+    lift(f, x, y, ...)   f of the values (behind + - * /, comparisons, and / or / not)
+    delay(x, d)          x as it was d minutes ago
 
-Over a trailing window (t - w, t]:
-    ts_sum(x, w)     ∫ x dt: a rate per minute gives a count, true / false gives minutes
-    ts_mean(x, w)    mean over the known values of the window
-    ts_max(x, w), ts_min(x, w)
-    ts_count(x, w)   how many times x changed to a new value in the window (true / false:
-                    how many times it became true)
-    ts_rank(x, w)    where x's current value stands among the window's, in [0, 1]
+Over the last w minutes (a "window"):
+    ts_sum(x, w)     the total over time: a rate per minute gives a count. True / False
+                     gives minutes (ts_sum(in_session, 60): minutes in a session this hour)
+    ts_mean(x, w)    the average of the known values
+    ts_max(x, w)     the largest (and ts_min(x, w) the smallest)
+    ts_count(x, w)   how many times x changed to a new value (for True / False: how many
+                     times it became True)
+    ts_rank(x, w)    where x's current value stands among the window's, from 0 to 1
 
-Resampling:
-    every(x, p, how)   one value per p minutes (clock-aligned spans): the mean (default),
+Slower (one value per span):
+    every(x, p, how)   one value per p minutes, on the local clock: the mean (default),
                        "sum", "max", "min" or "last" of x's values in each span
 
-Windows and `delay` take only the input's fresh values (a slow input, from `every`, adds
-one per span), and when they start they fill their queue from the input's table, if it
-keeps one (its `backfill`): `ts_mean(every(focus, 5), 7 * 1440)` is right from the start.
-They nest: `delay(ts_mean(keys, 5), 2)`.
+A slow stream (from `every`) adds one value per span to a window, not one per cycle,
+so a long window over it stays small: `ts_rank(every(focus, 60), 30 * 1440)` holds 720
+values. When a window starts, it fills itself from its input's table if the input keeps
+one, so `ts_mean(every(focus, 5), 7 * 1440)` is right from the start. Operators nest:
+`delay(ts_mean(keys, 5), 2)`.
 """
 
 from proki.core.ops.base import Constant, Operator, Queued

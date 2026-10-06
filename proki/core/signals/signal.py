@@ -1,7 +1,10 @@
-"""Signals: a name and a time-series expression over other streams (expr.py). The
-expression compiles into a tree of streams on the first cycle after the signal is made,
-so it may name streams made after it; a signal can keep a table of its history
-(`backfill`, `window`) and save it (`persist`).
+"""Signals: a name for an expression, so other expressions, rules and programs can use it.
+
+    {"name": "focus_5m", "expr": "ts_mean(focus, 5)"}
+
+The expression is compiled (expr.py) the first time it's needed, so it may use names
+defined after it. A signal can keep a table of its past values (`backfill`), how far
+back (`window`) and save it to disk (`persist`).
 """
 
 from __future__ import annotations
@@ -15,6 +18,8 @@ from proki.errors import SignalError
 
 
 class Signal(Stream):
+    """A named expression. Its value each cycle is the expression's."""
+
     def __init__(self, name: str, expr: str, backfill: bool = False, window: timedelta | None = None,
                  persist: bool = False):
         if not name:    raise SignalError("signal name can't be empty")
@@ -22,7 +27,7 @@ class Signal(Stream):
         if persist and (not backfill or window is None):
             raise SignalError("a persisted signal keeps a table of a window: it needs backfill=True and a window")
 
-        parse(expr)  # a syntax error shows now; unknown names on the first cycle
+        parse(expr)  # a syntax error shows now, an unknown name only once it's compiled
 
         self.name = name
         self.expr = expr  # e.g. "ts_mean(keys, 5)"

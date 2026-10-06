@@ -22,7 +22,7 @@ def aw_detect(
     `optional` ones (e.g. aw-watcher-input, installed with uv) are found anywhere, or skipped.
 
     A program sits right in the directory (macOS app bundle) or in a folder of its own
-    name (Windows and Linux: `aw-server/aw-server.exe`); `suffix` is "" or ".exe"."""
+    name (Windows and Linux: `aw-server/aw-server.exe`). `suffix` is "" or ".exe"."""
     for directory in directories:
         paths = {module: str(path) for module in modules if (path := _program(directory, module, suffix))}
 

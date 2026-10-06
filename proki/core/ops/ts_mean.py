@@ -1,4 +1,5 @@
-"""ts_mean(x, w): the mean of x's known values over the last w minutes."""
+"""ts_mean(x, w): the average of x's known values in the last w minutes (True counts as 1).
+"""
 
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ from proki.utils import minutes
 
 
 class TsMean(Queued):
-    """Running totals of the window's known values and of how many there are."""
+    """Keeps a running total and count of the known values, so each cycle costs little."""
 
     def __init__(self, x: Operand, w: float):
         super().__init__(x, minutes(w))

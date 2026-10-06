@@ -1,4 +1,5 @@
-"""ts_max(x, w): the maximum of x's known values over the last w minutes."""
+"""ts_max(x, w): the largest of x's known values in the last w minutes.
+"""
 
 from __future__ import annotations
 
@@ -11,8 +12,9 @@ from proki.utils import minutes
 
 
 class TsMax(Queued):
-    """Beside the queue, a monotonic queue of (time, value) that can still be the maximum: a
-    newer value drops those it beats, so its front is the window's maximum."""
+    """Keeps a second queue of only the values that can still become the maximum: a new
+    value removes the ones it beats, so the front is always the window's maximum, without
+    scanning the window."""
 
     def __init__(self, x: Operand, w: float):
         super().__init__(x, minutes(w))

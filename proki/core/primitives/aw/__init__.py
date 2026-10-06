@@ -1,4 +1,4 @@
-"""Primitives from what ActivityWatch recorded: the window, the browser tab, input; base.py: what they share."""
+"""Primitives from what ActivityWatch recorded: the window, the browser tab, input. Their base.py holds what they share."""
 
 from proki.core.primitives.aw.app_name import App
 from proki.core.primitives.aw.app_title import Title

@@ -23,7 +23,7 @@ BROWSER_APPS = {"chrome.exe", "msedge.exe", "brave.exe", "firefox.exe", "vivaldi
 # the lock screen / screen saver: time on it is time away
 LOCK_APPS = {"LockApp.exe"}
 
-# system windows that come and go on their own; never worth a question
+# system windows that come and go on their own. Never worth a question
 SYSTEM_APPS = {
     "LockApp.exe", "SearchHost.exe", "SearchApp.exe", "ShellExperienceHost.exe",
     "StartMenuExperienceHost.exe", "ApplicationFrameHost.exe", "explorer.exe", "Taskmgr.exe",

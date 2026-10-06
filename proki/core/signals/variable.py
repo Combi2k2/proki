@@ -1,20 +1,23 @@
-"""Variables: app state, a value something sets (an action, a flow), not read from the
-world or computed from other streams.
+"""Variables: app state, a value that actions or programs set, rather than one read from
+the world or worked out from other streams. Examples: in_session, deadline_eod, task.
 
-A `Variable` is a stream whose value is whatever it was last set to: `set`, `add` and
-`sub` change it (between cycles too: a reader in the same cycle sees the new value), and
-every cycle reads it like a primitive, so expressions can use it (`time - last_suggested`).
+    {"name": "deadline_eod", "value": "time - clock + 1440"}
 
-Its starting `value` is a constant (a number, true / false, null) or an expression,
-worked out once on its first live cycle (not while the startup replays the past; it's
-unknown till then): `"time - clock + 1440"` is the next midnight. Every
-variable keeps its latest value in `Variable.store` (a key-value store), saved when it
-changes and read back when it's made, so it carries on after a restart; the starting
-value counts only while nothing is saved (or what's saved is of another kind than a
-constant starting value: a number where text is expected). Resetting is up to flows
-(`{"set": {"daily_metric": 0}}` when a day ends), not the variable.
-The config changes one with the set / add / sub actions (core/actions/), each by an
-expression's value at the moment.
+Reading: a variable is a stream like any other, so expressions can use it
+(`time - last_suggested`). Its value is whatever it was last set to.
+
+Changing: `set`, `add` and `sub` (the config's set / add / sub actions, core/actions/var/).
+A change shows at once, even within the same cycle.
+
+Starting value: a constant (a number, true / false, null) or an expression. Text is
+always read as an expression, so `"time - clock + 1440"` means "next midnight". The
+expression is worked out once, on the first live cycle (not while the startup replays
+the past). Until then the variable is unknown.
+
+Saved across restarts: every change is saved (`Variable.store`) and read back when the
+variable is made, so a saved value replaces the starting value. If the config now
+starts it with a different kind of value (a number where it was text), the saved value
+is dropped. Resetting a variable (each day, say) is up to programs, not the variable.
 """
 
 from __future__ import annotations
@@ -28,13 +31,15 @@ from proki.utils import kind, same
 from proki.errors import VariableError
 
 class VariableStore(Protocol):
-    """Where variables keep their latest value, by name (the app gives one: core/store.py)."""
+    """Where variables save their latest value, by name. The app provides one."""
 
     def load(self, name: str) -> Any: ...  # raises KeyError if it was never saved
     def save(self, name: str, value: Any) -> None: ...
 
 
 class Variable(Stream):
+    """App state: a value set by actions, saved across restarts."""
+
     store: ClassVar[VariableStore | None] = None
 
     def __init__(self, name: str, value: Any = None):
@@ -51,7 +56,8 @@ class Variable(Stream):
             self.inputs = [self.start]  # worked out before it, in its first cycle
 
     def _saved(self, start: Any) -> bool:
-        """Take the saved value, if there is one of the right kind."""
+        """Use the saved value, if there is one and it's the same kind as the starting
+        value. Returns True if it did."""
         if Variable.store is None:
             return False
         try:
@@ -74,16 +80,18 @@ class Variable(Stream):
         return self.value
 
     def set(self, value: Any) -> None:
+        """Change the value (and save it). Everything reading it sees the new value at once."""
         if not same(value, self.value):
             self._keep(value)
             Stream.epoch += 1  # what was worked out from it this cycle is stale
 
     def add(self, amount: Any) -> None:
-        """Add `amount`; an unknown amount or value (None) changes nothing."""
+        """Add `amount`. If either the amount or the value is unknown, nothing changes."""
         if self.value is not None and amount is not None:
             self.set(self.value + amount)
 
     def sub(self, amount: Any) -> None:
+        """Subtract `amount`. If either the amount or the value is unknown, nothing changes."""
         if self.value is not None and amount is not None:
             self.set(self.value - amount)
 

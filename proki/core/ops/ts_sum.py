@@ -1,5 +1,9 @@
-"""ts_sum(x, w): ∫ x dt over the last w minutes: a rate per minute gives a count, true /
-false gives minutes."""
+"""ts_sum(x, w): x added up over time, in the last w minutes.
+
+Each value counts for the time it covers, in minutes:
+    ts_sum(keys, 10)            key presses in the last 10 minutes (keys is per minute)
+    ts_sum(in_session, 60)      minutes in a session in the last hour (True counts as 1)
+"""
 
 from __future__ import annotations
 
@@ -12,7 +16,8 @@ from proki.core.signals.stream import Stream
 
 
 class TsSum(Queued):
-    """A running total of the window's known values, each counted over its input's period."""
+    """Keeps a running total of the known values. The result multiplies it by the minutes
+    each value covers (a cycle, or the input's period for a slow input)."""
 
     def __init__(self, x: Operand, w: float):
         super().__init__(x, minutes(w))

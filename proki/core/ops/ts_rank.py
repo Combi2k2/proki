@@ -1,4 +1,6 @@
-"""ts_rank(x, w): where x's current value stands among the last w minutes' values, in [0, 1]."""
+"""ts_rank(x, w): where x's current value stands among the last w minutes' values, from 0
+(the lowest) to 1 (the highest).
+"""
 
 from __future__ import annotations
 
@@ -9,8 +11,8 @@ from proki.utils import minutes
 
 
 class TsRank(Queued):
-    """Where the current value stands among the window's known values, in [0, 1]: the
-    share below it (ties count half). None with fewer than two."""
+    """The share of the window's known values below the current one (equal ones count
+    half). Unknown with fewer than two known values."""
 
     def __init__(self, x: Operand, w: float):
         super().__init__(x, minutes(w))

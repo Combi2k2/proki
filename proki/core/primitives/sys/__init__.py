@@ -1,4 +1,4 @@
-"""Primitives from this computer's clock, at each cycle's time; base.py: what they share."""
+"""Primitives from this computer's clock, at each cycle's time. Their base.py holds what they share."""
 
 from proki.core.primitives.sys.clock import Clock
 from proki.core.primitives.sys.time import Time

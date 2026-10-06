@@ -1,6 +1,14 @@
-"""What proki raises on purpose, one root (base.py: `ProkiError`, with where it happened):
-mistakes in the config or definitions (config.py), services that failed (service.py), an
-unsupported computer (platform.py). Catch `ProkiError` for all of them, or one group."""
+"""The errors proki raises on purpose, all under one root, `ProkiError`:
+
+    ProkiError                 any of them (base.py). Its message says where it happened
+      ConfigError              a mistake in the config or a definition (config.py)
+        ExprError, SignalError, VariableError, RuleError, ProgramError, ActionError
+      ServiceError             a service outside proki failed (service.py)
+        LlmError
+      PlatformError            an operating system proki doesn't support (platform.py)
+
+Catch `ProkiError` for all of them, or one group.
+"""
 
 from proki.errors.base import ProkiError
 from proki.errors.config import (

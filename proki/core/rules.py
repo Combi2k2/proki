@@ -1,28 +1,31 @@
-"""Rules: a soft comparison of two expressions, the chance of doing something now.
-
-A `Rule` compares two expressions, `lhs` and `rhs` (each a signal expression: a name, a
-number, `ts_mean(keys, 5)`, ...) with `cmp`, one of gt, ge, lt, le, eq, ne, and turns it
-into a chance of firing, in [0, 1]:
+"""Rules: a comparison of two expressions that gives a chance of acting, not a plain yes/no.
 
     {"name": "busy", "lhs": "keys_5m", "cmp": "gt", "rhs": 30, "softness": 5}
 
-`softness` s is like an LLM's temperature; with z = (lhs - rhs) / s:
+`lhs` and `rhs` are expressions (a name, a number, `ts_mean(keys, 5)`, ...), compared
+with `cmp`: gt (>), ge (>=), lt (<), le (<=), eq (==) or ne (!=).
 
-    gt, ge      σ(z): equal → 50%, ± s → 73% / 27%, ± 2s → 88% / 12%
-    lt, le      σ(-z): the same, mirrored
-    eq          exp(-z² / 2): 1 when equal, 61% at ± s, 14% at ± 2s
-    ne          1 - that
-    softness 0  (the default) the comparison itself: 1 when it holds, else 0; so ge and
-                le differ from gt and lt only here
+Softness: with softness 0 (the default), the rule is a plain comparison: it fires
+(chance 1) when it holds, else not (0). With softness s > 0, the chance rises smoothly
+as lhs passes rhs, like an LLM's temperature. With z = (lhs - rhs) / s:
 
-Rules compare numbers only (true / false count as 1 / 0): a side that isn't a number, text
-or unknown (None), never fires. A rule keeps no history: `decide()` samples the
-chance at the moment, and whoever asks decides how often, since the chance is per asking.
-Each side is a hidden signal (`<rule>.lhs`, `<rule>.rhs`: names expressions can't use),
-so its windows move on every cycle. Every rule is kept in `Rule.registry` by name.
+    gt, ge   equal: 50%, s above: 73%, 2s above: 88%, s below: 27%, 2s below: 12%
+    lt, le   the same, mirrored
+    eq       equal: 100%, s apart: 61%, 2s apart: 14%
+    ne       100% minus eq's chance
 
-Rules trigger together by `Rule.vote()`, level by level, the highest first: a level approves
-when most of its rules fire; one that doesn't stops the vote there.
+So "busy" above is 50% at 30 keys a minute, 73% at 35, 88% at 40.
+
+Only numbers are compared (True / False count as 1 / 0). If either side is unknown or
+text, the rule doesn't fire.
+
+A rule keeps no history: `decide()` samples its chance at that moment, so how often it
+gets the chance to fire is up to whoever asks (a reaction's `every`). Each side is a hidden
+signal (`<rule>.lhs`, `<rule>.rhs`), so windows in it move on every cycle.
+
+Several rules decide together with `Rule.vote()`, by `level`, highest first: a level passes
+when more than half of its rules fire, and the vote stops at the first level that doesn't.
+To require all of several rules, give each its own level.
 """
 
 from __future__ import annotations
@@ -46,6 +49,8 @@ SYMBOL = {"gt": ">", "ge": ">=", "lt": "<", "le": "<=", "eq": "==", "ne": "!="}
 
 
 class Rule:
+    """A soft comparison of two expressions (see above)."""
+
     registry: ClassVar[dict[str, Rule]] = {}  # every rule, by name
 
     def __init__(
@@ -71,8 +76,9 @@ class Rule:
                 raise RuleError(f"level is a whole number ({level!r})")
 
             self.name = name
-            self.lhs = Signal(f"{name}.lhs", str(lhs)); self.lhs.inputs
-            self.rhs = Signal(f"{name}.rhs", str(rhs)); self.rhs.inputs
+            self.lhs = Signal(f"{name}.lhs", str(lhs))
+            self.rhs = Signal(f"{name}.rhs", str(rhs))
+            self.lhs.inputs, self.rhs.inputs  # compiled now: a mistake shows with the rule's name
             self.cmp = cmp
             self.softness = softness
             self.level = level
@@ -81,7 +87,7 @@ class Rule:
         Rule.registry[name] = self
 
     def chance(self) -> float:
-        """The chance of firing now, at the sides' current values."""
+        """The chance of firing now, from 0 to 1, given the sides' current values."""
         a = self.lhs.current()
         b = self.rhs.current()
         if not is_number(a):    return 0.0
@@ -96,7 +102,7 @@ class Rule:
         return 1 - bell(z)
 
     def decide(self, rng: np.random.Generator | None = None) -> bool:
-        """Fire or not, now: the chance at the moment, sampled."""
+        """Whether it fires now: a random draw with its current chance."""
         return chance(self.chance(), rng)
 
     def __repr__(self) -> str:
@@ -105,9 +111,10 @@ class Rule:
 
     @classmethod
     def vote(cls, rules: Iterable[Rule], rng: np.random.Generator | None = None) -> bool:
-        """Whether `rules` trigger, now: level by level, the highest first, each by a majority
-        of its rules (more than half fire; each rule sampled once); a level that doesn't
-        approve stops the vote there, so lower levels aren't asked."""
+        """Whether `rules` trigger now. They're grouped by level and voted level by level,
+        highest first: a level passes when more than half of its rules fire (each drawn
+        once). The first level that doesn't pass ends the vote with False. Lower levels
+        aren't drawn."""
         levels: dict[int, list[Rule]] = {}
         for rule in rules:
             levels.setdefault(rule.level, []).append(rule)

@@ -1,6 +1,12 @@
-"""ts_count(x, w): how many times x changed to a new value over the last w minutes
-(true / false: how many times it became true). An unknown value (None) is skipped: x
-before and after it are compared; the first value known isn't a change."""
+"""ts_count(x, w): how many times x changed to a new value in the last w minutes.
+
+    ts_count(app, 2)            app switches in the last 2 minutes
+    ts_count(in_session, 60)    sessions started in the last hour (True / False: how many
+                                times it became True)
+
+Unknown values are skipped: x before and after a gap is compared directly. The first
+value ever seen doesn't count as a change.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +18,7 @@ from proki.utils import minutes, same
 
 
 class TsCount(Queued):
-    """The queue holds (time, whether x changed to a new value: not unknown, not false)."""
+    """The queue holds (time, whether x changed then). `changes` is how many in the window."""
 
     def __init__(self, x: Operand, w: float):
         super().__init__(x, minutes(w))

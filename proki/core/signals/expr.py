@@ -1,21 +1,29 @@
-"""Expressions: the signal language's text, compiled into a tree of streams (operators from
-core/ops/, names from `Stream.registry`). Signals, rules, a variable's starting value and
-actions all read expressions through `compile_expr`.
+"""Expressions: the text of the signal language, compiled into a tree of streams.
 
-Expressions use Python's syntax, parsed with `ast` and walked by hand (no `eval`):
+Signals, rules, a variable's starting value and actions all use expressions. They are
+written in Python's syntax, but read by proki itself, not run by Python:
 
     ts_mean(keys + mouse_click, 5)
-    ts_sum(label == "video", 60)
+    ts_sum(label == "video_streaming", 60)
     ts_mean(focus_2m, 2) - delay(ts_mean(focus_2m, 2), 2)
     ts_count(app, 30) > 20 and not in_session
 
-numbers, text in quotes, + - * / // %, comparisons (and `in` a tuple of constants), and /
-or / not, the operators of ops/, and names. Time is always in minutes: windows, delays,
-and rates (keys is presses per minute). A value that can't be worked out is unknown
-(None): an unknown input, a division by zero, text where a number goes; `and` / `or`
-know the answer when one side settles it (`true or unknown` is true). A mistake the
-text shows (an unknown name, a missing argument, `"a" + 1`) is an `ExprError` when it
-compiles.
+What an expression can contain:
+    numbers, text in quotes, True / False
+    + - * / // %, comparisons (== != < <= > >=), `in` / `not in` a tuple of constants
+    and, or, not
+    the operators of core/ops/ (ts_mean, every, delay, ...)
+    names of inputs, signals and variables
+
+Time is always in minutes: windows, delays, and rates (keys is presses per minute).
+
+Unknown values: a value that can't be worked out is None (unknown). That includes an
+unknown input, a division by zero, and text where a number goes. Anything worked out
+from an unknown value is unknown too, except `and` / `or` when one side already settles
+the answer (`True or unknown` is True).
+
+Mistakes visible in the text itself (an unknown name, a missing argument, `"a" + 1`, a
+window that isn't a number) raise ExprError when the expression is compiled.
 """
 
 from __future__ import annotations
@@ -32,6 +40,7 @@ from proki.errors import ExprError
 
 @lru_cache(maxsize=256)
 def parse(expr: str) -> ast.expr:
+    """The expression's syntax tree. ExprError if it isn't valid syntax."""
     try:
         return ast.parse(expr, mode="eval").body
     except SyntaxError as e:
@@ -39,7 +48,8 @@ def parse(expr: str) -> ast.expr:
 
 
 def compile_expr(expr: str) -> Stream:
-    """The expression as a stream; its names refer to `Stream.registry`."""
+    """The expression as a stream, its names looked up in `Stream.registry`. Any mistake
+    the text shows becomes an ExprError naming the expression."""
     try:
         result = _build(parse(expr))
     except ExprError:
@@ -50,28 +60,29 @@ def compile_expr(expr: str) -> Stream:
 
 
 def _lift(f: Any, *args: Any, unknown: bool = False) -> Any:
-    """`f` over the arguments: worked out now when they're all constants (`7 * 1440` is a
-    number, usable as a window), else a stream (ops.Lift). `unknown`: `f` takes unknown
-    (None) arguments itself (and / or)."""
+    """`f` applied to the arguments. If they're all constants, it's worked out right away
+    (so `7 * 1440` is a plain number, usable as a window). Otherwise it's a stream that
+    applies `f` each cycle (ops.Lift). `unknown=True`: `f` handles unknown arguments
+    itself (and / or). Otherwise any unknown argument makes the result unknown."""
     if any(isinstance(a, Stream) for a in args):
         return ops.Lift(f, *args, unknown=unknown)
     return None if not unknown and any(a is None for a in args) else f(*args)
 
 
 def _divide(f: Any) -> Any:
-    """/ // %: unknown when dividing by zero."""
+    """Division (/ // %) that gives unknown instead of failing when dividing by zero."""
     return lambda a, b: None if b == 0 else f(a, b)
 
 
 def _and(*values: Any) -> Any:
-    """False if any is false, else unknown if any is, else true."""
+    """`and`: False if any value is false, else unknown if any is unknown, else True."""
     if any(v is not None and not v for v in values):
         return False
     return None if None in values else True
 
 
 def _or(*values: Any) -> Any:
-    """True if any is true, else unknown if any is, else false."""
+    """`or`: True if any value is true, else unknown if any is unknown, else False."""
     if any(v is not None and v for v in values):
         return True
     return None if None in values else False
@@ -94,6 +105,8 @@ COMPARE = {
 
 
 def _build(node: ast.expr) -> Any:
+    """One node of the syntax tree as a constant or a stream. ExprError for anything an
+    expression can't contain."""
     match node:
         case ast.Constant(value=value) if isinstance(value, (int, float, str, bool)):
             return value

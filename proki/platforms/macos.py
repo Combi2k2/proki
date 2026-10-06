@@ -22,7 +22,7 @@ BROWSER_APPS = {
 # the lock screen / screen saver: time on it is time away
 LOCK_APPS = {"loginwindow", "ScreenSaverEngine"}
 
-# system windows that come and go on their own; never worth a question
+# system windows that come and go on their own. Never worth a question
 SYSTEM_APPS = {
     "loginwindow", "Dock", "SystemUIServer", "ControlCenter", "NotificationCenter",
     "UserNotificationCenter", "Spotlight", "ScreenSaverEngine", "SecurityAgent",

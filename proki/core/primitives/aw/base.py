@@ -1,5 +1,9 @@
-"""What the ActivityWatch primitives (this folder) share: the window watcher's event in focus
-(`focused`), a field of it (`Window`), input per minute (`InputRate`)."""
+"""What the ActivityWatch primitives (this folder) share:
+
+    focused(rec, t)   the window watcher's event at time t: the app and window in focus
+    Window            mixin: one field of that event (app, title)
+    InputRate         mixin: input per minute over the cycle (keys, mouse_*)
+"""
 
 from __future__ import annotations
 
@@ -16,7 +20,7 @@ def focused(rec: aw.Record | None, t: datetime) -> aw.Event | None:
 
 
 class Window:
-    """Mixin: a field of the window in focus."""
+    """Mixin: one field (`field`) of the window in focus, e.g. "app" or "title"."""
 
     buckets = (aw.WINDOW,)
     field: ClassVar[str]
@@ -27,14 +31,17 @@ class Window:
 
 
 class InputRate:
-    """Mixin: per minute, over the cycle's time frame (t − cycle, t]: every input event in
-    it, each counted for the part of it inside the frame, over the time they cover (the
-    newest event may not be written yet). With none in the frame, the event covering the
-    moment (input holds a while: `aw.HOLD`)."""
+    """Mixin: input per minute, over the last cycle (from t − cycle to t).
+
+    Every input event overlapping the cycle counts, each weighted by how much of it falls
+    inside the cycle. If none does (the newest may not be written yet), the event holding
+    at t is used. Input holds a little while after its event (`aw.HOLD`). `count` says
+    what to count in an event's data."""
 
     buckets = (aw.INPUT,)
 
     def count(self, data: dict) -> float:
+        """How much input one event holds (presses, clicks, pixels, ...)."""
         raise NotImplementedError
 
     def read(self, rec: aw.Record | None, t: datetime) -> Any:

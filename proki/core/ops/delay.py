@@ -1,4 +1,7 @@
-"""delay(x, d): x as it was d minutes ago."""
+"""delay(x, d): x as it was d minutes ago.
+
+    focus - delay(focus, 2)   how much focus changed in the last 2 minutes
+"""
 
 from __future__ import annotations
 
@@ -10,15 +13,16 @@ from proki.utils import minutes
 
 
 class Delay(Queued):
-    """`x` as it was `d` minutes ago: the latest value at or before t - d. Fresh when that
-    value is a new one of x's (d after x took it), not when x is: over a slow input the
-    two differ."""
+    """x as it was `d` minutes ago: the latest value x took at or before t - d.
+
+    It's fresh when the value it gives changes, which is d minutes after x took it, not
+    when x itself is fresh. For a slow x, the two differ."""
 
     def __init__(self, x: Operand, d: float):
         super().__init__(x, minutes(d))
 
     at: datetime | None = None
-    shown: datetime | None = None  # when x took the value it gives now
+    shown: datetime | None = None  # when x took the value delay gives now
 
     def advance(self, t: datetime) -> None:
         super().advance(t)

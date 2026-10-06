@@ -4,7 +4,7 @@ ActivityWatch's tray app (aw-qt) only starts a few programs and shows an icon.
 proki does the same from its own tray icon: start the server and watchers, restart
 crashes, and stop them on quit. If ActivityWatch is already running, proki leaves it
 alone, unless those are programs proki started in an earlier run that ended without
-cleaning up; proki remembers their process ids and takes them over.
+cleaning up, and proki remembers their process ids and takes them over.
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ class ActivityWatchSupervisor:
         return found
 
     def start(self) -> str:
-        """Start everything; returns a short status for the tray."""
+        """Start everything. Returns a short status for the tray."""
         if self.clean():    wait_while(self.healthy, self.timeout)
         if self.healthy():
             self.external = True
@@ -84,7 +84,7 @@ class ActivityWatchSupervisor:
         return "ActivityWatch started by proki"
 
     def check(self) -> list[str]:
-        """Restart any module that has stopped; returns the names restarted."""
+        """Restart any module that has stopped. Returns the names restarted."""
         if self.external:
             return []
         restarted = []

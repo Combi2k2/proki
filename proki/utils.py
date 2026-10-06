@@ -41,7 +41,7 @@ def same(a: Any, b: Any) -> bool:
 
 
 def minutes(m: float) -> timedelta:
-    """`m` minutes; a number, not negative (true / false aren't numbers here)."""
+    """`m` minutes. It must be a number that isn't negative (true / false aren't numbers here)."""
     if isinstance(m, bool) or not isinstance(m, int | float):
         raise TypeError(f"minutes are a number, not {m!r}")
     if m < 0:

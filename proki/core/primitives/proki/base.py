@@ -1,6 +1,7 @@
-"""What proki's own primitives (this folder) share: `Labeled`, the window in focus as the
-app labels it, through a function the app sets (the labels, jev, the user's answers:
-more than a field of what was recorded)."""
+"""What proki's own primitives (this folder) share: `Labeled`, a value about the window in
+focus that comes from the app's labels, not from a field ActivityWatch recorded. The app
+plugs in the function (it knows the labels, jev's guesses and your answers).
+"""
 
 from __future__ import annotations
 
@@ -12,11 +13,13 @@ from proki.services import aw
 
 
 class Labeled:
-    """Mixin: `of(app, title)`, of the window in focus."""
+    """Mixin: the value `of(app, title)` gives for the window in focus. Unknown when no
+    window is in focus."""
 
     buckets = (aw.WINDOW,)
 
     def of(self, app: str, title: str) -> Any:
+        """The value for a window, from its app and title."""
         raise NotImplementedError
 
     def read(self, rec: aw.Record | None, t: datetime) -> Any:

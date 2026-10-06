@@ -1,4 +1,6 @@
-"""`depth`: how deep what's in focus is, from its label's category."""
+"""`depth`: how deep the work in focus is (1 deep, 0.25 shallow, ...), from the category of
+its label. Unknown for a window without a label.
+"""
 
 from __future__ import annotations
 
@@ -10,8 +12,8 @@ from proki.core.primitives.proki.base import Labeled
 
 
 class Depth(Labeled, Primitive):
-    """How deep what's in focus is, from `Depth.depth_of(app, title)` (its label's
-    category; the app sets it)."""
+    """How deep the window in focus is: `Depth.depth_of(app, title)`, a function the app
+    plugs in (it maps the window's label to its category's depth)."""
 
     depth_of: ClassVar[Callable[[str, str], float | None]] = staticmethod(lambda app, title: None)
 
