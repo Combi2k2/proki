@@ -14,7 +14,7 @@ Watchers report every few seconds and send their reports in batches: neighbourin
 leave tiny gaps, and the newest event ends a little before now. So an event's value holds
 until the next event starts, for at most `HOLD` after its end; longer gaps are unknown.
 
-Only core/signals/primitive.py reads a `Record`; it keeps what it needs as its own tables.
+Only core/primitives/ reads a `Record`; it keeps what it needs as its own tables.
 """
 
 from __future__ import annotations

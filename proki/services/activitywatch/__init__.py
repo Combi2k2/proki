@@ -1,8 +1,7 @@
 """ActivityWatch, the tracker proki is built on (imported as `aw`: proki/services).
 
     server.py   runs the server and watchers, so ActivityWatch's own tray app isn't needed
-    client.py   the server's REST API, what the watchers record, and how to look up a
-                moment in it (only core/signals/primitive.py reads a `Record`)
+    client.py   the server's REST API, what the watchers record, and how to look up a moment in it (only core/primitives/ reads a `Record`)
     utils.py    finding the programs (`aw_detect`), checking the server (`aw_health`)
 """
 
