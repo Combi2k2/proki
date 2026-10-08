@@ -1,14 +1,16 @@
 """Small helpers that know nothing about proki: names, values, chances, text similarity,
-waiting."""
+waiting, finding the commands that start installed programs."""
 
 from __future__ import annotations
 
+import shutil
 import math
-import re
 import time
-from collections import Counter
+import re
 from collections.abc import Callable
+from collections import Counter
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -61,12 +63,12 @@ def kind(x: Any) -> str:
 # chances
 
 def sigmoid(z: float) -> float:
-    """1 / (1 + e^−z), without overflow."""
+    """1 / (1 + e^-z), without overflow."""
     return float(0.5 * (1 + np.tanh(z / 2)))
 
 
 def bell(z: float) -> float:
-    """e^(−z²/2): 1 at 0, 61% at ±1, 14% at ±2."""
+    """e^(-z²/2): 1 at 0, 61% at ±1, 14% at ±2."""
     return float(np.exp(-z * z / 2))
 
 
@@ -113,3 +115,42 @@ def wait_while(condition: Callable[[], bool], timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while condition() and time.monotonic() < deadline:
         time.sleep(0.2)
+
+
+# commands
+
+def find_commands(
+    modules: dict[str, list[str]],
+    directories: list[Path],
+    suffix: str = "",
+) -> dict[str, list[str]] | None:
+    """Each module's start command: its installed program, then its arguments.
+
+        {"nats-server": ["-p", "4222"]}  →  {"nats-server": ["/opt/homebrew/bin/nats-server", "-p", "4222"]}
+
+    `directories` are tried in order. In each, a module's program is looked for:
+
+        right in it          a macOS app bundle, a bin folder: `<dir>/aw-server`
+        in its own folder    Windows and Linux: `<dir>/aw-server/aw-server.exe`
+        on the PATH          when the directory doesn't have it
+
+    The first directory where every module is found gives the commands. Without
+    directories, the PATH alone. None: they aren't all found. `suffix` is "" or ".exe"."""
+    paths_init = {name: path for name in modules if (path := shutil.which(f"{name}{suffix}")) is not None}
+    for directory in directories:
+        paths = paths_init.copy()
+        for name in modules:
+            cands = [
+                directory / f"{name}{suffix}",
+                directory / name / f"{name}{suffix}",
+            ]
+            if cands[0].is_file():  paths[name] = cands[0]
+            if cands[1].is_file():  paths[name] = cands[1]
+
+        if len(paths) == len(modules):
+            return {name: [str(paths[name]), *args] for name, args in modules.items()}
+
+    if len(paths_init) == len(modules):
+        return {name: [str(paths_init[name]), *args] for name, args in modules.items()}
+
+    return None
