@@ -29,9 +29,7 @@ from typing import Any, Protocol
 
 # the programs proki runs (services/supervisor.py); the server's address (the config's
 # [nats] host and port) is added to its command where it's started
-MODULES = [
-    "nats-server",
-]
+MODULES = ["nats-server"]
 
 Reply    = Callable[[dict], None]               # answers a request: reply({"answer": ...})
 Handler  = Callable[[dict, Reply], None]        # a subscriber: handler(data, reply)
@@ -53,7 +51,7 @@ class Bus(Protocol):
         """Stop. What's still waiting gets no reply."""
 
 
-class LocalBus:
+class LocalBus(Bus):
     """Subjects in this process: a request goes to the subject's first subscriber.
     `inline`: handlers run on the caller's thread, not a pool's (tests: nothing races)."""
 
@@ -114,7 +112,7 @@ class LocalBus:
         else:               pool.submit(_safely, handler, data, reply)
 
 
-class NatsBus:
+class NatsBus(Bus):
     """A connection to a NATS server, on an asyncio loop of its own thread (the rest of
     proki isn't async). Subscribers of a subject share a queue group, so several processes
     can serve one subject and each message goes to one of them."""
