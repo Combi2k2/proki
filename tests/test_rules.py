@@ -3,9 +3,12 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pytest
 
+from conftest import replay
 from proki.compiler import compile_config
 from proki.core.rules import Rule
-from proki.core.signals import Primitive, Stream
+from proki.core.primitives import Primitive
+from proki.core.signals import Signal, Stream
+from proki.errors import RuleError
 from proki.services.activitywatch import Event, Record
 
 T0 = datetime(2026, 10, 1, 10, tzinfo=timezone.utc)
@@ -83,7 +86,7 @@ def test_a_rule_reads_its_signals_now_and_is_sampled(tmp_path):
     busy, = compile_config(config).rules
     typing = [Event(at(m / 12), at((m + 1) / 12), {"presses": 5}) for m in range(5 * 12)]  # 30 a minute
     Stream.now = at(0)
-    Primitive.run(at(5), Record.of(at(0), at(5), {"os.hid.input": typing}))
+    replay(at(5), Record.of(at(0), at(5), {"os.hid.input": typing}))
     assert busy.chance() == pytest.approx(0.5) and Rule.registry["busy"] is busy
     assert "busy" not in Stream.registry  # a rule isn't a signal
     rng = np.random.default_rng(1)
@@ -117,3 +120,11 @@ def test_levels_vote_by_majority_the_highest_first():
     Stream.tick(T0 + Stream.cycle)
     assert Rule.vote(band)
     assert Rule.vote([])  # nothing against
+
+
+def test_softness_is_a_number_and_level_a_whole_one():
+    Signal("x", "1")
+    for kwargs, problem in [({"softness": "0.1"}, "softness is a number"), ({"softness": True}, "softness is a number"),
+                            ({"level": "high"}, "level is a whole number"), ({"level": 1.5}, "level is a whole number")]:
+        with pytest.raises(RuleError, match=problem):
+            Rule("r", "x", "gt", 0, **kwargs)

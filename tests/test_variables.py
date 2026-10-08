@@ -2,9 +2,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from conftest import replay
 from proki.compiler import compile_config
 from proki.core.rules import Rule
-from proki.core.signals import Clock, Primitive, Signal, Stream, Time, Update, Variable, Weekday
+from proki.core.actions import Action, Add, Set
+from proki.core.primitives import Clock, Primitive, Time, Weekday
+from proki.core.signals import Signal, Stream, Variable
 from proki.services.activitywatch import Event, Record
 
 T0 = datetime(2026, 10, 1, 10, tzinfo=timezone.utc)  # a Thursday
@@ -56,9 +59,9 @@ def test_updates_take_an_expression_at_the_moment():
     last = Variable("last_suggested")
     count = Variable("count", 0)
     since = Signal("since_suggested", "time - last_suggested")
-    remember = Update("set", {"last_suggested": "time"})
-    bump = Update("add", {"count": "1 + 1"})
-    clear = Update("set", {"last_suggested": None})
+    remember = Set(name="last_suggested", expr="time")
+    bump = Add(name="count", expr="1 + 1")
+    clear = Set(name="last_suggested", expr=None)
 
     Stream.tick(at(0))
     remember.apply(), bump.apply()
@@ -71,34 +74,45 @@ def test_updates_take_an_expression_at_the_moment():
     assert last.current() is None
 
 
-def test_an_update_window_moves_on_every_cycle():
-    """An update's expression is made up front: its window is full when it's applied."""
-    x = Variable("x", 0)
+def test_an_action_works_its_expression_out_on_the_spot():
+    """No window in an action (nothing moves it on every cycle for the action): a signal's
+    name instead, which moves on with the others."""
+    Variable("x", 0)
     Variable("mean_then")
-    take = Update("set", {"mean_then": "ts_mean(x, 1)"})
+    with pytest.raises(ValueError, match="ts_mean keeps a window"):
+        Set(name="mean_then", expr="ts_mean(x, 1)")
+    Signal("x_1m", "ts_mean(x, 1)")
+    take = Set(name="mean_then", expr="x_1m * 1")  # names, and arithmetic over them: fine
     for i in range(6):
-        x.set(i)
+        Stream.registry["x"].set(i)
         Stream.tick(at(i / 6))
     take.apply()
-    assert Stream.registry["mean_then"].current() == pytest.approx(2.5)  # 0..5, not just the last
+    assert Stream.registry["mean_then"].current() == pytest.approx(2.5)  # 0..5
 
 
 def test_updates_are_checked():
     Variable("v", 0)
     Signal("s", "1")
-    for args, problem in [(("mul", {"v": "1"}), "one of set, add, sub"), (("set", {}), "set what"),
-                          (("set", {"nothing": "1"}), "no variable"), (("set", {"s": "1"}), "no variable is called 's'"),
-                          (("set", {"v": "nope + 1"}), "unknown name")]:
+    for entry, problem in [({"mul": {"name": "v", "expr": "1"}}, "an action is one of"),
+                           ({"set": {}}, "set takes {name, expr}: missing expr, name"),
+                           ({"set": {"v": "1"}}, "unknown v"),  # the old {variable: expr}
+                           ({"set": {"name": "nothing", "expr": "1"}}, "no variable"),
+                           ({"set": {"name": "s", "expr": "1"}}, "no variable is called 's'"),
+                           ({"set": {"name": "v", "expr": "nope + 1"}}, "unknown name"),
+                           ({"goto": {"state": "idle"}}, "an action is one of"),  # a jump is a state's, not an action
+                           ({"alarm": {"name": "bedtime", "on": "yes"}}, "on is true")]:
         with pytest.raises(ValueError, match=problem):
-            Update(*args)
+            Action.parse(entry)
 
 
-def test_one_update_changes_several_at_once():
-    a, b = Variable("a", 1), Variable("b", 2)
-    swap = Update("set", {"a": "b", "b": "a"})
+def test_actions_in_a_row_see_each_other():
+    """A swap, through a third variable: each set reads what the one before it set."""
+    a, b, tmp = Variable("a", 1), Variable("b", 2), Variable("tmp")
+    swap = [Set(name="tmp", expr="a"), Set(name="a", expr="b"), Set(name="b", expr="tmp")]
     Stream.tick(T0)
-    swap.apply()
-    assert (a.current(), b.current()) == (2, 1)  # worked out first, then assigned
+    for action in swap:
+        action.apply()
+    assert (a.current(), b.current()) == (2, 1)
 
 
 def test_every_variable_keeps_its_latest_value():
@@ -165,7 +179,7 @@ def test_the_time_is_known_without_a_recording():
     """Clock primitives don't need ActivityWatch: they're known while nothing was recorded."""
     Clock()
     Stream.now = at(0)
-    Primitive.run(at(1), Record.of(at(0), at(1), {}))
+    replay(at(1), Record.of(at(0), at(1), {}))
     assert Stream.registry["clock"].current() is not None
 
 
@@ -190,10 +204,10 @@ def test_config_variables(tmp_path):
 
     typing = [Event(at(m / 12), at((m + 1) / 12), {"presses": 5}) for m in range(60 * 12)]
     Stream.now = at(0)
-    Primitive.run(at(10), Record.of(at(0), at(10), {"os.hid.input": typing}))
+    replay(at(10), Record.of(at(0), at(10), {"os.hid.input": typing}))
     assert Rule.registry["not_lately"].chance() == 0  # never suggested: unknown, so it never fires
     program.variables[0].set(Stream.registry["time"].current())
-    Primitive.run(at(60), Record.of(at(0), at(60), {"os.hid.input": typing}))
+    replay(at(60), Record.of(at(0), at(60), {"os.hid.input": typing}))
     assert Stream.registry["since_suggested"].current() == pytest.approx(50)
     assert Rule.registry["not_lately"].chance() == 1
 
@@ -210,3 +224,23 @@ def test_config_variables_are_checked(tmp_path):
         Stream.registry.clear()
         with pytest.raises(ValueError, match=problem):
             compile_config(bad)
+
+
+def test_a_change_is_seen_at_once_by_everything_that_reads_it():
+    """Values worked out earlier in the cycle are worked out again after a variable changes."""
+    x = Variable("x", 0)
+    bump = Set(name="x", expr="x + 1")
+    doubled = Signal("doubled", "x * 2")
+    Stream.tick(T0)
+    assert doubled.current() == 0
+    bump.apply(), bump.apply()  # twice in one cycle
+    assert x.current() == 2 and doubled.current() == 4
+
+
+def test_a_starting_expression_waits_for_the_live_cycle():
+    now = at(60 * 15)
+    Time(), Clock(), Primitive.kinds["keys"](backfill=True, window=timedelta(days=1))
+    deadline = Variable("deadline_eod", "time - clock + 1440")
+    replay(now, Record.of(now - timedelta(days=1), now, {}))  # the startup replay: a day back
+    midnight = (now.astimezone().replace(hour=0, minute=0, second=0) + timedelta(days=1)).timestamp() / 60
+    assert deadline.current() == pytest.approx(midnight)  # tonight's, not the one a day ago

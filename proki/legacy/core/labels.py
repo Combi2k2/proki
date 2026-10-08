@@ -26,7 +26,7 @@ from proki.utils import slugify
 TAXONOMY = Path(__file__).resolve().parents[2] / "assets" / "labels.json"
 OTHER_GROUP = "Other"
 
-# how deep each category is: the `depth` primitive (core/signals/primitive.py)
+# how deep each category is: the `depth` primitive (core/primitives/)
 DEPTH = {
     Category.DEEP: 1.0,
     Category.NEUTRAL: 0.5,  # tools: neither helps nor hurts much

@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS tracking (
     decision TEXT NOT NULL,     -- 'track' or 'never'
     set_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS signal_history (  -- persisted signals (signals/base.py)
+CREATE TABLE IF NOT EXISTS signal_history (  -- persisted signals (signals/stream.py)
     name TEXT NOT NULL,
     t TEXT NOT NULL,            -- UTC, ISO
     value TEXT,                 -- JSON
@@ -645,7 +645,7 @@ def _hash(app: str) -> str:
 
 
 class SignalHistory:
-    """Where persisted signals keep their history (the `Storage` of signals/base.py)."""
+    """Where persisted signals keep their history (the `Storage` of signals/stream.py)."""
 
     def __init__(self, store: Store):
         self._db = store._db
@@ -659,6 +659,11 @@ class SignalHistory:
     def save(self, name: str, t: datetime, value: Any) -> None:
         self._db.execute("INSERT OR REPLACE INTO signal_history (name, t, value) VALUES (?, ?, ?)",
                          (name, t.astimezone(timezone.utc).isoformat(), json.dumps(value)))
+        self._db.commit()
+
+    def forget(self, name: str, before: datetime) -> None:
+        self._db.execute("DELETE FROM signal_history WHERE name = ? AND t <= ?",
+                         (name, before.astimezone(timezone.utc).isoformat()))
         self._db.commit()
 
 

@@ -120,13 +120,13 @@ def wait_while(condition: Callable[[], bool], timeout: float) -> None:
 # commands
 
 def find_commands(
-    modules: dict[str, list[str]],
+    modules: list[str],
     directories: list[Path],
     suffix: str = "",
 ) -> dict[str, list[str]] | None:
-    """Each module's start command: its installed program, then its arguments.
+    """Each module's start command: its installed program (arguments can follow).
 
-        {"nats-server": ["-p", "4222"]}  →  {"nats-server": ["/opt/homebrew/bin/nats-server", "-p", "4222"]}
+        ["nats-server"]  →  {"nats-server": ["/opt/homebrew/bin/nats-server"]}
 
     `directories` are tried in order. In each, a module's program is looked for:
 
@@ -148,9 +148,9 @@ def find_commands(
             if cands[1].is_file():  paths[name] = cands[1]
 
         if len(paths) == len(modules):
-            return {name: [str(paths[name]), *args] for name, args in modules.items()}
+            return {name: [str(paths[name])] for name in modules}
 
     if len(paths_init) == len(modules):
-        return {name: [str(paths_init[name]), *args] for name, args in modules.items()}
+        return {name: [str(paths_init[name])] for name in modules}
 
     return None

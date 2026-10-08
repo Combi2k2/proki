@@ -2,8 +2,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from conftest import replay
 from proki.services.activitywatch import Event, Record
-from proki.core.signals import Depth, Primitive, Sector, Stream
+from proki.core.primitives import Depth, Primitive, Label
+from proki.core.signals import Stream
 from proki.compiler import compile_config
 
 T0 = datetime(2026, 10, 2, 10, tzinfo=timezone.utc)
@@ -37,12 +39,12 @@ RECORDED = {
 
 
 def run_to(minutes):
-    return Primitive.run(at(minutes), Record.of(at(0), at(minutes), RECORDED))
+    return replay(at(minutes), Record.of(at(0), at(minutes), RECORDED))
 
 
 @pytest.fixture
 def signals():
-    Sector.classify = lambda app, title: KINDS.get(app)
+    Label.label_of = lambda app, title: KINDS.get(app)
     Depth.depth_of = lambda app, title: DEPTH.get(KINDS.get(app, ""))
     signals = compile_config().streams
     out = {s.name: s for s in signals}

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from proki.core.primitives.aw.base import Recording
 from proki.core.primitives.base import Primitive
 from proki.services import aw
 
@@ -15,7 +16,8 @@ class Recorded(Primitive):
 
     buckets = (aw.WINDOW, aw.INPUT)
 
-    def read(self, rec: aw.Record | None, t: datetime) -> Any:
+    def read(self, t: datetime) -> Any:
+        rec = Recording.rec
         if rec is None:
             return None
         return rec[aw.WINDOW].covering(t) is not None or rec[aw.INPUT].covering(t) is not None

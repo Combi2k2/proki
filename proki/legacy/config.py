@@ -49,10 +49,11 @@ port = 5600
 # Let proki start ActivityWatch's server and watchers itself, so ActivityWatch's
 # own tray icon isn't needed. If ActivityWatch is already running, proki leaves it alone.
 manage = false
-modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
-# started too when found (ActivityWatch's app includes aw-watcher-input): counts of key
-# presses and clicks (never which keys), to tell creating from consuming
-optional_modules = ["aw-watcher-input"]
+
+[nats]
+# the message bus (questions to you, jev and an LLM): proki runs its server on this computer
+host = "127.0.0.1"
+port = 4222
 
 [analysis]
 poll_seconds = 15      # how often to re-analyze recent activity (tray status, focus, nudges)
@@ -228,9 +229,9 @@ class CategoryRule:
 class Config:
     aw_host: str = "127.0.0.1"
     aw_port: int = 5600
+    nats_host: str = "127.0.0.1"
+    nats_port: int = 4222
     aw_manage: bool = False
-    aw_modules: list[str] = field(default_factory=lambda: ["aw-server", "aw-watcher-afk", "aw-watcher-window"])
-    aw_optional_modules: list[str] = field(default_factory=lambda: ["aw-watcher-input"])
     poll_seconds: int = 15
     lookback_minutes: int = 30
     min_minutes_between_nudges: int = 20
@@ -288,6 +289,7 @@ def load(path: Path = CONFIG_PATH) -> Config:
 
 def parse(raw: dict) -> Config:
     aw = raw.get("activitywatch", {})
+    nats = raw.get("nats", {})
     analysis = raw.get("analysis", {})
     nudges = raw.get("nudges", {})
     classification = raw.get("classification", {})
@@ -296,9 +298,9 @@ def parse(raw: dict) -> Config:
     return Config(
         aw_host=aw.get("host", "127.0.0.1"),
         aw_port=aw.get("port", 5600),
+        nats_host=nats.get("host", "127.0.0.1"),
+        nats_port=nats.get("port", 4222),
         aw_manage=aw.get("manage", False),
-        aw_modules=aw.get("modules", ["aw-server", "aw-watcher-afk", "aw-watcher-window"]),
-        aw_optional_modules=aw.get("optional_modules", ["aw-watcher-input"]),
         poll_seconds=analysis.get("poll_seconds", 15),
         lookback_minutes=analysis.get("lookback_minutes", 30),
         min_minutes_between_nudges=nudges.get("min_minutes_between", 20),

@@ -12,10 +12,10 @@ The mixins aren't exported outside this package.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 from proki.core.signals.stream import Stream
-from proki.services import aw
 from proki.errors import SignalError
 from proki.utils import snake
 
@@ -29,8 +29,7 @@ class Primitive(Stream):
     (`backfill`, how far back: `window`)."""
 
     kinds: ClassVar[dict[str, type[Primitive]]] = {}  # every kind, by name
-    rec: ClassVar[aw.Record | None] = None     # what ActivityWatch recorded, for the current run
-    buckets: ClassVar[tuple[str, ...]] = ()    # the ActivityWatch bucket types it reads (fetched before the cycles)
+    sources: ClassVar[list[Callable[[datetime, datetime], None]]] = []  # fetch(start, end): what each source recorded, before the cycles
 
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
@@ -48,31 +47,25 @@ class Primitive(Stream):
         self.window = window
         Stream.registry[self.name] = self
 
-    def read(self, rec: aw.Record | None, t: datetime) -> Any:
-        """The value at time `t`, from the recorded events (`rec` is None before the
-        first fetch)."""
+    def read(self, t: datetime) -> Any:
+        """The value at time `t` (from what its source recorded, or the clock)."""
         raise NotImplementedError
 
     def compute(self) -> Any:
-        return None if Stream.now is None else self.read(Primitive.rec, Stream.now)
+        return None if Stream.now is None else self.read(Stream.now)
 
     def __repr__(self) -> str:
         return f"<{type(self).__name__} {self.name}>"
 
     @classmethod
-    def run(cls,
-        now: datetime,
-        rec: aw.Record | None = None,
-        host: str = "127.0.0.1",
-        port: int = 5600
-    ) -> None:
+    def run(cls, now: datetime) -> None:
         """Run every stream, cycle by cycle, up to `now`.
 
         It continues from the last cycle run. The first time, it starts as far back as
         the longest table (persisted tables don't count: they load their past from
-        disk), so every table starts full. What ActivityWatch recorded is fetched before
-        the first cycle: if that fails, no stream has moved and the next run retries.
-        `rec`: a recording to use instead of fetching (tests)."""
+        disk), so every table starts full. Each source fetches what it recorded before
+        the first cycle (`sources`): if that fails, no stream has moved and the next run
+        retries."""
         t = Stream.now
         if t is None or t > now:
             longest = max([timedelta(0), *(s.window for s in Stream.registry.values()
@@ -84,9 +77,8 @@ class Primitive(Stream):
                 if stream.backfill and stream._table is None:
                     Stream.fill(stream, t)
         Stream.live = now
-        cls.rec = aw.Record.fetch(t, now, aw.ActivityWatchClient(host, port), cls.rec) if rec is None else rec
-        for bucket in sorted({b for s in Stream.registry.values() if isinstance(s, Primitive) for b in s.buckets}):
-            cls.rec[bucket]  # fetched now: a failure stops the run before any stream moves on
+        for fetch in cls.sources:
+            fetch(t, now)
 
         while t + Stream.cycle <= now:
             t += Stream.cycle

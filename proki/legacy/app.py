@@ -32,33 +32,33 @@ from proki.legacy.core.policy import NudgePolicy
 from proki.legacy.rules.fragmentation import default_rules
 from proki.legacy.core.rhythm import Rhythm
 from proki.legacy.core.store import SignalHistory, Store, VariableValues
-from proki.legacy.flows.bedtime import BedtimeFlow
-from proki.legacy.flows.capture import CaptureFlow
-from proki.legacy.flows.meditation import MeditationFlow
-from proki.legacy.flows.reminders import RemindersFlow
-from proki.legacy.flows.experiment import ExperimentFlow, experiment_lines
-from proki.legacy.flows.grand import GrandFlow
-from proki.legacy.flows.sprint import SprintFlow
-from proki.legacy.flows.base import Flow, FlowContext
-from proki.legacy.flows.session import NO_DATA_AFTER, SessionFlow
-from proki.legacy.flows.budget import BudgetFlow
-from proki.legacy.flows.hub import HubFlow
-from proki.legacy.flows.suggest import SuggestSessionFlow
-from proki.compiler import compile_config, editable_copy
-from proki.core.signals import Depth, Primitive, Sector, Stream, Variable
+from proki.legacy.flows.experiment import experiment_lines
+from proki.legacy.flows.base import FlowContext
+from proki.compiler import editable_copy
+from proki.core.ui import Ui
+from proki.core.ask import Asking
+from proki.engine import Engine, serve_jev, serve_llm
+from proki.services import nats
+from proki.services.supervisor import Supervisor
+from proki.utils import find_commands
+from proki.legacy.core.sprint import SprintParams
+from proki.programs import (Capture, Craftsman, Grand, Meditation, Plan, Reminders, Routines,
+                            Session, Shutdown, Sprint, ThirtyDayTest, program, variable)
+from proki.programs import Rhythm as RhythmPrompts
+from proki.programs.session import NO_DATA_AFTER
+from proki.legacy.ui.client import PopupClient
+from proki.services.llm import Llm
+from proki.core.primitives import Depth, Label, Recording
+from proki.core.signals import Stream, Variable
 from proki.legacy.core.craftsman import WorthAsking, pick, site_weeks
 from proki.legacy.core.association import AssociationParams, contributions, pair_minutes
 from proki.legacy.ui.background import Background
-from proki.legacy.flows.craftsman import CraftsmanFlow, verdict_lines
-from proki.legacy.flows.shutdown import ShutdownFlow
+from proki.legacy.flows.craftsman import verdict_lines
 from proki.legacy.core.backlog import minutes_text
 from proki.legacy.core.budget import shallow_share
 from proki.legacy.metrics.consistency import ConsistencyParams, consistency
 from proki.legacy.core.shutdown import workday
 from proki.legacy.core.weekly import WeekFacts, review_due, review_text, week_start
-from proki.legacy.flows.morning import MorningFlow
-from proki.legacy.flows.routines import RoutinesFlow
-from proki.legacy.flows.rhythm import RhythmFlow
 from proki.legacy.flows.tasks import TasksFlow
 from proki.services import aw
 from proki.legacy.ui.board import budget_lines, consistency_lines, rhythm_lines, scoreboard_lines, sleep_lines, task_lines
@@ -75,7 +75,12 @@ TRACK_OPTIONS = [(c.value.capitalize(), c.value) for c in Category] + [("Don't t
 class Proki:
     def __init__(self, config: Config):
         self.config = config
-        self.activitywatch = start_activitywatch(config)  # before anything reads from it
+        # the third-party services: each client made here, once, and given to what uses it
+        self.aw = aw.ActivityWatchClient(config.aw_host, config.aw_port)
+        Recording.client = self.aw  # the primitives read what it recorded
+        self.activitywatch = start_activitywatch(config, self.aw)  # before anything reads from it
+        self.nats = start_nats(config.nats_host, config.nats_port)
+        Asking.bus = connect_bus(config.nats_host, config.nats_port)  # questions and UI messages go over it
         self.store = Store(DB_PATH)
         config.add_tracked_apps(self.store.tracked_apps())
         self.collector = Collector(config)
@@ -115,17 +120,16 @@ class Proki:
             day_starts=config.day_starts,
         )
         self.quota = QuotaKeeper(self.store, config.quota, config.day_starts, config.focus.deep_threshold)
-        self.session_flow = SessionFlow(self)  # before the tray: its menu starts and stops sessions
         self.rhythm = Rhythm(self.store, config.rhythm, config.day_starts, config.focus.deep_threshold)
-        self.tray = Tray(
-            on_session=self.session_flow.toggle_session,
+        self.tray = Tray(  # its items reach the programs (proki/programs/) by name, once the engine made them
+            on_session=lambda: program("session").toggle_session(),
             on_tasks=lambda: self.tasks.open_board(),
             on_new_task=lambda: self.tasks.new_task(),
-            on_task_done=lambda: self.tasks.task_done(),
-            on_walk=lambda: self.meditation.start(),
-            on_grand=lambda: self.grand_prompts.start(),
-            on_experiment=lambda: self.experiments.start(),
-            on_sprint=lambda: self.sprint_prompts.start(),
+            on_task_done=lambda: program("plan").task_done(),
+            on_walk=lambda: program("meditation").start(),
+            on_grand=lambda: program("grand").start(),
+            on_experiment=lambda: program("experiment").start(),
+            on_sprint=lambda: program("sprint").start(),
             on_rate=lambda: self.ask_focus("manual"),
             on_snooze=self.snooze_hour,
             on_settings=lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(CONFIG_PATH))),
@@ -134,77 +138,71 @@ class Proki:
             on_quit=QApplication.quit,
         )
         self.popup = Popup()
-        self.tasks = TasksFlow(
+        self.tasks = TasksFlow(  # the task windows (the UI's); handing tasks over is the plan program's
             self.store, self.popup, today=self.rhythm.today, day_starts=config.day_starts,
             deep_minutes_today=lambda now: self.scores.today(now).deep_minutes,
             assess=self.assess, suggest_group=self.suggest_group, helper=self.helper,
         )
-        self.bedtime = BedtimeFlow(
-            self.store, config.bedtime, config.day_starts, self.popup,
-            # its own player: the session logic stops its alarm when focus is fine, which must not end this one
-            alarm=Alarm(config.alarm_sound, config.alarm_volume),
-            lock_screen=platforms.current().lock_screen, today=self.rhythm.today,
-        )
-        self.morning = MorningFlow(
-            self.store, self.popup, alarm=Alarm(config.alarm_sound, config.alarm_volume), today=self.rhythm.today,
-            first_activity=lambda now: self.bedtime.last_night(now)[1],
-            todays_work=self.todays_work,
-            request_session=lambda: self.tasks.request_session(self.session_flow.start_session),
-        )
-        self.routines = RoutinesFlow(self.store, self.popup, config.bedtime.wind_down, config.day_starts,
-                                       always_ask=config.routines_always_ask,
-                                       classify=(lambda text: classify_activity(jev, text)) if jev else None,
-                                       still_there=(lambda context: still_there(jev, context)) if jev else None,
-                                       still_there_above=config.routines_skip_if_still_there,
-                                       label_name=lambda s: self.labels.name(self.labeler.label_of(s.app, s.title)) if s.app else None)
-        self.capture = CaptureFlow(self.store, self.popup, self.tasks,
-                                      (lambda note: is_todo(jev, note)) if jev else None)
-        self.reminder_prompts = RemindersFlow(self.store, self.popup, config.day_starts)
-        self.experiments = ExperimentFlow(self.store, self.popup, self.rhythm.today, self.distraction_candidates)
-        self.grand_prompts = GrandFlow(self.store, self.popup, self.session_flow.start_grand,
-                                          next_task=lambda: self.tasks.next_task(datetime.now(timezone.utc))[1])
-        self.sprint_prompts = SprintFlow(self.popup, self.session_flow.start_sprint,
-                                            next_task=lambda: self.tasks.next_task(datetime.now(timezone.utc))[1],
-                                            new_task=lambda: self.tasks.new_task())
         # kinds are remembered by site; without the domain, a browser's window has none yet
         Stream.storage = SignalHistory(self.store)  # where persisted signals keep their history
-        Variable.store = VariableValues(self.store)  # and variables their latest value
-        Sector.classify = self.labeler.label_of
+        Label.label_of = self.labeler.label_of
         Depth.depth_of = lambda app, title: self.labels.depth(self.labeler.label_of(app, title))
-        self.signals = compile_config(editable_copy(JSON_CONFIG_PATH)).streams  # config.json next to the config: yours to edit
+        # the engine's UI, in this app for now: questions in the popup, alarms, the session in the tray
+        self.ui = PopupClient(self.popup, alarm=lambda: Alarm(config.alarm_sound, config.alarm_volume),
+                              set_session=self.tray.set_session, lock_screen=platforms.current().lock_screen,
+                              views={"task_form": lambda: self.tasks.new_task(), "task_board": self.tasks.open_board})
+        self.ui.serve(Asking.bus)  # it answers your questions ("proki.ask.usr") and shows "proki.ui"
+        Ui.elsewhere = lambda: ((self.popup.isVisible() and self.ui.showing is None)  # a legacy question
+                                or self.tasks.form.isVisible() or self.tasks.breakdown_dialog.isVisible())
+        if jev:
+            serve_jev(Asking.bus, jev)
+        if config.ai_enabled and config.gemini_api_key:
+            serve_llm(Asking.bus, Llm.of("gemini"))
+        new_task = self.tasks.new_task
+        self.engine = Engine(
+            editable_copy(JSON_CONFIG_PATH),  # config.json and programs/ next to the config: yours to edit
+            variables=VariableValues(self.store),  # variables keep their latest value
+            # programs in code, in the order they take their turn (earlier ones get the popup first);
+            # the config's (programs/*.json) come after them
+            programs=[
+                lambda: Plan(self.store, new_task=new_task, refresh=self.tasks.refresh, today=self.rhythm.today),
+                lambda: Session(self.store, config.session, config.focus.deep_threshold, config.sound_on_low_focus,
+                                SprintParams().extension),
+                lambda: Routines(self.store, config.bedtime.wind_down, config.day_starts,
+                                 always_ask=config.routines_always_ask,
+                                 classify=(lambda text: classify_activity(jev, text)) if jev else None,
+                                 still_there=(lambda context: still_there(jev, context)) if jev else None,
+                                 still_there_above=config.routines_skip_if_still_there,
+                                 label_name=lambda s: self.labels.name(self.labeler.label_of(s.app, s.title)) if s.app else None),
+                lambda: Reminders(self.store, config.day_starts),
+                lambda: ThirtyDayTest(self.store, self.rhythm.today, self.distraction_candidates),
+                lambda: Capture(self.store, (lambda note: is_todo(jev, note)) if jev else None,
+                                new_task=new_task, refresh_tasks=self.tasks.refresh),
+                lambda: Shutdown(self.store, config.shutdown, config.day_starts, self.shutdown_wrap_up,
+                                 new_task=new_task, weekly_review=self.weekly_review,
+                                 save_review=self.save_weekly_review, tools_check=self.tools_check),
+                lambda: RhythmPrompts(self.store, self.rhythm, config.rhythm, config.day_starts),
+                lambda: Meditation(self.store),
+                lambda: Grand(self.store),
+                lambda: Sprint(),
+                lambda: Craftsman(self.store),
+            ],
+        )
+        self.signals = self.engine.compiled.streams
 
-        self.craftsman = CraftsmanFlow(self.store, self.popup, start_test=lambda key: self.experiments.start_for(key))
         self.worth_asking = WorthAsking()
         self._week_sites: tuple[datetime, dict] | None = None
         self._computing = False
         self.background = Background()
-        self.meditation = MeditationFlow(self.store, self.popup, self.session_flow.start_walk,
-                                            current_task=lambda: self.tasks.next_task(datetime.now(timezone.utc))[1])
-        self.shutdown = ShutdownFlow(self.store, self.popup, self.tasks, config.shutdown, config.day_starts,
-                                        self.shutdown_wrap_up, alarm=Alarm(config.alarm_sound, config.alarm_volume),
-                                        weekly_review=self.weekly_review, save_review=self.save_weekly_review,
-                                        tools_check=self.tools_check)
-        self.prompts = RhythmFlow(
-            self.store, self.rhythm, config.rhythm, config.day_starts, self.popup,
-            request_session=lambda: self.tasks.request_session(self.session_flow.start_session),
-            ask_anything_new=self.tasks.ask_anything_new,
-        )
-        request_session = lambda: self.tasks.request_session(self.session_flow.start_session)
-        self.budget_flow = BudgetFlow(self.popup, config.shallow, config.shutdown, self.rhythm.today,
-                                      self.shallow_today, request_session)
-        self.suggest_flow = SuggestSessionFlow(self.popup, request_session)
-        self.hub_flow = HubFlow(self.popup, self.session_flow.on_session_answer, label_name=self.labels.name)
-        # the order flows run in, each tick / poll (earlier ones get the popup first)
-        self.flows: list[Flow] = [
-            self.session_flow, self.bedtime, self.morning, self.routines, self.reminder_prompts, self.experiments, self.budget_flow,
-            self.capture, self.suggest_flow, self.shutdown, self.prompts, self.hub_flow,
-        ]
         self.timer = QTimer()
         self.timer.timeout.connect(self.tick)
         self.timer.start(config.poll_seconds * 1000)
         self.fast_timer = QTimer()
         self.fast_timer.timeout.connect(self.poll)
         self.fast_timer.start(FAST_POLL_MS)
+        self.ui_timer = QTimer()
+        self.ui_timer.timeout.connect(self.ui.pump)  # what came over the bus, onto the screen
+        self.ui_timer.start(200)
 
     def make_group_suggester(self, jev):
         """An existing group that fits (jev), else a name for a new one (the AI)."""
@@ -223,6 +221,9 @@ class Proki:
         if self.activitywatch:
             for module in self.activitywatch.check():
                 print(f"restarted {module}", flush=True)
+        if self.nats:
+            for module in self.nats.check():
+                print(f"restarted {module}", flush=True)
         try:
             raw = self.collector.timeline(timedelta(minutes=self.config.lookback_minutes))
         except (OSError, RuntimeError) as e:  # ActivityWatch not running or not ready
@@ -239,20 +240,37 @@ class Proki:
         active = latest is not None and not latest.away and now - latest.end <= NO_DATA_AFTER
         self.update_scoreboard(now)
         self.week_sites(now)  # keeps the craftsman data fresh (hourly, in the background)
-        ctx = FlowContext(now, self.state(now), segments=segments, latest=latest, active=active,
-                          in_session=self.session_flow.session is not None,
-                          away_since=latest.start if latest is not None and latest.away else None)
-        Primitive.run(now, host=self.config.aw_host, port=self.config.aw_port)
-        ctx.values = {**ctx.state, **{signal.name: signal.current() for signal in self.signals}}  # app state + signals
+
+        def context() -> FlowContext:  # what the programs in code get, once the signals moved on
+            state = self.state(now)
+            variable("todays_work").set(self.todays_work(now))  # for the morning's greeting (programs/morning.json)
+            return FlowContext(now, state, segments=segments, latest=latest, active=active,
+                               in_session=state["in_session"],
+                               away_since=latest.start if latest is not None and latest.away else None,
+                               values={**state, **{signal.name: signal.current() for signal in self.signals}})
+
+        try:
+            self.engine.cycle(now, context)  # signals, then programs
+        except (OSError, RuntimeError) as e:  # ActivityWatch stopped answering: the cycles wait (none ran)
+            self.tray.set_status(f"waiting for ActivityWatch ({e.__class__.__name__})")
+            return
+        self.ui.show_next()
         self.tray.set_status("away" if away else self.status())  # after the cycles: this tick's focus
-        for flow in self.flows:
-            flow.tick(ctx)
 
     # --- focus sessions --------------------------------------------------------
 
+    def last_night(self, now: datetime) -> tuple[datetime | None, datetime | None]:
+        """(last active minute of the previous day, first active minute today), from the
+        minute ledger, which is filled from ActivityWatch's history even when proki wasn't running."""
+        _, start, end = day_bounds(now, self.config.day_starts)
+        active = lambda entries: [e.minute for e in entries if e.activity not in (None, "away")]
+        yesterday = active(self.store.minutes(start - timedelta(days=1), start))
+        today = active(self.store.minutes(start, end))
+        return (yesterday[-1] + timedelta(minutes=1) if yesterday else None, today[0] if today else None)
+
     def todays_work(self, now: datetime) -> str:
         """One line for the morning: the most urgent goal and its next task, and the deep-work goal."""
-        group, task = self.tasks.next_task(now)
+        group, task = program("plan").next_task(now)
         quota = self.quota.today(now, self.scores.today(now).deep_minutes)
         goal = f"Today's deep-work goal: {minutes_text(quota)}."
         if task is None:
@@ -273,7 +291,7 @@ class Proki:
                 when = "Tomorrow" if ahead == 1 else f"{block.start.astimezone():%A}"
                 lines.append(f"{when}: deep-work block at {block.start.astimezone():%H:%M}.")
                 break
-        group, task = self.tasks.next_task(now)
+        group, task = program("plan").next_task(now)
         if task is not None:
             lines.append(f"First up: {task.title} (~{minutes_text(task.estimate)}).")
         lines.append("Everything is written down. The workday is over.")
@@ -353,7 +371,7 @@ class Proki:
         """The craftsman question: one site per weekly review, picked by the rule."""
         site = pick(self.week_sites(now), set(self.store.verdicts()), self.worth_asking)
         if site is not None:
-            self.craftsman.ask(site, self.store.groups())
+            program("craftsman").ask(site, self.store.groups())
 
     def save_weekly_review(self, now: datetime, answer: str | None) -> None:
         self.store.add_weekly_review(week_start(self.rhythm.today(now)), now, answer)
@@ -376,12 +394,12 @@ class Proki:
         return self.usage(Category.DISTRACTION, now - timedelta(days=7), now)
 
     def state(self, now: datetime) -> dict:
-        """The app's own values, for flows; each is also config.json's variable of that name
-        (set here, only when it changes, while the legacy flows still change them in Python)."""
+        """The app's own values, for the programs in code; each is also the config's variable
+        of that name (set here, only when it changes)."""
         state = {
-            "in_session": self.session_flow.session is not None,
-            "shutdown_done": self.shutdown.done_today(now),
-            "popup_open": self.popup.isVisible(),
+            "in_session": program("session").session is not None,
+            "shutdown_done": program("shutdown").done_today(now),
+            "popup_open": Ui.busy() or self.popup.isVisible(),  # a question on screen, or waiting for it
         }
         for name, value in state.items():
             if isinstance(variable := Stream.registry.get(name), Variable):
@@ -399,16 +417,16 @@ class Proki:
         deep = self.scores.today(now).deep_minutes
         today = self.scores.today(now, self.quota.today(now, deep))
         _, day_start, day_end = day_bounds(now, self.config.day_starts)
-        group, task = self.tasks.next_task(now)
+        group, task = program("plan").next_task(now)
         shallow = shallow_share(today.minutes_by_activity)
         lines = (
             scoreboard_lines(today, self.config.focus.deep_threshold)
             + budget_lines(shallow, self.config.shallow.limit)
-            + rhythm_lines(self.prompts.todays_block(now), now, self.rhythm.chain(now), self.rhythm.todays_sessions(now))
+            + rhythm_lines(program("rhythm").todays_block(now), now, self.rhythm.chain(now), self.rhythm.todays_sessions(now))
             + consistency_lines(self.consistency(now))
             + experiment_lines(self.store.experiments(("running",)), self.rhythm.today(now))
             + task_lines(group, task, self.store.tasks_done_between(day_start, day_end))
-            + sleep_lines(*self.bedtime.last_night(now))
+            + sleep_lines(*self.last_night(now))
         )
         self.tray.set_scoreboard(lines, today.goal_progress)
 
@@ -429,12 +447,13 @@ class Proki:
         label_question = None
         if present and question is None and self.config.is_tracked(current.app, current.title, current.url):
             label_question = self.label_loop.observe(current.app, current.title, now)
-        ctx = FlowContext(now, state=self.state(now), latest=current, current=current, active=present,
-                          in_session=self.session_flow.session is not None,
+        state = self.state(now)
+        ctx = FlowContext(now, state=state, latest=current, current=current, active=present,
+                          in_session=state["in_session"],
                           category=self.categorizer.categorize(current) if present else None,
                           kind=self.categorizer.kind(current) if present else None)
-        for flow in self.flows:
-            flow.poll(ctx)
+        self.engine.poll(now, ctx)  # answers, and the programs that watch what's in focus
+        self.ui.show_next()
         if question and not self.popup.isVisible():
             self.ask(question)
         elif label_question and not self.popup.isVisible():
@@ -557,21 +576,43 @@ def set_autostart(enabled: bool) -> None:
         os_support.uninstall_autostart()
 
 
-def start_activitywatch(config: Config) -> aw.ActivityWatchSupervisor | None:
+def start_activitywatch(config: Config, client: aw.ActivityWatchClient) -> Supervisor | None:
     """Start ActivityWatch's programs ourselves, unless disabled, missing, or already running."""
     if not config.aw_manage:
         return None
     os_support = platforms.current()
-    commands = aw.aw_detect(os_support.ACTIVITYWATCH_DIRS, os_support.EXECUTABLE_SUFFIX, config.aw_modules,
-                             config.aw_optional_modules)
+    commands = find_commands(aw.MODULES, os_support.ACTIVITYWATCH_DIRS, os_support.EXECUTABLE_SUFFIX)
     if commands is None:
         print("ActivityWatch not found; start it yourself or set [activitywatch] manage = false", flush=True)
         return None
-    supervisor = aw.ActivityWatchSupervisor(
-        commands, lambda: aw.aw_health(config.aw_host, config.aw_port), user_log_path("proki") / "activitywatch"
-    )
+    supervisor = Supervisor("ActivityWatch", commands, client.is_up, user_log_path("proki") / "activitywatch")
     print(supervisor.start(), flush=True)
     return supervisor
+
+
+def start_nats(host: str, port: int) -> Supervisor | None:
+    """Start the NATS server ourselves, at `host`:`port`, unless it's missing or already running."""
+    os_support = platforms.current()
+    commands = find_commands(nats.MODULES, os_support.NATS_DIRS, os_support.EXECUTABLE_SUFFIX)
+    if commands is None:
+        print("nats-server not found (brew install nats-server): questions stay in this process", flush=True)
+        return None
+    commands["nats-server"] += ["-a", host, "-p", str(port)]  # on the config's address only
+    supervisor = Supervisor("NATS", commands, lambda: nats.NatsBus.is_up(host, port), user_log_path("proki") / "nats")
+    print(supervisor.start(), flush=True)
+    return supervisor
+
+
+def connect_bus(host: str, port: int) -> nats.Bus:
+    """The message bus: NATS if a server answers at `host`:`port`, else one in this process
+    (everything works, in this process only)."""
+    if not nats.NatsBus.is_up(host, port):
+        return nats.LocalBus()
+    try:
+        return nats.NatsBus(host, port)
+    except Exception as e:  # a server that doesn't speak NATS
+        print(f"NATS unreachable ({e.__class__.__name__}): questions stay in this process", flush=True)
+        return nats.LocalBus()
 
 
 def run(config: Config) -> int:
@@ -585,6 +626,9 @@ def run(config: Config) -> int:
     proki = Proki(config)
     if proki.activitywatch:
         app.aboutToQuit.connect(proki.activitywatch.stop)  # stop what we started
+    app.aboutToQuit.connect(Asking.bus.close)
+    if proki.nats:
+        app.aboutToQuit.connect(proki.nats.stop)
     # Quit cleanly (running aboutToQuit) when told to stop, e.g. at logout or by launchd.
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: app.quit())

@@ -1,0 +1,29 @@
+{
+  "variables": [
+    {"name": "shallow_today", "value": 0},
+    {"name": "active_today", "value": 0},
+    {"name": "budget_day_ends", "value": "time - clock + 1440 + 240"},
+    {"name": "budget_last_asked", "value": 0},
+    {"name": "budget_answer", "value": -1}
+  ],
+  "signals": [
+    {"name": "shallow_now", "expr": "depth == 0.25"},
+    {"name": "shallow_share", "expr": "shallow_today / (active_today + 0.001)"}
+  ],
+  "rules": [
+    {"name": "budget_new_day", "lhs": "time", "cmp": "gt", "rhs": "budget_day_ends"},
+    {"name": "budget_workday", "lhs": "weekday", "cmp": "lt", "rhs": 5, "level": 6},
+    {"name": "budget_not_in_session", "lhs": "in_session", "cmp": "eq", "rhs": 0, "level": 5},
+    {"name": "budget_not_shut_down", "lhs": "shutdown_done", "cmp": "eq", "rhs": 0, "level": 4},
+    {"name": "budget_no_popup", "lhs": "popup_open", "cmp": "eq", "rhs": 0, "level": 3},
+    {"name": "budget_enough_time", "lhs": "active_today", "cmp": "ge", "rhs": 60, "level": 2},
+    {"name": "budget_over", "lhs": "shallow_share", "cmp": "gt", "rhs": 0.3, "softness": 0.05, "level": 1},
+    {"name": "budget_not_lately", "lhs": "time - budget_last_asked", "cmp": "ge", "rhs": 30, "level": 7}
+  ],
+  "program": {"initial": "idle", "states": {
+    "idle": {"do": [{"add": {"name": "active_today", "expr": "active"}}, {"add": {"name": "shallow_today", "expr": "active and shallow_now"}}], "next": [{"goto": "new_day", "if": ["budget_new_day"]}, {"goto": "starting", "if": "budget_answer == 0"}, {"goto": "asking", "if": ["budget_not_lately", "budget_workday", "budget_not_in_session", "budget_not_shut_down", "budget_no_popup", "budget_enough_time", "budget_over"]}, {"goto": "idle"}]},
+    "new_day": {"do": [{"set": {"name": "shallow_today", "expr": 0}}, {"set": {"name": "active_today", "expr": 0}}, {"set": {"name": "budget_day_ends", "expr": "budget_day_ends + 1440"}}], "every": 0.1},
+    "asking": {"do": [{"set": {"name": "budget_last_asked", "expr": "time"}}, {"ask": {"channel": "usr", "context": "Shallow work is at {share:.0%} of your time at the computer today (your limit: 30%). Batch the rest for later and get back to deep work?", "values": {"share": "shallow_share"}, "options": [{"option": "Start a focus session"}, {"option": "Not now"}], "result": "budget_answer", "default": 1}}], "every": 0.1},
+    "starting": {"do": [{"set": {"name": "session_requested", "expr": true}}, {"set": {"name": "budget_answer", "expr": -1}}], "every": 0.1}
+  }}
+}

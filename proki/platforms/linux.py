@@ -13,6 +13,7 @@ from platformdirs import user_config_path
 DESKTOP_FILE = user_config_path("autostart") / "proki.desktop"
 ACTIVITYWATCH_DIRS = [Path.home() / "activitywatch", Path("/opt/activitywatch"), Path("/usr/lib/activitywatch")]
 EXECUTABLE_SUFFIX = ""
+NATS_DIRS = [Path("/usr/local/bin"), Path("/usr/bin"), Path.home() / ".local" / "bin", Path.home() / "go" / "bin"]
 
 # the browsers, as ActivityWatch names them (the window's class). Not yet tested
 BROWSER_APPS = {

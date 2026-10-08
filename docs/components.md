@@ -81,8 +81,8 @@ ActivityWatch ─► collector ─► timeline ─► categories.prepare ─┬�
 | `legacy/flows/reminders.py` | The reminder popup (Going now / Later / Skip today), outside sessions | — | — | manual |
 | `legacy/core/analyzer.py`, `legacy/rules/` | Notice patterns outside sessions (currently none active: parked until scheduled deep-work blocks) | `Segment`s → `Finding`s | per rule | `test_core.py` |
 | `legacy/core/policy.py` | Allow an interruption? | `Finding`, now, away → yes/no | `[nudges]` | `test_core.py` |
-| `services/activitywatch/server.py` | Run ActivityWatch's server + watchers instead of its own tray app; restart crashed ones; stop them on quit; take over leftovers from a crashed run | module commands → running processes | `[activitywatch] manage`, `modules` | `test_activitywatch.py` |
-| `services/activitywatch/client.py` | What the watchers recorded: events per bucket type, the value holding at a moment (gaps held up to 15 s) | REST API → `Recording` | `[activitywatch] host`, `port` | `test_ops.py` |
+| `services/supervisor.py` | Run a service's programs (ActivityWatch's server + watchers, the NATS server) instead of their own launchers; restart crashed ones; stop them on quit; take over leftovers from a crashed run | module commands → running processes | `[activitywatch] manage` (the modules: `aw.MODULES`, `nats.MODULES`) | `test_supervisor.py` |
+| `services/activitywatch.py` | What the watchers recorded: events per bucket type, the value holding at a moment (gaps held up to 15 s) | REST API → `Recording` | `[activitywatch] host`, `port` | `test_ops.py` |
 | `legacy/ui/` | Tray (scoreboard + block/chain/session/task lines, `board.py`), task window / form / break-down dialog (`task_board.py`, `task_form.py`, `breakdown.py`), background calls (`background.py`), scope icon with progress ring (`icon.py`), popup, inbox, looping alarm sound (`sound.py`, Qt audio) | — | `[session] alarm_sound`, `alarm_volume` | `test_scoreboard.py` (text), manual |
 | `platforms/` | Per OS: start at login, where ActivityWatch is installed, lock the screen | — | — | manual |
 | `assets/sounds/` | Built-in sounds, with `CREDITS.md` (source and license) | — | — | — |

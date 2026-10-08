@@ -1,0 +1,23 @@
+{
+  "variables": [
+    {"name": "last_suggested", "value": "time - 10000"},
+    {"name": "suggest_answer", "value": -1}
+  ],
+  "signals": [
+    {"name": "since_suggested", "expr": "time - last_suggested"}
+  ],
+  "rules": [
+    {"name": "suggest_not_in_session", "lhs": "in_session", "cmp": "eq", "rhs": 0, "level": 5},
+    {"name": "suggest_not_shut_down", "lhs": "shutdown_done", "cmp": "eq", "rhs": 0, "level": 4},
+    {"name": "suggest_no_popup", "lhs": "popup_open", "cmp": "eq", "rhs": 0, "level": 3},
+    {"name": "suggest_not_lately", "lhs": "since_suggested", "cmp": "gt", "rhs": 45, "softness": 10, "level": 2},
+    {"name": "focus_rising", "lhs": "focus_rise", "cmp": "gt", "rhs": 0.15, "softness": 0.05, "level": 1},
+    {"name": "focus_high", "lhs": "focus_5m", "cmp": "gt", "rhs": 0.5, "softness": 0.1, "level": 1},
+    {"name": "deep_now", "lhs": "depth", "cmp": "eq", "rhs": 1, "level": 1}
+  ],
+  "program": {"initial": "idle", "states": {
+    "idle": {"next": [{"goto": "starting", "if": "suggest_answer == 0"}, {"goto": "asking", "if": ["suggest_not_in_session", "suggest_not_shut_down", "suggest_no_popup", "suggest_not_lately", "focus_rising", "focus_high", "deep_now"]}]},
+    "asking": {"do": [{"set": {"name": "last_suggested", "expr": "time"}}, {"ask": {"channel": "usr", "context": "You're getting into it. Start a focus session to protect this?", "options": [{"option": "Start session"}, {"option": "Not now"}], "result": "suggest_answer", "default": 1}}], "every": 0.1},
+    "starting": {"do": [{"set": {"name": "session_requested", "expr": true}}, {"set": {"name": "suggest_answer", "expr": -1}}], "every": 0.1}
+  }}
+}

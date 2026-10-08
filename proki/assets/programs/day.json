@@ -1,0 +1,11 @@
+{
+  "variables": [],
+  "signals": [],
+  "rules": [
+    {"name": "eod", "lhs": "time", "cmp": "gt", "rhs": "deadline_eod"}
+  ],
+  "program": {"initial": "idle", "states": {
+    "idle": {"variables": [{"name": "deadline_eod", "value": "time - clock + 1440"}], "next": [{"goto": "new_day", "if": ["eod"]}]},
+    "new_day": {"do": [{"set": {"name": "deadline_eod", "expr": "deadline_eod + 1440"}}]}
+  }}
+}

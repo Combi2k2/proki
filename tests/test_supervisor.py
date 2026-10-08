@@ -1,6 +1,8 @@
+"""Running a service's programs (services/supervisor.py), with ActivityWatch's as the example."""
 import sys
 
-from proki.services.activitywatch import ActivityWatchSupervisor, aw_detect
+from proki.services.supervisor import Supervisor
+from proki.utils import find_commands
 
 SLEEPER = [sys.executable, "-c", "import time; time.sleep(60)"]
 
@@ -8,7 +10,7 @@ SLEEPER = [sys.executable, "-c", "import time; time.sleep(60)"]
 def supervisor(tmp_path, server_up=None):
     """Stand-in programs; by default the server is healthy once it has been launched."""
     commands = {"aw-server": SLEEPER, "aw-watcher-afk": SLEEPER, "aw-watcher-window": SLEEPER}
-    s = ActivityWatchSupervisor(commands, lambda: False, tmp_path / "logs", timeout=0.1)
+    s = Supervisor("ActivityWatch", commands, lambda: False, tmp_path / "logs", timeout=0.1)
     s.healthy = server_up or (lambda: "aw-server" in s.processes)
     return s
 
@@ -46,12 +48,22 @@ def test_restarts_a_module_that_crashed(tmp_path):
     s.stop()
 
 
-def test_detects_programs_in_the_first_directory_with_all_of_them(tmp_path):
+def test_detects_programs_in_the_first_directory_with_all_of_them(tmp_path, monkeypatch):
+    import proki.utils as utils
+
+    monkeypatch.setattr(utils.shutil, "which", lambda name: None)
     for name in ("aw-watcher-window", "aw-server"):
         (tmp_path / name).touch()
-    commands = aw_detect([tmp_path / "missing", tmp_path], "", ["aw-watcher-window", "aw-server"])
+    commands = find_commands(["aw-watcher-window", "aw-server"], [tmp_path / "missing", tmp_path])
     assert commands == {name: [str(tmp_path / name)] for name in ("aw-watcher-window", "aw-server")}
-    assert aw_detect([tmp_path], "", ["aw-server", "aw-watcher-afk"]) is None
+    assert find_commands(["aw-server", "aw-watcher-afk"], [tmp_path]) is None
+
+
+def test_a_program_on_the_path_is_found_too(monkeypatch):
+    import proki.utils as utils
+
+    monkeypatch.setattr(utils.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert find_commands(["nats-server"], []) == {"nats-server": ["/usr/bin/nats-server"]}
 
 
 def test_takes_over_programs_left_behind_by_a_crashed_run(tmp_path):
@@ -71,21 +83,6 @@ def test_detects_programs_in_per_program_folders(tmp_path):
     for module in ["aw-server", "aw-watcher-afk"]:
         (tmp_path / module).mkdir()
         (tmp_path / module / f"{module}.exe").write_text("")
-    commands = aw_detect([tmp_path], ".exe", ["aw-watcher-afk", "aw-server"])
+    commands = find_commands(["aw-watcher-afk", "aw-server"], [tmp_path], ".exe")
     assert set(commands) == {"aw-server", "aw-watcher-afk"}
     assert commands["aw-server"] == [str(tmp_path / "aw-server" / "aw-server.exe")]
-
-
-def test_optional_watchers_are_found_elsewhere_or_skipped(tmp_path, monkeypatch):
-    import proki.services.activitywatch.utils as aw
-
-    app, tools = tmp_path / "app", tmp_path / "tools"
-    app.mkdir(), tools.mkdir()
-    for m in ["aw-server", "aw-watcher-afk"]:
-        (app / m).write_text("")
-    monkeypatch.setattr(aw, "UV_TOOLS", tools)
-    monkeypatch.setattr(aw.shutil, "which", lambda name: None)
-    assert "aw-watcher-input" not in aw_detect([app], "", ["aw-server", "aw-watcher-afk"], ["aw-watcher-input"])
-    (tools / "aw-watcher-input").write_text("")
-    found = aw_detect([app], "", ["aw-server", "aw-watcher-afk"], ["aw-watcher-input"])
-    assert found["aw-watcher-input"] == [str(tools / "aw-watcher-input")]

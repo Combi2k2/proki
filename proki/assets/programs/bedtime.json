@@ -1,0 +1,36 @@
+{
+  "variables": [
+    {"name": "bedtime_snooze_night", "value": 0},
+    {"name": "bedtime_snoozed_until", "value": 0},
+    {"name": "bedtime_poked", "value": 0},
+    {"name": "bedtime_answer", "value": -1},
+    {"name": "bedtime_late_answer", "value": -1},
+    {"name": "bedtime_alarm_answer", "value": -1}
+  ],
+  "signals": [
+    {"name": "wind_down", "expr": "clock >= 1320"},
+    {"name": "hard_stop", "expr": "clock < 240"},
+    {"name": "night", "expr": "clock >= 1320 or clock < 240"}
+  ],
+  "rules": [
+    {"name": "bed_wind_down", "lhs": "wind_down", "cmp": "eq", "rhs": 1, "level": 4},
+    {"name": "bed_active", "lhs": "active", "cmp": "eq", "rhs": 1, "level": 3},
+    {"name": "bed_not_snoozed", "lhs": "time", "cmp": "ge", "rhs": "bedtime_snoozed_until", "level": 2},
+    {"name": "bed_snooze_left", "lhs": "bedtime_snooze_night", "cmp": "lt", "rhs": "today", "level": 1},
+    {"name": "bed_snooze_used", "lhs": "bedtime_snooze_night", "cmp": "ge", "rhs": "today", "level": 1},
+    {"name": "bed_hard_stop", "lhs": "hard_stop", "cmp": "eq", "rhs": 1, "level": 2},
+    {"name": "bed_away", "lhs": "active", "cmp": "eq", "rhs": 0},
+    {"name": "bed_day", "lhs": "night", "cmp": "eq", "rhs": 0},
+    {"name": "bed_poke_due", "lhs": "time - bedtime_poked", "cmp": "ge", "rhs": 5, "level": 5}
+  ],
+  "program": {"initial": "idle", "states": {
+    "idle": {"every": 0.1, "next": [{"goto": "ringing", "if": ["bed_hard_stop", "bed_active"]}, {"goto": "snoozing", "if": "bedtime_answer == 0"}, {"goto": "locking", "if": "bedtime_answer == 2 or bedtime_late_answer == 1"}, {"goto": "poking", "if": ["bed_wind_down", "bed_active", "bed_not_snoozed", "bed_poke_due", "bed_snooze_left"]}, {"goto": "poking_again", "if": ["bed_wind_down", "bed_active", "bed_not_snoozed", "bed_poke_due", "bed_snooze_used"]}]},
+    "poking": {"do": [{"set": {"name": "bedtime_poked", "expr": "time"}}, {"ask": {"channel": "usr", "context": "It's {h:02.0f}:{m:02.0f}. Time to wrap up and get ready for bed.\nEnding the day on time is how you take back control of tomorrow.", "values": {"h": "clock // 60", "m": "clock % 60"}, "options": [{"option": "10 more minutes"}, {"option": "OK, winding down"}, {"option": "Lock screen"}], "result": "bedtime_answer", "default": 1}}], "every": 0.1},
+    "poking_again": {"do": [{"set": {"name": "bedtime_poked", "expr": "time"}}, {"ask": {"channel": "usr", "context": "It's {h:02.0f}:{m:02.0f}. Time to wrap up and get ready for bed.\nEnding the day on time is how you take back control of tomorrow.", "values": {"h": "clock // 60", "m": "clock % 60"}, "options": [{"option": "OK, winding down"}, {"option": "Lock screen"}], "result": "bedtime_late_answer", "default": 0}}], "every": 0.1},
+    "snoozing": {"do": [{"set": {"name": "bedtime_snoozed_until", "expr": "time + 10"}}, {"set": {"name": "bedtime_snooze_night", "expr": "today"}}, {"set": {"name": "bedtime_answer", "expr": -1}}], "every": 0.1},
+    "locking": {"do": [{"lock": {}}, {"set": {"name": "bedtime_answer", "expr": -1}}, {"set": {"name": "bedtime_late_answer", "expr": -1}}], "every": 0.1},
+    "ringing": {"do": [{"alarm": {"name": "bedtime", "on": true}}, {"ask": {"channel": "usr", "context": "It's {h:02.0f}:{m:02.0f}, past your stop time. The alarm keeps ringing while you're still here.\nLock the screen and go to sleep.", "values": {"h": "clock // 60", "m": "clock % 60"}, "options": [{"option": "Lock screen"}], "result": "bedtime_alarm_answer", "default": -1}}], "every": 0.1, "next": [{"goto": "ring_locking", "if": "bedtime_alarm_answer == 0"}, {"goto": "silencing", "if": ["bed_away"]}, {"goto": "silencing", "if": ["bed_day"]}]},
+    "ring_locking": {"do": [{"lock": {}}, {"set": {"name": "bedtime_alarm_answer", "expr": -1}}], "every": 0.1, "next": [{"goto": "silencing", "if": ["bed_away"]}, {"goto": "silencing", "if": ["bed_day"]}]},
+    "silencing": {"do": [{"alarm": {"name": "bedtime", "on": false}}], "every": 0.1}
+  }}
+}

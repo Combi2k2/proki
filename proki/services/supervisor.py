@@ -1,10 +1,18 @@
-"""Run ActivityWatch's background programs instead of its tray app.
+"""Running the programs proki's services need, so their own tray apps or launchers aren't:
+ActivityWatch's server and watchers, the NATS server.
 
-ActivityWatch's tray app (aw-qt) only starts a few programs and shows an icon.
-proki does the same from its own tray icon: start the server and watchers, restart
-crashes, and stop them on quit. If ActivityWatch is already running, proki leaves it
-alone, unless those are programs proki started in an earlier run that ended without
-cleaning up, and proki remembers their process ids and takes them over.
+A `Supervisor` runs a service's programs (its "modules": ActivityWatch has a server and a
+few watchers, NATS just its server), found with `find_commands` (proki/utils.py). The first
+module is the server, the one the others need up first:
+
+    start()   start them, the server first, the others once `healthy()` says it's up.
+              Returns a short status for the tray
+    check()   restart any that stopped. Returns their names
+    stop()    stop them, the server last
+
+If the service is already running (`healthy()` before proki starts anything), proki leaves
+it alone, unless those are programs proki started in an earlier run that ended without
+cleaning up: proki remembers their process ids (a pid file in `log_dir`) and takes them over.
 """
 
 from __future__ import annotations
@@ -16,27 +24,31 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from proki.utils import wait_until, wait_while
+from proki.utils import (
+    wait_until,
+    wait_while
+)
 
-
-class ActivityWatchSupervisor:
+class Supervisor:
     def __init__(
         self,
+        name: str,
         commands: dict[str, list[str]],
         healthy: Callable[[], bool],
         log_dir: Path,
         timeout: float = 10.0,
     ):
-        self.processes: dict[str, subprocess.Popen] = {}
-        self.commands = commands
-        self.healthy = healthy
+        self.name = name  # for the status: "ActivityWatch", "NATS"
+        self.commands = commands  # each module's command line, by module name, the server first
+        self.healthy = healthy  # whether the service answers
         self.timeout = timeout
         self.log_dir = log_dir
         self.pid_file = log_dir / "pids"
-        self.external = False
+        self.processes: dict[str, subprocess.Popen] = {}
+        self.external = False  # already running, not started by proki
 
     def clean(self) -> bool:
-        """Stop programs a previous proki run started but never stopped."""
+        """Stop the modules a previous proki run started but never stopped."""
         if not self.pid_file.exists():
             return False
         found = False
@@ -66,22 +78,23 @@ class ActivityWatchSupervisor:
         return found
 
     def start(self) -> str:
-        """Start everything. Returns a short status for the tray."""
+        """Start every module, the server first. Returns a short status for the tray."""
         if self.clean():    wait_while(self.healthy, self.timeout)
         if self.healthy():
             self.external = True
-            return "ActivityWatch already running (not managed by proki)"
+            return f"{self.name} already running (not managed by proki)"
 
-        for module in sorted(self.commands, key=lambda module: module != "aw-server"):  # server first
+        server = next(iter(self.commands))
+        for module in self.commands:
             self._launch(module)
-            if module == "aw-server":
+            if module == server:
                 wait_until(self.healthy, self.timeout)
                 if not self.healthy():
                     self.stop()
-                    return "ActivityWatch server failed to start"
+                    return f"{self.name} server failed to start"
 
         self._save_pids()
-        return "ActivityWatch started by proki"
+        return f"{self.name} started by proki"
 
     def check(self) -> list[str]:
         """Restart any module that has stopped. Returns the names restarted."""
@@ -97,7 +110,7 @@ class ActivityWatchSupervisor:
         return restarted
 
     def stop(self) -> None:
-        """Stop the modules proki started, watchers first and the server last."""
+        """Stop the modules proki started, the server last."""
         for module in reversed(list(self.processes)):
             process = self.processes.pop(module)
             if process.poll() is None:

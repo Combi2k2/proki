@@ -1,0 +1,20 @@
+{
+  "variables": [
+    {"name": "hub_answer", "value": -1}
+  ],
+  "signals": [
+    {"name": "on_contact", "expr": "label in (\"email\", \"team_chat\", \"video_calls\")"},
+    {"name": "on_contact_15s", "expr": "ts_min(on_contact, 0.25)"}
+  ],
+  "rules": [
+    {"name": "hub_in_session", "lhs": "in_session", "cmp": "eq", "rhs": 1, "level": 3},
+    {"name": "hub_on_contact", "lhs": "on_contact_15s", "cmp": "eq", "rhs": 1, "level": 2},
+    {"name": "hub_off_contact", "lhs": "on_contact", "cmp": "eq", "rhs": 0}
+  ],
+  "program": {"initial": "idle", "states": {
+    "idle": {"every": 0.1, "next": [{"goto": "stopping", "if": "hub_answer == 1"}, {"goto": "reminding", "if": ["hub_in_session", "hub_on_contact"]}]},
+    "reminding": {"do": [{"ask": {"channel": "usr", "context": "Email, chat and calls can wait until the session is over (hub and spoke: collaboration outside deep work).", "options": [{"option": "Back to work"}, {"option": "Stop session"}], "result": "hub_answer", "default": 0}}], "every": 0.1, "next": "reminded"},
+    "reminded": {"every": 0.1, "next": [{"goto": "stopping", "if": "hub_answer == 1"}, {"goto": "idle", "if": ["hub_off_contact"]}]},
+    "stopping": {"do": [{"set": {"name": "session_stop_requested", "expr": true}}, {"set": {"name": "hub_answer", "expr": -1}}], "every": 0.1, "next": "reminded"}
+  }}
+}

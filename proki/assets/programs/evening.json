@@ -1,0 +1,20 @@
+{
+  "variables": [
+    {"name": "evening_asked_day", "value": 0},
+    {"name": "evening_answer", "value": -1}
+  ],
+  "signals": [
+    {"name": "planning_time", "expr": "clock >= 1290 or clock < 240"}
+  ],
+  "rules": [
+    {"name": "eve_time", "lhs": "planning_time", "cmp": "eq", "rhs": 1, "level": 4},
+    {"name": "eve_not_asked", "lhs": "evening_asked_day", "cmp": "lt", "rhs": "today", "level": 3},
+    {"name": "eve_not_shut_down", "lhs": "shutdown_done", "cmp": "eq", "rhs": 0, "level": 2},
+    {"name": "eve_no_popup", "lhs": "popup_open", "cmp": "eq", "rhs": 0, "level": 1}
+  ],
+  "program": {"initial": "idle", "states": {
+    "idle": {"next": [{"goto": "adding", "if": "evening_answer == 0"}, {"goto": "asking", "if": ["eve_time", "eve_not_asked", "eve_not_shut_down", "eve_no_popup"]}]},
+    "asking": {"do": [{"set": {"name": "evening_asked_day", "expr": "today"}}, {"ask": {"channel": "usr", "context": "Anything new to take care of?", "options": [{"option": "Add a task"}, {"option": "Nothing new"}], "result": "evening_answer", "default": 1}}], "every": 0.1},
+    "adding": {"do": [{"open": {"view": "task_form"}}, {"set": {"name": "evening_answer", "expr": -1}}], "every": 0.1}
+  }}
+}

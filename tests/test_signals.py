@@ -1,9 +1,13 @@
+import json
+import random
 from datetime import datetime, timedelta, timezone
 
+from conftest import replay
 from proki.legacy.rules.suggest_session import suggest_session
 from proki.services.activitywatch import Event, Record
-from proki.core.signals import Depth, Primitive, Stream
-from proki.compiler import CONFIG, compile_config, editable_copy
+from proki.core.primitives import Depth, Primitive
+from proki.core.signals import Stream
+from proki.compiler import CONFIG, compile_config, editable_copy, with_programs
 from proki.core.rules import Rule
 
 T0 = datetime(2026, 10, 1, 10, tzinfo=timezone.utc)
@@ -25,10 +29,14 @@ def test_default_signals_feed_the_suggest_session_pipeline():
     Depth.depth_of = lambda app, title: depth.get(app)
     signals = compile_config().streams
     Stream.now = at(0)  # cycles from minute 0
-    Primitive.run(at(10), Record.of(at(0), at(10), recorded))
+    replay(at(10), Record.of(at(0), at(10), recorded))
     values = {**state, **{signal.name: signal.current() for signal in signals}}  # as the app does
     assert values["focus"] == 1 and values["on_deep"] is True and values["focus_rise"] > 0.15
-    assert suggest_session().decide(values)
+    pipeline = suggest_session()
+    for level in pipeline.levels:
+        for rule in level.rules:
+            rule.rng = random.Random(0)  # its soft rules are sampled: the same draws every run
+    assert pipeline.decide(values)
 
 
 def test_every_shipped_signal_compiles_and_runs():
@@ -36,10 +44,13 @@ def test_every_shipped_signal_compiles_and_runs():
 
     signals = {s.name: s for s in compile_config().streams}
     Stream.now = at(0)
-    Primitive.run(at(1), Record.of(at(0), at(1), {}))  # every expression compiles on its first cycle
-    shipped = json.loads(CONFIG.read_text())
+    replay(at(1), Record.of(at(0), at(1), {}))  # every expression compiles on its first cycle
+    shipped = with_programs(json.loads(CONFIG.read_text()), CONFIG.parent / "programs")
     named = {name for name in Stream.registry if "." not in name}  # not the rules' sides
-    assert {e["name"] for e in shipped["inputs"] + shipped["variables"] + shipped["signals"]} == set(signals) == named
+    in_states = [v for program in shipped["programs"] for state in program["states"].values()
+                 for v in state.get("variables", [])]
+    assert {e["name"] for e in shipped["inputs"] + shipped["variables"] + in_states + shipped["signals"]} \
+        == set(signals) == named
     assert {e["name"] for e in shipped["rules"]} == set(Rule.registry)
     assert signals["focus_history"].persist and signals["focus_history"].window == timedelta(days=7)
 
@@ -49,7 +60,9 @@ def test_configs_are_checked(tmp_path):
 
     bad = tmp_path / "config.json"
     for text, problem in [('{"signals": [{"name": "x", "expr": "keys", "windw": 5}]}', "unknown windw"),
-                          ('{"signals": [{"name": "x", "window": 5}]}', "needs an expr"),
+                          ('{"signals": [{"name": "x", "backfill": 5}]}', "needs an expr"),
+                          ('{"signals": [{"name": "x", "expr": "keys", "backfill": true}]}', "in minutes"),
+                          ('{"signals": [{"name": "x", "expr": "keys", "persist": true}]}', "persist needs a backfill"),
                           ('{"signals": [{"expr": "keys"}]}', "needs a name"),
                           ('{"signals": [{"name": "x", "expr": "1"}, {"name": "x", "expr": "2"}]}', "twice"),
                           ('{"signals": [{"name": "x", "expr": "kes + 1"}]}', "unknown name 'kes'"),
@@ -76,7 +89,7 @@ def test_inputs_keep_the_backfill_they_ask_for(tmp_path):
     keys, app = compile_config(config).inputs
     assert (keys.backfill, keys.window) == (True, timedelta(hours=1))
     assert (app.backfill, app.window) == (False, None)
-    Primitive.run(at(120), Record.of(at(0), at(120), {}))  # the first run goes back as far as the longest table
+    replay(at(120), Record.of(at(0), at(120), {}))  # the first run goes back as far as the longest table
     assert len(keys.history(at(0))) == 360
 
 
@@ -92,7 +105,7 @@ def test_the_cycle_comes_from_the_config(tmp_path):
         compile_config(config)
         assert Stream.cycle == timedelta(seconds=cycle)
         Stream.now = at(0)
-        Primitive.run(at(10), Record.of(at(0), at(10), typing))
+        replay(at(10), Record.of(at(0), at(10), typing))
         results[cycle] = Stream.registry["keys_5m"].current(), len(Stream.registry["keys"].history(at(0)))
     assert results[10][0] == results[30][0]
     assert (results[10][1], results[30][1]) == (60, 20)
@@ -129,3 +142,43 @@ def test_your_copy_gets_what_the_shipped_config_adds(tmp_path):
     before = mine.stat().st_mtime_ns, mine.read_text()
     editable_copy(mine)  # nothing new: left alone
     assert (mine.stat().st_mtime_ns, mine.read_text()) == before
+
+
+def test_an_old_copy_takes_the_window_as_its_backfill(tmp_path):
+    mine = tmp_path / "config.json"
+    mine.write_text(json.dumps({"signals": [
+        {"name": "focus_history", "expr": "every(focus, 5)", "backfill": True, "window": 10080, "persist": True}]}))
+    editable_copy(mine)
+    entry = next(e for e in json.loads(mine.read_text())["signals"] if e["name"] == "focus_history")
+    assert entry == {"name": "focus_history", "expr": "every(focus, 5)", "backfill": 10080, "persist": True}
+
+
+def test_an_old_copy_takes_renamed_inputs(tmp_path):
+    mine = tmp_path / "config.json"
+    mine.write_text(json.dumps({"inputs": [{"name": "sector", "backfill": 1440}],
+                                "signals": [{"name": "on_video", "expr": 'sector == "video_streaming"'}]}))
+    (tmp_path / "programs").mkdir()
+    mail = tmp_path / "programs" / "mail.json"
+    mail.write_text(json.dumps({"signals": [{"name": "on_contact", "expr": 'sector in ("email", "chat")'}],
+                                "program": {"initial": "idle", "states": {"idle": {"ask": {
+                                    "channel": "usr", "context": "which sector?",
+                                    "options": [{"option": "a sector", "goto": "idle"}], "default": 0}}}}}))
+    editable_copy(mine)
+    config = json.loads(mine.read_text())
+    assert {"name": "label", "backfill": 1440} in config["inputs"]
+    assert next(s for s in config["signals"] if s["name"] == "on_video")["expr"] == 'label == "video_streaming"'
+    spec = json.loads(mail.read_text())
+    assert spec["signals"][0]["expr"] == 'label in ("email", "chat")'
+    ask = spec["program"]["states"]["idle"]["ask"]
+    assert (ask["context"], ask["options"][0]["option"]) == ("which sector?", "a sector")  # shown as written
+
+def test_an_old_program_file_is_replaced_by_the_shipped_one(tmp_path):
+    mine = tmp_path / "config.json"
+    mine.write_text(json.dumps({}))
+    (tmp_path / "programs").mkdir()
+    old = {"program": {"name": "day", "initial": "running", "states": {"running": {"actions": [
+        {"name": "end_of_day", "trigger": ["eod"], "do": [{"set": {"deadline_eod": "deadline_eod + 1440"}}]}]}}}}
+    (tmp_path / "programs" / "day.json").write_text(json.dumps(old))
+    editable_copy(mine)
+    assert json.loads((tmp_path / "programs" / "day.json").read_text())["program"]["initial"] == "idle"
+    assert json.loads((tmp_path / "programs" / "day.json.old").read_text()) == old  # yours, kept

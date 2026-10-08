@@ -1,0 +1,74 @@
+{
+  "gemini": {
+    "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "key": "GEMINI_API_KEY",
+    "models": [
+      "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.7-flash",
+      "gemini-3.6-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3-flash-preview",
+      "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-pro-latest",
+      "gemini-flash-latest", "gemini-flash-lite-latest", "gemma-4-31b-it", "gemma-4-26b-a4b-it"
+    ]
+  },
+  "nvidia": {
+    "url": "https://integrate.api.nvidia.com/v1",
+    "key": "NVIDIA_API_KEY",
+    "models": [
+      "nvidia/nemotron-3-super-120b-a12b", 
+      "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "nvidia/nemotron-3-ultra-550b-a55b",
+      "deepseek-ai/deepseek-v4.1-flash",
+      "z-ai/glm-5.3",
+      "z-ai/glm-5.3-flash",
+      "openai/gpt-oss-20b",
+      "google/gemma-4-31b-it",
+      "meta/llama-3.2-90b-vision-instruct",
+      "moonshotai/kimi-k3",
+      "poolside/laguna-xs-2.1"
+    ]
+  },
+  "anthropic": {
+    "url": "https://api.anthropic.com/v1",
+    "key": "ANTHROPIC_API_KEY",
+    "models": [
+      "claude-sonnet-5",
+      "claude-haiku-4-5-20251001",
+      "claude-opus-5-5",
+      "claude-fable-5-1"
+    ]
+  },
+  "openai": {
+    "url": "https://api.openai.com/v1",
+    "key": "OPENAI_API_KEY",
+    "models": [
+  ]},
+  "mistral": {
+    "url": "https://api.mistral.ai/v1",
+    "key": "MISTRAL_API_KEY",
+    "models": [
+  ]},
+  "deepseek": {
+    "url": "https://api.deepseek.com/v1",
+    "key": "DEEPSEEK_API_KEY",
+    "models": [
+  ]},
+  "xai": {
+    "url": "https://api.x.ai/v1",
+    "key": "XAI_API_KEY",
+    "models": [
+  ]},
+  "groq": {
+    "url": "https://api.groq.com/openai/v1",
+    "key": "GROQ_API_KEY",
+    "models": [
+  ]},
+  "openrouter": {
+    "url": "https://openrouter.ai/api/v1",
+    "key": "OPENROUTER_API_KEY",
+    "models": [
+  ]},
+  "ollama": {
+    "url": "http://localhost:11434/v1",
+    "key": null,
+    "models": [
+  ]}
+}

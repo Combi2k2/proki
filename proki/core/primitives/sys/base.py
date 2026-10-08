@@ -7,7 +7,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from proki.services import aw
 
 
 class Moment:
@@ -15,7 +14,7 @@ class Moment:
 
     unbounded = "a table of the time needs a window (otherwise it would grow without end)"
 
-    def read(self, rec: aw.Record | None, t: datetime) -> Any:
+    def read(self, t: datetime) -> Any:
         return self.at(t)
 
     def at(self, t: datetime) -> Any:

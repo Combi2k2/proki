@@ -119,19 +119,41 @@ is evaluated, and one module per concrete one:
 ```
 proki/
   core/
-    signals/      the signal language: Stream, Signal (name, expr), expressions (base.py);
-                  primitives read from ActivityWatch and the clock, the cycles
-                  (primitive.py); variables, the app's state (variable.py)
+    signals/      the signal language: Stream and the cycles (stream.py),
+                  expressions (expr.py), signals (signal.py), variables, the app's state (variable.py)
+    primitives/   the streams the others are built from, a folder per source, one file each:
+                  aw/ what ActivityWatch recorded, sys/ the clock, proki/ what proki works
+                  out from the window in focus (label, depth); each folder's base.py: what
+                  its primitives share; base.py: Primitive and the cycles' run
     ops/          time-series operators, one file each (TsMean → ts_mean.py, `ts_mean(...)`)
     rules.py      Rule: a soft comparison of two expressions, the chance of firing now
-  compiler.py     compiles config.json (inputs, variables, signals, rules) into streams
+    actions/      what a state does as it's entered, one file each, a folder by what it acts on:
+                  var/ (set, add, sub), ask/ (ask), ui/ (poke, alarm, lock, open)
+    programs.py   Program: state machines side by side, each state with actions and a next
+    ask.py        ask_usr / ask_jev / ask_llm: a question over the bus (NATS), its answer back
+    ui.py         what programs in code say to you: questions, pokes, alarms, the session line
+    later.py      slow calls in the background, their results at the engine's next turn
+  compiler.py     compiles config.json and its program files (assets/programs/*.json)
+  engine/         Engine: runs it all cycle by cycle; the workers answering jev's and the
+                  LLM's questions (workers.py)
+  programs/       programs written in code, one file each: plan, session, shutdown, routines,
+                  reminders, rhythm, capture, meditation, grand, sprint, experiment, craftsman
+                  (the legacy flows, moved over; base.py: Ritual)
+  errors/         what proki raises on purpose: ProkiError (with where it happened), config
+                  mistakes (ConfigError: ExprError, RuleError, ProgramError, ...), services
+                  (ServiceError: LlmError), the platform (PlatformError)
   utils.py        small helpers that know nothing about proki (snake, slugify, grams, ...)
-  services/       ActivityWatch (`aw`: run it, read it) and jev (structured decisions)
+  services/       ActivityWatch (`aw`: run it, read it), jev (structured decisions), LLMs
+                  (llm.py: any OpenAI-compatible service; assets/llms.json: each family's
+                  URL, key variable and models)
   platforms/      the only OS-specific code
-  assets/         config.json, labels.json, sounds
+  assets/         config.json, programs/ (the config's programs: day, suggest, budget, hub,
+                  bedtime, morning, evening),
+                  llms.json, labels.json, sounds
   legacy/         everything else, still running the tray app until it moves onto signals:
-                  app.py, cli.py, config.py, commands/, core/, focus/, metrics/, rules/,
-                  flows/, ui/ (see legacy/__init__.py)
+                  app.py (hosts the engine, the tray, the popup and task windows), cli.py,
+                  config.py, commands/, core/, focus/, metrics/, rules/, ui/, flows/ (no
+                  longer run: replaced by programs/; see legacy/__init__.py)
 ```
 
 ## Platform status

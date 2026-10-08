@@ -12,6 +12,7 @@ ACTIVITYWATCH_DIRS = [
     Path.home() / "Applications" / "ActivityWatch.app" / "Contents" / "MacOS",
 ]
 EXECUTABLE_SUFFIX = ""
+NATS_DIRS = [Path("/opt/homebrew/bin"), Path("/usr/local/bin"), Path.home() / "go" / "bin"]  # Homebrew, go install
 
 # the browsers, as ActivityWatch names them (the app's name)
 BROWSER_APPS = {

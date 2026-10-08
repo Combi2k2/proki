@@ -10,6 +10,7 @@ dependencies = [
     "requests>=2.31",
     "PySide6>=6.6",
     "numpy>=2.4.6",
+    "nats-py>=2.16.0",
 ]
 
 [project.scripts]
@@ -27,11 +28,21 @@ build-backend = "setuptools.build_meta"
 packages = [
     "proki",
     "proki.core",
+    "proki.core.actions",
+    "proki.core.actions.ask",
+    "proki.core.actions.ui",
+    "proki.core.actions.var",
     "proki.core.ops",
     "proki.core.signals",
+    "proki.core.primitives",
+    "proki.core.primitives.aw",
+    "proki.core.primitives.proki",
+    "proki.core.primitives.sys",
+    "proki.engine",
+    "proki.errors",
     "proki.platforms",
+    "proki.programs",
     "proki.services",
-    "proki.services.activitywatch",
     "proki.legacy",
     "proki.legacy.commands",
     "proki.legacy.core",
@@ -43,7 +54,7 @@ packages = [
 ]
 
 [tool.setuptools.package-data]
-proki = ["assets/sounds/*", "assets/*.json"]
+proki = ["assets/sounds/*", "assets/*.json", "assets/programs/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

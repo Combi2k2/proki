@@ -1,5 +1,7 @@
-"""ActivityWatch's REST API (http://host:port/api/0), what its watchers record, and how
-to look up a moment in it.
+"""ActivityWatch, the tracker proki is built on (imported as `aw`): its REST API
+(http://host:port/api/0, `is_up`: whether it answers), what its watchers record, and how to
+look up a moment in it. proki runs the server and watchers itself (services/supervisor.py,
+`MODULES`), so ActivityWatch's own tray app isn't needed.
 
 Watchers store events in typed buckets as (timestamp, duration, data), with identical
 neighbours merged. The bucket types proki reads:
@@ -31,6 +33,15 @@ WEBTAB = "web.tab.current"
 INPUT = "os.hid.input"
 AFK = "afkstatus"
 
+# the programs proki runs (services/supervisor.py): the server first, then the watchers
+# that record the buckets above (WEBTAB comes from the browser extension)
+MODULES = [
+    "aw-server",
+    "aw-watcher-window",    # WINDOW
+    "aw-watcher-afk",       # AFK
+    "aw-watcher-input",     # INPUT: counts of key presses and clicks (never which keys)
+]
+
 # how long a value outlives its event (see above)
 HOLD = {
     WINDOW: timedelta(seconds=15),
@@ -60,9 +71,9 @@ class Events:
         self._starts = [e.start for e in self.events]
         self._untils = [e.end + hold for e in self.events]
 
-        for i in range(len(self.events) - 1):
-            if self._untils[i] > self.events[i + 1].start:
-                self._untils[i] = self.events[i + 1].start
+        for i in range(len(self.events) - 1):  # a value holds until the next event starts, at most
+            nxt = self.events[i + 1].start
+            if self._untils[i] > nxt:  self._untils[i] = nxt
 
     def covering(self, t: datetime) -> Event | None:
         """The event whose value holds at t (start < t <= until)."""
@@ -85,12 +96,15 @@ class Events:
 
 
 class ActivityWatchClient:
-    def __init__(self, host: str = "127.0.0.1", port: int = 5600, timeout: float = 10):
+    """The server at `host`:`port` (the config's [activitywatch])."""
+
+    def __init__(self, host: str, port: int, timeout: float = 10):
         self.api = f"http://{host}:{port}/api/0"
         self.timeout = timeout
         self.session = requests.Session()
 
     def is_up(self) -> bool:
+        """Whether the server answers."""
         try:
             return self.session.get(f"{self.api}/info", timeout=1).ok
         except requests.RequestException:
@@ -109,8 +123,13 @@ class ActivityWatchClient:
     ) -> list[dict]:
         """A bucket's events starting between `start` and `end` (default: any), at most
         `limit` of them (the server's order isn't guaranteed to be newest first)."""
-        params = {"start": start and start.isoformat(), "end": end and end.isoformat(), "limit": limit}
-        return self._get(f"/buckets/{bucket_id}/events", {k: v for k, v in params.items() if v is not None})
+        params = {
+            "start": start and start.isoformat(),
+            "end": end and end.isoformat(),
+            "limit": limit,
+        }
+        given = {name: value for name, value in params.items() if value is not None}
+        return self._get(f"/buckets/{bucket_id}/events", given)
 
     def _get(self, path: str, params: dict | None = None):
         response = self.session.get(self.api + path, params=params, timeout=self.timeout)
@@ -133,6 +152,7 @@ class Record:
         if bucket_type not in self._events:
             hold = HOLD.get(bucket_type, timedelta(0))
             self._events[bucket_type] = Events(self._fetch(bucket_type), hold)
+
         return self._events[bucket_type]
 
     @classmethod
@@ -141,7 +161,13 @@ class Record:
         return cls(start, end, lambda bucket_type: events.get(bucket_type, []))
 
     @classmethod
-    def fetch(cls, start: datetime, end: datetime, client: ActivityWatchClient, previous: Record | None = None) -> Record:
+    def fetch(
+        cls,
+        start: datetime,
+        end: datetime,
+        client: ActivityWatchClient,
+        previous: Record | None = None,
+    ) -> Record:
         """From the server, each bucket type when first asked for.
 
         Each bucket is read from where its newest event known from the `previous` fetch
@@ -152,16 +178,18 @@ class Record:
         buckets: dict[str, dict] = {}
 
         def events(bucket_type: str) -> list[Event]:
-            if not buckets:
-                buckets.update(client.buckets())
+            if not buckets:  buckets.update(client.buckets())
+
             found = []
             for bucket_id, info in buckets.items():
-                if info.get("type") != bucket_type:
-                    continue
+                if info.get("type") != bucket_type:  continue
+
                 since = min(known.get(bucket_id, start), start)
                 for event in map(Event.parse, client.events(bucket_id, since, end)):
                     found.append(event)
-                    record.newest[bucket_id] = max(event.start, record.newest.get(bucket_id, event.start))
+                    newest = record.newest.get(bucket_id, event.start)
+                    record.newest[bucket_id] = max(event.start, newest)
+
                 if bucket_id not in record.newest and bucket_id in known:
                     record.newest[bucket_id] = known[bucket_id]  # nothing new: the old one still holds
             return found

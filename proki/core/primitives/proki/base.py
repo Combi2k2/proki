@@ -22,6 +22,6 @@ class Labeled:
         """The value for a window, from its app and title."""
         raise NotImplementedError
 
-    def read(self, rec: aw.Record | None, t: datetime) -> Any:
-        e = focused(rec, t)
+    def read(self, t: datetime) -> Any:
+        e = focused(t)
         return self.of(e.data.get("app", ""), e.data.get("title", "")) if e else None

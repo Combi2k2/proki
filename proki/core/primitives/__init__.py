@@ -43,7 +43,8 @@ holds for the length of its event. A primitive's value in a cycle comes from the
 holding at that moment. Where nothing was recorded, it's unknown (None).
 
 How the cycles run (`Primitive.run(now)`, every 10 s): fetch what ActivityWatch recorded
-since the last cycle, then run each cycle up to now. On the first run, it starts a day
+since the last cycle (`Recording`, with the client the app gives it), then run each cycle
+up to now. On the first run, it starts a day
 back (the longest table), so every table starts full. After a pause (proki off, the
 computer asleep), the cycles in between are run from the recording, and `recorded` is
 False where nothing was.
@@ -52,8 +53,8 @@ Signals read ActivityWatch only through here.
 """
 
 from proki.core.primitives.base import Primitive
-from proki.core.primitives.aw import App, Keys, MouseClick, MouseMove, MouseScroll, Recorded, Title, Url
+from proki.core.primitives.aw import App, Keys, MouseClick, MouseMove, MouseScroll, Recorded, Recording, Title, Url
 from proki.core.primitives.sys import Clock, Time, Weekday
 from proki.core.primitives.proki import Depth, Label
 
-__all__ = ["Primitive", "App", "Clock", "Depth", "Keys", "MouseClick", "MouseMove", "MouseScroll", "Label", "Recorded", "Time", "Title", "Url", "Weekday"]
+__all__ = ["Primitive", "Recording", "App", "Clock", "Depth", "Keys", "MouseClick", "MouseMove", "MouseScroll", "Label", "Recorded", "Time", "Title", "Url", "Weekday"]

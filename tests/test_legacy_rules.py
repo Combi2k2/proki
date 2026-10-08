@@ -4,14 +4,14 @@ from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 
-from proki.compiler import CONFIG
+from proki.compiler import CONFIG, with_programs
 from proki.core.rules import Rule
 from proki.core.signals import Stream
 from proki.legacy.core.shutdown import ShutdownParams
 from proki.legacy.rules.base import RuleParams, chance_at
 from proki.legacy.rules.shutdown import ShiftContext, shift_ending
 
-SHIPPED = {r["name"]: r for r in json.loads(CONFIG.read_text())["rules"]}
+SHIPPED = {r["name"]: r for r in with_programs(json.loads(CONFIG.read_text()), CONFIG.parent / "programs")["rules"]}
 TUESDAY = date(2026, 9, 29)
 
 
