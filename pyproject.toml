@@ -11,13 +11,17 @@ dependencies = [
     "PySide6>=6.6",
     "numpy>=2.4.6",
     "nats-py>=2.16.0",
+    "qasync>=0.28.0",
 ]
 
 [project.scripts]
 proki = "proki.legacy.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=1.4.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -58,3 +62,5 @@ proki = ["assets/sounds/*", "assets/*.json", "assets/programs/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"  # an `async def` test runs on a loop of its own
+asyncio_default_fixture_loop_scope = "function"
