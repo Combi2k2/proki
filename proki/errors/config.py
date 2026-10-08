@@ -6,7 +6,7 @@ rule or program defined in code. Each is also a `ValueError`: a value proki can'
       SignalError       a signal or primitive (its window, backfill, ...)
       VariableError     a variable (its name, its starting value)
       RuleError         a rule (its sides, compare operator, softness)
-      ProgramError      a program, its states and reactions (an unknown state, a goto not last, ...)
+      ProgramError      a program and its states (an unknown state, a state without an exit, ...)
       ActionError       an action (an unknown kind, its params, an expression with a window)
 """
 

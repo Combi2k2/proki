@@ -20,7 +20,7 @@ Only numbers are compared (True / False count as 1 / 0). If either side is unkno
 text, the rule doesn't fire.
 
 A rule keeps no history: `decide()` samples its chance at that moment, so how often it
-gets the chance to fire is up to whoever asks (a reaction's `every`). Each side is a hidden
+gets the chance to fire is up to whoever asks (a state's `every`). Each side is a hidden
 signal (`<rule>.lhs`, `<rule>.rhs`), so windows in it move on every cycle.
 
 Several rules decide together with `Rule.vote()`, by `level`, highest first: a level passes
