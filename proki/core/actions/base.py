@@ -1,4 +1,4 @@
-"""The base of every action, and the two helpers actions use for their expressions.
+"""The base of every action, and the helpers actions use for their expressions.
 
 What an action is: one step a program takes when it enters a state (core/programs.py),
 such as setting a variable, asking a question, or ringing an alarm. An action only does
@@ -22,6 +22,16 @@ taken (`evaluate`). So an expression in an action can't contain a window like
 `ts_mean(keys, 5)`, which needs to see every cycle to have a value. `check` rejects that
 when the config is compiled. The fix is to make the window a signal and use the signal's
 name in the action.
+
+What a question or a poke says (`Context`): a plain text, or a format with values filled
+in at the moment it's said.
+
+    "context": "Start a session?"
+    "context": {"format": "{h:.1f} h shallow so far. Start a session?", "values": {"h": "shallow_today / 60"}}
+
+    format   what's said. Its {name}s are filled in from `values` ({h:.1f}: with a format,
+             as in Python's str.format)
+    values   expressions, worked out at the moment it's said (optional)
 """
 
 from __future__ import annotations
@@ -30,7 +40,7 @@ import inspect
 from typing import Any, ClassVar
 
 from proki.core.signals import Stream, compile_expr
-from proki.utils import snake
+from proki.utils import fill, snake
 from proki.errors import ActionError
 
 
@@ -48,8 +58,9 @@ class Action:
         super().__init_subclass__(**kwargs)
         Action.kinds[snake(cls.__name__)] = cls
 
-    def apply(self) -> None:
-        """Take the step, now. Each kind says what that is."""
+    async def apply(self) -> None:
+        """Take the step. Each kind says what that is. Most are done at once, a question
+        (`ask`) waits for its answer."""
         raise NotImplementedError
 
     @classmethod
@@ -104,3 +115,29 @@ def check(expr: str) -> None:
 def evaluate(expr: str) -> Any:
     """The expression's value at this moment (None if unknown). Used by actions as they're taken."""
     return compile_expr(expr).current()
+
+
+class Context:
+    """What a question or a poke says (see above). `kind` names the action in its errors."""
+
+    def __init__(self, spec: Any, kind: str):
+        spec = {"format": spec} if isinstance(spec, str) else spec
+        format = spec.get("format") if isinstance(spec, dict) else None
+        values = spec.get("values", {}) if isinstance(spec, dict) else None
+
+        if not isinstance(spec, dict) or set(spec) - {"format", "values"}:
+            raise ActionError(f"{kind}: context is a text, or {{format, values}} ({spec!r})")
+        if not isinstance(format, str) or not format:   raise ActionError(f"{kind}: context's format is what's said ({format!r})")
+        if not isinstance(values, dict):                raise ActionError(f"{kind}: context's values are {{name: expr}} ({values!r})")
+
+        self.format = format
+        self.values = {str(name): str(expr) for name, expr in values.items()}
+        for expr in self.values.values():
+            check(expr)
+
+    def said(self) -> str:
+        """The format, with its values as they are now."""
+        return fill(self.format, {name: evaluate(expr) for name, expr in self.values.items()})
+
+    def __repr__(self) -> str:
+        return repr(self.format)

@@ -1,77 +1,106 @@
-"""{"ask": {...}}: a question with options, to you ("usr"), jev ("jev") or an LLM ("llm").
+"""{"ask": {...}}: ask you, jev or an LLM, and keep the answer in a variable of the state:
+the option picked, or a text.
 
-    {"ask": {"channel": "usr",
-             "context": "{h:.1f} h shallow so far. Start a session?",
-             "values": {"h": "shallow_today / 60"},
-             "options": [{"option": "Start", "criteria": "focus is building"}, {"option": "Not now"}],
-             "result": "suggest_answer",
-             "default": 1,
-             "timeout": 120}}
+    {"ask": {
+        "channel": "usr",
+        "context": {"format": "{h:.1f} h shallow so far. Start a session?", "values": {"h": "shallow_today / 60"}},
+        "options": [{"option": "Start", "criteria": "focus is building"}, {"option": "Not now"}],
+        "result":  "$answer",
+        "default": 1,
+        "timeout": 120
+    }}
 
-It asks in the background (`ask_later`, core/ask.py), so the program goes on. The answer
-comes back as the chosen option's index (0, 1, ...) in the variable `result`. While the
-question waits, that variable is unknown, so rules on it don't pass yet. No answer
-(dismissed, a failed call, nobody to ask, or past `timeout` seconds) is the `default`
-index (-1: nothing chosen). The default timeout is 2 min for you, 10 s for jev and an LLM.
+    channel   who answers: "usr" (you, in the popup), "jev" or "llm"
+    context   the question: a text, or {format, values} to fill values in as it's asked
+              (actions/base.py)
+    options   what can be picked. `criteria` tells jev and an LLM what an option means.
+              Without options, the answer is a text: what you type, or what the LLM
+              writes (jev only picks options)
+    result    the state's variable the answer goes into, made without declaring it ("$answer"
+              or "answer"): the picked option's index (0, 1, ...), or the text
+    default   with options, the index when there's no answer (optional, -1: nothing picked).
+              A text without an answer is unknown
+    timeout   how many seconds to wait (optional): 120 for you, 10 for jev and an LLM
 
-`values` are expressions, worked out when it's asked and filled into `context`
-(`{h:.1f}`). `criteria` says what an option means, for jev and an LLM.
+No answer means it was dismissed, the call failed, nobody was there to ask, or `timeout`
+went by. While the question waits, `result` is unknown. Only this program waits, the
+others go on.
 
-The state that asks decides where to go with its `next`, on the result:
-`{"goto": "starting", "if": "suggest_answer == 0"}`.
+The state that asks moves on with its `next`, by the result:
+
+    "next": [{"goto": "starting", "if": "$answer == 0"}]
+
+A text goes on to another question through its context's values:
+
+    {"ask": {"channel": "jev", "context": {"format": "A note someone wrote: {note}", "values": {"note": "$text"}}, ...}}
+
+To keep it for another state, `set` a variable of the program to it.
 """
 
 from __future__ import annotations
 
-from proki.core.actions.base import Action, check, evaluate
-from proki.core.ask import ask_later
+from collections.abc import Awaitable, Callable
+from typing import ClassVar
+
+from proki.core.actions.base import Action, Context
 from proki.core.signals import Stream, Variable
 from proki.errors import ActionError
-from proki.utils import fill
 
-TIMEOUT = {"usr": 120, "jev": 10, "llm": 10}  # seconds, by channel
+# seconds to wait, by channel
+TIMEOUT = {
+    "usr": 120,
+    "jev": 10,
+    "llm": 10,
+}
+
+# how a channel is asked: (context, options as (label, criteria) or None, timeout) → the
+# picked option's index, or the text without options (None: no answer)
+Pick = Callable[[str, list[tuple[str, str | None]] | None, float], Awaitable[int | str | None]]
 
 
 class Ask(Action):
-    def __init__(self, channel: str, context: str, options: list, result: str, default: int,
-                 timeout: float | None = None, values: dict | None = None):
-        if channel not in TIMEOUT:
-            raise ActionError(f"ask: channel is one of {', '.join(TIMEOUT)} ({channel!r})")
-        if not isinstance(context, str) or not context:
-            raise ActionError(f"ask: context is the question's text ({context!r})")
-        values = {} if values is None else values
-        if not isinstance(values, dict):
-            raise ActionError(f"ask: values are {{name: expr}} ({values!r})")
-        if not isinstance(options, list) or not options:
+    # who answers each channel, set by the app (None: nobody, so the answer is the default)
+    ask_usr: ClassVar[Pick | None] = None
+    ask_jev: ClassVar[Pick | None] = None
+    ask_llm: ClassVar[Pick | None] = None
+
+    def __init__(self, channel: str, context: str | dict, result: str, options: list | None = None, default: int | None = None, timeout: float | None = None):
+        target = Stream.registry.get(result)  # the state's, by its full name (the compiler made it)
+
+        if channel not in TIMEOUT:                              raise ActionError(f"ask: channel is one of {', '.join(TIMEOUT)} ({channel!r})")
+        if not isinstance(target, Variable):                    raise ActionError(f"ask: result is the name of a variable for the answer ({result!r})")
+        if options is None and channel == "jev":                raise ActionError("ask: jev only picks options, so it needs some")
+        if options is None and default is not None:             raise ActionError("ask: default is an option's index, so it needs options")
+        if options is not None and (not isinstance(options, list) or not options):
             raise ActionError("ask: options is a list of {option, criteria}")
-        for entry in options:
+
+        for entry in options or []:
             if not isinstance(entry, dict) or "option" not in entry or set(entry) - {"option", "criteria"}:
                 raise ActionError(f"ask: an option is {{option, criteria}} ({entry!r})")
-        labels = [str(entry["option"]) for entry in options]
+
+        labels = [str(entry["option"]) for entry in options or []]
+        default = -1 if options is not None and default is None else default
         if len(set(labels)) != len(labels):
             raise ActionError(f"ask: an option is listed twice ({labels})")
-        if isinstance(default, bool) or not isinstance(default, int) or not -1 <= default < len(labels):
+        if options is not None and (isinstance(default, bool) or not isinstance(default, int) or not -1 <= default < len(labels)):
             raise ActionError(f"ask: default is an option's index, -1 to {len(labels) - 1} ({default!r})")
         if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, int | float) or timeout <= 0):
             raise ActionError(f"ask: timeout is in seconds, more than 0 ({timeout!r})")
-        target = Stream.registry.get(result)
-        if not isinstance(target, Variable):
-            raise ActionError(f"ask: result is a variable, and there's none called {result!r}")
-        self.channel, self.context, self.default = channel, context, default
-        self.options = [(str(e["option"]), str(e["criteria"]) if e.get("criteria") else None) for e in options]
-        self.values = {str(name): str(expr) for name, expr in values.items()}
-        for expr in self.values.values():
-            check(expr)
-        self.timeout = TIMEOUT[channel] if timeout is None else timeout
+
+        self.channel = channel
+        self.context = Context(context, "ask")
+        self.options = None if options is None else [(label, str(e["criteria"]) if e.get("criteria") else None) for label, e in zip(labels, options)]
         self.result = target
+        self.default = default
+        self.timeout = TIMEOUT[channel] if timeout is None else timeout
 
-    def apply(self) -> None:
+    async def apply(self) -> None:
         self.result.set(None)  # unknown until the answer comes
-        context = fill(self.context, {name: evaluate(expr) for name, expr in self.values.items()})
-        ask_later(self.answered, self.channel, context, self.options, timeout=self.timeout)
-
-    def answered(self, index: int | None) -> None:
-        self.result.set(self.default if index is None else index)
+        picker = getattr(Ask, f"ask_{self.channel}")
+        answer = None if picker is None else await picker(self.context.said(), self.options, self.timeout)
+        self.result.set(self.default if answer is None else answer)
 
     def __repr__(self) -> str:
-        return f"ask {self.channel} {self.context!r} {[label for label, _ in self.options]} → {self.result.name}"
+        options = "text" if self.options is None else [label for label, _ in self.options]
+        return f"ask {self.channel} {self.context!r} {options} → {self.result.name}"
+

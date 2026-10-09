@@ -25,7 +25,7 @@ class Update:
         if self.expr is not None:
             check(self.expr)
 
-    def apply(self) -> None:
+    async def apply(self) -> None:
         self.change(None if self.expr is None else evaluate(self.expr))
 
     def change(self, value: Any) -> None:

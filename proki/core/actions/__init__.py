@@ -17,7 +17,7 @@ A question, its answer later in a variable (ask/):
              {"option": "Not now"}], "result": "suggest_answer", "default": 1}}
 
 The UI, one way (nothing comes back):
-    poke    {"poke": {"text": "{h:.0f} h left today", "values": {"h": "..."}}}
+    poke    {"poke": {"context": {"format": "{h:.0f} h left today", "values": {"h": "..."}}}}
     alarm   {"alarm": {"name": "bedtime", "on": true}}   ring (true) until turned off (false)
     lock    {"lock": {}}                                 lock the screen
     open    {"open": {"view": "task_form"}}              a view: task_form, task_board

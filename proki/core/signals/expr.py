@@ -116,6 +116,8 @@ def _build(node: ast.expr) -> Any:
             if name not in Stream.registry:
                 raise ExprError(f"unknown name {name!r}")
             return Stream.registry[name]
+        case ast.Attribute() if (name := ast.unparse(node)) in Stream.registry:
+            return Stream.registry[name]
         case ast.Call(func=ast.Name(id=name), args=args, keywords=[]) if name in ops.FUNCTIONS:
             return ops.FUNCTIONS[name](*(_build(a) for a in args))
         case ast.BinOp(left=left, op=op, right=right) if type(op) in BINARY:

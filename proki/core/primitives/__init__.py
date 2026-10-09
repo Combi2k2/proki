@@ -36,7 +36,7 @@ The primitives:
         mouse_scroll   scrolling, in scroll units
 
 Which primitives exist, and how much history each keeps, is the config's "inputs"
-(proki/compiler.py).
+(proki/compiler/).
 
 How values are read: ActivityWatch stores events (start, duration, data), and a value
 holds for the length of its event. A primitive's value in a cycle comes from the event
