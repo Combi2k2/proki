@@ -1,14 +1,31 @@
-"""jev: a structured-decision API. proki asks it questions it answers with a choice or a
-probability, never free text:
+"""jev: a structured-decision API. You describe a situation in a short text (`state`) and ask
+it named questions. It answers each one with a choice or a probability, never free text.
 
-- input  :  {"state": text, "questions": {name: {...}}},
-- output :  {"answers": {name: {...}}} out.
+    jev = Jev("https://api.openjev.sh/v1/systemone", api_key="...", model="openjev")
+    jev.ask('A person\'s task: "write the intro"', {
+        "size": {
+            "type": "choice",
+            "instructions": "How long will it take one focused person?",
+            "criteria": {
+                "short": "under 25 minutes",
+                "long": "more than 2 hours"
+            }
+        },
+        "vague": {"type": "noul", "instructions": "Is the task too vague to start?"},
+    })
+    →  {"size":  {"choice": "short", "probabilities": {"short": 0.8, "long": 0.2}},
+        "vague": {"noul": 0.1}}
 
-Any service that speaks it fits: openjev (api.openjev.sh), a local jev, or a typesafe-AI
-backend behind the same shape. The URL and key come from the environment (JEV_URL,
-JEV_KEY, e.g. in .env). Optional. Only short texts are ever sent (an app name, a
-website domain, a tracked window's title, a task's title). The questions themselves are
-proki's (core/jev.py).
+Question types:
+
+    choice   pick one of `criteria` (option → what it means): its key, and each one's probability
+    noul     yes or no: the probability of yes
+
+Any service that speaks this shape fits: openjev (api.openjev.sh), a local jev, or another
+backend behind the same shape. Its address, key and model are the config's [jev]. Only
+short texts are ever sent: an app's name, a website's domain, a window's or a task's title.
+Programs ask jev through the message bus, where a worker answers with this client
+(channels/jev.py).
 """
 
 from __future__ import annotations
@@ -17,15 +34,17 @@ import requests
 
 
 class Jev:
+    """A jev service: where it is, its key, and the model to ask (if it has several)."""
+
     def __init__(self, api_url: str, api_key: str | None = None, model: str | None = None, timeout: float = 5):
-        self.api_url = api_url
-        self.api_key = api_key
+        self.api_url = api_url  # the endpoint questions are posted to
+        self.api_key = api_key  # sent as a bearer token. None: no key (a local service)
         self.model = model  # some services want one (openjev: "openjev")
-        self.timeout = timeout
+        self.timeout = timeout  # seconds per call
 
     def ask(self, state: str, questions: dict) -> dict:
-        """The answers to `questions` about `state`, by question name. Raises
-        `requests.RequestException` when the call fails."""
+        """The answers to `questions` (name → question) about `state`, by question name (see
+        above). Raises `requests.RequestException` when the call fails or times out."""
         response = requests.post(
             self.api_url,
             headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
