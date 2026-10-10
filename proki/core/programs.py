@@ -49,9 +49,8 @@ Variables and rules: a state reads its own, its program's and the global ones, b
 full names (`suggest.asking.answer`), which the compiler writes out (proki/compiler/). Only
 variables carry over a restart: each start begins every program at its `initial` state.
 
-A program written in code (proki/programs/) has a `run` of its own (`step` once a cycle),
-and maybe a `_poll`: between cycles, every few seconds (`Program.poll`), for what's in
-focus right now. Both can read `Program.context`, what the app gives programs each turn.
+A program written in code (proki/programs/) has a `run` of its own: `Ritual`'s calls its
+`step` once a cycle (programs/base.py).
 """
 
 from __future__ import annotations
@@ -59,7 +58,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from proki.core.signals import Signal, Variable
 from proki.core.actions import Action
@@ -96,7 +95,6 @@ class State:
 
 class Program:
     registry: ClassVar[dict[str, Program]] = {}  # every program, by name
-    context: ClassVar[Any] = None  # what the app gives programs in code, each turn
     now: ClassVar[datetime | None] = None  # the cycle being run (`tick`)
 
     def __init__(self, name: str, states: dict[str, State], initial: str):
@@ -147,9 +145,6 @@ class Program:
         self.wake = (t, asyncio.get_running_loop().create_future())
         await self.wake[1]
 
-    async def _poll(self, now: datetime) -> None:
-        """Between cycles (programs in code)."""
-
     @classmethod
     def tick(cls, now: datetime) -> None:
         """A new cycle: start the programs that haven't started, and wake the ones whose wait
@@ -161,12 +156,6 @@ class Program:
             elif program.wake is not None and program.wake[0] <= now:
                 wake, program.wake = program.wake[1], None
                 wake.set_result(None)
-
-    @classmethod
-    async def poll(cls, now: datetime) -> None:
-        """Between cycles, every few seconds: every program's `_poll`."""
-        for program in list(cls.registry.values()):
-            await program._poll(now)
 
     @classmethod
     def stop(cls) -> None:
