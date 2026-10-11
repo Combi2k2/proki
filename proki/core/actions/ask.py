@@ -94,6 +94,12 @@ class Ask(Action):
         self.default = default
         self.timeout = TIMEOUT[channel] if timeout is None else timeout
 
+    def reads(self) -> list[str]:
+        return list(self.context.values.values())
+
+    def writes(self) -> list[Variable]:
+        return [self.result]
+
     async def apply(self) -> None:
         self.result.set(None)  # unknown until the answer comes
         picker = getattr(Ask, f"ask_{self.channel}")

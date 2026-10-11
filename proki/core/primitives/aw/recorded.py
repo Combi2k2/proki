@@ -1,4 +1,4 @@
-"""`recorded`: whether ActivityWatch recorded anything (false: it or proki was off)."""
+"""`recorded`: whether ActivityWatch recorded anything (false: it or proki was off, or the computer asleep)."""
 
 from __future__ import annotations
 

@@ -34,6 +34,9 @@ class Poke(Action):
     def __init__(self, context: str | dict):
         self.context = Context(context, "poke")
 
+    def reads(self) -> list[str]:
+        return list(self.context.values.values())
+
     async def apply(self) -> None:
         if Poke.handler is not None:
             Poke.handler(self.context.said())

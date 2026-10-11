@@ -70,6 +70,7 @@ class Stream:
     epoch: ClassVar[int] = 0  # bumped when a variable changes, so every cached value gets worked out again
 
     name: str = ""
+    desc: str = ""  # what it is, in a line (an operator has none)
     inputs: Sequence[Stream] = ()  # the streams it reads (each subclass sets its own)
     period: timedelta | None = None  # how often it takes a new value. None: every cycle
     window: timedelta | None = None  # how far back its table goes

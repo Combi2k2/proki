@@ -45,17 +45,27 @@ waits, a branch always sees this cycle's values, and a replay or a test moves ti
 fast as it likes. Entering a state, even the one it's in, runs its `do` again. That's how
 a state loops.
 
-Variables and rules: a state reads its own, its program's and the global ones, by their
-full names (`suggest.asking.answer`), which the compiler writes out (proki/compiler/). Only
-variables carry over a restart: each start begins every program at its `initial` state.
+A program says what it's for (`desc`, a line) and words to find it by (`tags`), for the UI.
+A state and a branch can say what they're for too (`desc`).
+A program can be switched off (`switch`): it stops where it is, and the cycles leave it
+alone until it's switched on again, then it starts over at its initial state.
 
-A program written in code (proki/programs/) has a `run` of its own: `Ritual`'s calls its
-`step` once a cycle (programs/base.py).
+Variables and rules: a state reads its own, its program's and the global ones, by their
+full names (`suggest.asking.answer`), which the compiler writes out (proki/compiler/).
+
+A variable lives as long as what owns it: a state's goes back to its starting value when
+the state is left, a program's when the program starts over (each start of proki, or
+switched on again), and a global one carries over a restart (the compiler makes it
+`persist`). Each start begins every program at its `initial` state.
+
+A program written in code (proki/programs/code/) has a `run` of its own: `Ritual`'s calls
+its `step` once a cycle (programs/code/base.py).
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import ClassVar
@@ -73,6 +83,7 @@ class Branch:
     goto: str
     rules: list[Rule] = field(default_factory=list)
     conds: list[Signal] = field(default_factory=list)
+    desc: str = ""  # why it's taken, in a line
 
     def passes(self) -> bool:
         values = [cond.current() for cond in self.conds]
@@ -91,18 +102,21 @@ class State:
     do: list[Action] = field(default_factory=list)
     every: timedelta = timedelta(minutes=1)
     next: list[Branch] = field(default_factory=list)
+    desc: str = ""  # what it's waiting for, in a line
 
 
 class Program:
     registry: ClassVar[dict[str, Program]] = {}  # every program, by name
     now: ClassVar[datetime | None] = None  # the cycle being run (`tick`)
 
-    def __init__(self, name: str, states: dict[str, State], initial: str):
+    def __init__(self, name: str, states: dict[str, State], initial: str, desc: str = "", tags: Iterable[str] = ()):
         if not name.isascii():      raise ProgramError(f"program {name!r}: a name is letters, digits and _, not starting with a digit")
         if not name.isidentifier(): raise ProgramError(f"program {name!r}: a name is letters, digits and _, not starting with a digit")
         if initial not in states:   raise ProgramError(f"program {name!r}: initial {initial!r} isn't one of its states")
 
         self.name = name
+        self.desc = desc  # what it's for, in a line
+        self.tags = list(tags)  # words to find it by
         self.states = states
         self.initial = initial
         self.vars: list[Variable] = []  # its own (each state has its own too)
@@ -110,10 +124,14 @@ class Program:
         self.current = initial
         self.task: asyncio.Task | None = None  # its `run`, from its first cycle on
         self.wake: tuple[datetime, asyncio.Future] | None = None  # while it waits for a cycle: when, and what wakes it
+        self.on = True  # off: the cycles leave it alone (`switch`)
         Program.registry[name] = self
 
     async def run(self) -> None:
-        """Its life (see above), from its initial state on."""
+        """Its life (see above), from its initial state on, its own variables and its
+        states' at their starting values."""
+        for variable in [*self.vars, *(v for state in self.states.values() for v in state.vars)]:
+            variable.reset()
         name = self.initial
         while True:
             state, entered = self.states[name], Program.now
@@ -123,6 +141,8 @@ class Program:
             
             while (goto := self.choose(state)) is None:
                 await self.until(Program.now + state.every)
+            for variable in state.vars:  # leaving it: its variables start over
+                variable.reset()
             name = goto
 
     async def act(self, actions: list[Action]) -> None:
@@ -151,11 +171,21 @@ class Program:
         is over. It doesn't wait for them: each goes on with its job on its own."""
         cls.now = now
         for program in list(cls.registry.values()):
+            if not program.on:
+                continue
             if program.task is None:
                 program.task = asyncio.get_running_loop().create_task(program.run())
             elif program.wake is not None and program.wake[0] <= now:
                 wake, program.wake = program.wake[1], None
                 wake.set_result(None)
+
+    def switch(self, on: bool) -> None:
+        """Off: it stops where it is, and waits for nothing. On: it starts over at its initial
+        state, at the next cycle."""
+        if on == self.on:  return
+        if self.task is not None:
+            self.task.cancel()
+        self.on, self.task, self.wake, self.current = on, None, None, self.initial
 
     @classmethod
     def stop(cls) -> None:

@@ -35,6 +35,12 @@ class Update:
     async def apply(self) -> None:
         self.change(None if self.expr is None else evaluate(self.expr))
 
+    def reads(self) -> list[str]:
+        return [] if self.expr is None else [self.expr]
+
+    def writes(self) -> list[Variable]:
+        return [self.variable]
+
     def change(self, value: Any) -> None:
         raise NotImplementedError
 

@@ -11,6 +11,7 @@ The mixins aren't exported outside this package.
 
 from __future__ import annotations
 
+import inspect
 from datetime import datetime, timedelta
 from collections.abc import Callable
 from typing import Any, ClassVar
@@ -26,7 +27,8 @@ class Primitive(Stream):
     Defining a subclass registers its kind in `kinds`, by its name in snake case
     (`MouseMove` → "mouse_move"). The config's "inputs" pick kinds by that name. Making one
     registers it in `Stream.registry`. It keeps a table if the config asks for one
-    (`backfill`, how far back: `window`)."""
+    (`backfill`, how far back: `window`). What it is (`desc`) is its module's first
+    paragraph, after its name: "`app`: the app in focus" → "the app in focus"."""
 
     kinds: ClassVar[dict[str, type[Primitive]]] = {}  # every kind, by name
     sources: ClassVar[list[Callable[[datetime, datetime], None]]] = []  # fetch(start, end): what each source recorded, before the cycles
@@ -34,6 +36,8 @@ class Primitive(Stream):
     def __init_subclass__(cls, **kwargs: Any):
         super().__init_subclass__(**kwargs)
         Primitive.kinds[snake(cls.__name__)] = cls
+        doc = (inspect.getmodule(cls).__doc__ or "").split("\n\n")[0]
+        cls.desc = " ".join(doc.split(":", 1)[-1].split())
 
     # why a table needs a window: the recording is let go after the first run, so a
     # table is all there is of it (a kind can say otherwise: `Moment`)

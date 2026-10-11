@@ -39,7 +39,7 @@ from __future__ import annotations
 import inspect
 from typing import Any, ClassVar
 
-from proki.core.signals import Stream, compile_expr
+from proki.core.signals import Stream, Variable, compile_expr
 from proki.utils import fill, snake
 from proki.errors import ActionError
 
@@ -48,7 +48,8 @@ class Action:
     """One step a program takes when it enters a state.
 
     Each kind is a subclass. Its config name is its class name in snake case, its params
-    are its `__init__`'s keyword arguments, and `apply` takes the step.
+    are its `__init__`'s keyword arguments, and `apply` takes the step. `reads` and
+    `writes` say what it uses, for the UI to show what a program depends on.
     """
 
     kinds: ClassVar[dict[str, type[Action]]] = {}  # every kind, by its name in the config
@@ -62,6 +63,14 @@ class Action:
         """Take the step. Each kind says what that is. Most are done at once, a question
         (`ask`) waits for its answer."""
         raise NotImplementedError
+
+    def reads(self) -> list[str]:
+        """The expressions it works out (none by default)."""
+        return []
+
+    def writes(self) -> list[Variable]:
+        """The variables it changes (none by default)."""
+        return []
 
     @classmethod
     def parse(cls, entry: dict) -> Action:

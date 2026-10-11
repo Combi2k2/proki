@@ -61,6 +61,7 @@ class Rule:
         rhs: str | float | None = None,
         softness: float = 0.0,
         level: int = 1,
+        desc: str = "",
     ):
         if not name:    raise RuleError("rule name can't be empty")
         try:
@@ -76,6 +77,7 @@ class Rule:
                 raise RuleError(f"level is a whole number ({level!r})")
 
             self.name = name
+            self.desc = desc  # what it's for, in a line
             self.lhs = Signal(f"{name}.lhs", str(lhs))
             self.rhs = Signal(f"{name}.rhs", str(rhs))
             self.lhs.inputs, self.rhs.inputs  # compiled now: a mistake shows with the rule's name

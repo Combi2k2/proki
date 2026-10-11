@@ -20,8 +20,7 @@ from proki.errors import SignalError
 class Signal(Stream):
     """A named expression. Its value each cycle is the expression's."""
 
-    def __init__(self, name: str, expr: str, backfill: bool = False, window: timedelta | None = None,
-                 persist: bool = False):
+    def __init__(self, name: str, expr: str, backfill: bool = False, window: timedelta | None = None, persist: bool = False, desc: str = ""):
         if not name:    raise SignalError("signal name can't be empty")
         if not expr:    raise SignalError("signal expr can't be empty")
         if persist and (not backfill or window is None):
@@ -30,6 +29,7 @@ class Signal(Stream):
         parse(expr)  # a syntax error shows now, an unknown name only once it's compiled
 
         self.name = name
+        self.desc = desc
         self.expr = expr  # e.g. "ts_mean(keys, 5)"
         self.backfill = backfill
         self.window = window
