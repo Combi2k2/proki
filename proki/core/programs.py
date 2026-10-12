@@ -6,9 +6,9 @@ then waits, then tries its one way out.
 
     "asking": {
         "do":    [{"ask": {"channel": "usr", "context": "Start a session?",
-                           "options": [{"option": "Start"}, {"option": "Not now"}], "result": "$answer"}}],
+                           "options": [{"option": "Start"}, {"option": "Not now"}], "result": "answer"}}],
         "every": 0.1,
-        "next":  [{"goto": "starting", "if": "$answer == 0"}, {"goto": "waiting"}]
+        "next":  [{"goto": "starting", "when": "answer == 0"}, {"goto": "waiting"}]
     }
 
 A state has:
@@ -18,18 +18,18 @@ A state has:
     do          actions taken in order when the state is entered (core/actions/)
     every       minutes between tries of `next` (1 by default)
     next        where to go: branches tried in order. Never empty: written as a state's name,
-                or left out (back to `initial`), the compiler makes it a branch that always passes
+                or left out (back to `initial`), it's built as a branch that always passes
 
-A branch goes to its `goto` if it passes. Its `if` is a list of rules and conditions,
+A branch goes to its `goto` if it passes. Its `when` is a list of rules and conditions,
 or one of them:
 
-    {"goto": "starting", "if": ["focus_high", "$answer == 0", "not in_session"]}
+    {"goto": "starting", "when": ["focus_high", "answer == 0", "not in_session"]}
 
     rules        names of rules, voted together (`Rule.vote`): soft, by level
     conditions   expressions, each true or false: hard, like a rule with no softness above
                  every level. All of them must be true, then the rules vote
 
-A branch without `if` always passes (the else). An unknown condition isn't true.
+A branch without `when` always passes (the else). An unknown condition isn't true.
 
 A program's life (`run`), one task per program:
 
@@ -51,11 +51,11 @@ A program can be switched off (`switch`): it stops where it is, and the cycles l
 alone until it's switched on again, then it starts over at its initial state.
 
 Variables and rules: a state reads its own, its program's and the global ones, by their
-full names (`suggest.asking.answer`), which the compiler writes out (proki/compiler/).
+full names (`suggest.asking.answer`), which the builder writes out (proki/model/).
 
 A variable lives as long as what owns it: a state's goes back to its starting value when
 the state is left, a program's when the program starts over (each start of proki, or
-switched on again), and a global one carries over a restart (the compiler makes it
+switched on again), and a global one carries over a restart (the builder makes it
 `persist`). Each start begins every program at its `initial` state.
 
 A program written in code (proki/programs/code/) has a `run` of its own: `Ritual`'s calls

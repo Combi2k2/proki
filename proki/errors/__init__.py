@@ -1,7 +1,8 @@
 """The errors proki raises on purpose, all under one root, `ProkiError`:
 
     ProkiError                 any of them (base.py). Its message says where it happened
-      ConfigError              a mistake in the config or a definition (config.py)
+      ConfigError              a mistake in the config or a definition (config.py). `Inside`
+                               says where one made in it is
         ExprError, SignalError, VariableError, RuleError, ProgramError, ActionError
       ServiceError             a service outside proki failed (service.py)
         LlmError
@@ -14,6 +15,7 @@ from proki.errors.base import ProkiError
 from proki.errors.config import (
     ActionError,
     ConfigError,
+    Inside,
     ExprError,
     ProgramError,
     RuleError,
@@ -25,7 +27,7 @@ from proki.errors.service import LlmError, ServiceError
 
 __all__ = [
     "ProkiError",
-    "ConfigError", "ExprError", "SignalError", "VariableError", "RuleError", "ProgramError", "ActionError",
+    "ConfigError", "Inside", "ExprError", "SignalError", "VariableError", "RuleError", "ProgramError", "ActionError",
     "ServiceError", "LlmError",
     "PlatformError",
 ]

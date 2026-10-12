@@ -5,7 +5,7 @@ the option picked, or a text.
         "channel": "usr",
         "context": {"format": "{h:.1f} h shallow so far. Start a session?", "values": {"h": "shallow_today / 60"}},
         "options": [{"option": "Start", "criteria": "focus is building"}, {"option": "Not now"}],
-        "result":  "$answer",
+        "result":  "answer",
         "default": 1,
         "timeout": 120
     }}
@@ -16,8 +16,8 @@ the option picked, or a text.
     options   what can be picked. `criteria` tells jev and an LLM what an option means.
               Without options, the answer is a text: what you type, or what the LLM
               writes (jev only picks options)
-    result    the state's variable the answer goes into, made without declaring it ("$answer"
-              or "answer"): the picked option's index (0, 1, ...), or the text
+    result    the name of the state's variable the answer goes into ("answer"), made without
+              declaring it: the picked option's index (0, 1, ...), or the text
     default   with options, the index when there's no answer (optional, -1: nothing picked).
               A text without an answer is unknown
     timeout   how many seconds to wait (optional): 120 for you, 10 for jev and an LLM
@@ -28,11 +28,11 @@ others go on.
 
 The state that asks moves on with its `next`, by the result:
 
-    "next": [{"goto": "starting", "if": "$answer == 0"}]
+    "next": [{"goto": "starting", "when": "answer == 0"}]
 
 A text goes on to another question through its context's values:
 
-    {"ask": {"channel": "jev", "context": {"format": "A note someone wrote: {note}", "values": {"note": "$text"}}, ...}}
+    {"ask": {"channel": "jev", "context": {"format": "A note someone wrote: {note}", "values": {"note": "text"}}, ...}}
 
 To keep it for another state, `set` a variable of the program to it.
 """
@@ -65,7 +65,7 @@ class Ask(Action):
     ask_llm: ClassVar[Pick | None] = None
 
     def __init__(self, channel: str, context: str | dict, result: str, options: list | None = None, default: int | None = None, timeout: float | None = None):
-        target = Stream.registry.get(result)  # the state's, by its full name (the compiler made it)
+        target = Stream.registry.get(result)  # the state's, by its full name (the builder made it)
 
         if channel not in TIMEOUT:                              raise ActionError(f"ask: channel is one of {', '.join(TIMEOUT)} ({channel!r})")
         if not isinstance(target, Variable):                    raise ActionError(f"ask: result is the name of a variable for the answer ({result!r})")

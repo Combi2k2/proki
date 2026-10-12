@@ -17,7 +17,7 @@ What it does over its life:
     persists    with `persist`, every change is saved (`Variable.store`) and read back when
                 it's made, so a saved value replaces the starting value. A saved value of
                 another kind (a number where the config now starts it with text) is
-                dropped. The compiler makes every global variable persist, and no
+                dropped. The builder (model/) makes every global variable persist, and no
                 program's or state's
 """
 

@@ -2,17 +2,17 @@
 
     {"poke": {"context": "Back to work"}}            a message to read (a question is `ask`, ask.py)
     {"poke": {"context": {"format": "{n} pokes today", "values": {"n": "pokes"}}}}
-    {"alarm": {"name": "bedtime", "on": true}}       ring alarm "bedtime" (true) until it's turned off (false)
+    {"poke": {"context": "You've been away", "alarm": true}}   one that rings while it's shown
     {"lock": {}}                                     lock the screen
     {"open": {"view": "task_form"}}                  open a view: task_form (a new task), task_board
 
-A poke's `context` is filled in as it's said (base.py: `Context`). Each alarm goes by its
-own name, so turning one off leaves the others.
+A poke's `context` is filled in as it's said (base.py: `Context`). With `alarm`, the alarm
+rings while the poke is on the screen, and stops as it's closed: a reminder for when you
+may not be looking (a question never rings: you're there to answer it).
 
 Each kind has a `handler`, what does it, set by the app (None: nothing happens):
 
-    Poke.handler(text)          show a message
-    Alarm.handler(name, on)     ring alarm `name`, or stop it
+    Poke.handler(text, alarm)   show a message, ringing while it's shown if `alarm`
     Lock.handler()              lock the screen
     Open.handler(view)          open one of the app's views
 """
@@ -29,36 +29,22 @@ VIEWS = ("task_form", "task_board")
 
 
 class Poke(Action):
-    handler: ClassVar[Callable[[str], None] | None] = None
+    handler: ClassVar[Callable[[str, bool], None] | None] = None
 
-    def __init__(self, context: str | dict):
+    def __init__(self, context: str | dict, alarm: bool = False):
+        if not isinstance(alarm, bool):  raise ActionError(f"poke: alarm is true or false ({alarm!r})")
         self.context = Context(context, "poke")
+        self.alarm = alarm
 
     def reads(self) -> list[str]:
         return list(self.context.values.values())
 
     async def apply(self) -> None:
         if Poke.handler is not None:
-            Poke.handler(self.context.said())
+            Poke.handler(self.context.said(), self.alarm)
 
     def __repr__(self) -> str:
-        return f"poke {self.context!r}"
-
-
-class Alarm(Action):
-    handler: ClassVar[Callable[[str, bool], None] | None] = None
-
-    def __init__(self, name: str, on: bool):
-        if not isinstance(name, str) or not name:   raise ActionError(f"alarm: name is the alarm's name ({name!r})")
-        if not isinstance(on, bool):                raise ActionError(f"alarm {name!r}: on is true (ring) or false (stop) ({on!r})")
-        self.name, self.on = name, on
-
-    async def apply(self) -> None:
-        if Alarm.handler is not None:
-            Alarm.handler(self.name, self.on)
-
-    def __repr__(self) -> str:
-        return f"alarm {self.name} {'on' if self.on else 'off'}"
+        return f"poke {self.context!r}" + (" (alarm)" if self.alarm else "")
 
 
 class Lock(Action):

@@ -16,15 +16,16 @@ the answer goes back to whoever asked. That one does what it means.
 Telling, one way ("proki.ui"): nothing comes back.
 
     Popup.poke("Back to work")      {"type": "poke", "text": ...}            a message to read
-    Popup.alarm("session", True)    {"type": "alarm", "id": ..., "on": ...}  rings until turned off
+    Popup.poke("Away?", alarm=True) {"type": "poke", ..., "alarm": true}     ringing while it's shown
     Popup.open("task_form")         {"type": "open", "view": ...}            a view: task_form, task_board
     Popup.send({"type": ...})       any other:
                                     "status"   the tray's line, each cycle
                                     "quit"     the UI closes
                                     "cancel"   a question no longer asked (`ask` sends it)
 
-The UI shows one question at a time: the others wait their turn, and one that's too late
-leaves the line ("cancel"). Whether a question waits is the channel's (`queued("usr")`, base.py).
+The UI shows one question at a time: the others wait their turn, and one that's too late,
+or no longer asked (whoever asked moved on), leaves the line ("cancel"). A poke's alarm
+rings only while the poke is on the screen: closing it stops the alarm at once. Whether a question waits is the channel's (`queued("usr")`, base.py).
 """
 
 from __future__ import annotations
@@ -48,8 +49,13 @@ class Popup:
         """Your answer: an option's index, or with no options the text you typed. None when
         there's no answer, and then the question is taken off the screen."""
         id = next(Channels.ids)
-        options = None if options is None else paired(options)
-        answer = await request("usr", {"id": id, "context": context, "options": options, "show": show}, timeout)
+        
+        try:
+            options = None if options is None else paired(options)
+            answer = await request("usr", {"id": id, "context": context, "options": options, "show": show}, timeout)
+        except asyncio.CancelledError:  # no longer asked: off the screen (and its alarm stops)
+            Popup.send({"type": "cancel", "id": id})
+            raise
 
         if answer is None:       await Channels.bus.publish("proki.ui", {"type": "cancel", "id": id})
         if options is not None:  return picked(answer, options)
@@ -63,12 +69,8 @@ class Popup:
         asyncio.get_running_loop().create_task(Channels.bus.publish("proki.ui", message))
 
     @staticmethod
-    def poke(text: str) -> None:
-        Popup.send({"type": "poke", "text": text})
-
-    @staticmethod
-    def alarm(id: str, on: bool) -> None:
-        Popup.send({"type": "alarm", "id": id, "on": on})
+    def poke(text: str, alarm: bool = False) -> None:
+        Popup.send({"type": "poke", "text": text, **({"alarm": True} if alarm else {})})
 
     @staticmethod
     def open(view: str) -> None:

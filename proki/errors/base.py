@@ -3,8 +3,8 @@
 `where` lists what the error happened in, outermost first. Code that knows more context
 adds it on the way out with `within`, so the final message reads from the outside in:
 
-    e.within("config.json", "rule 'focus_high'")
-    →  config.json: rule 'focus_high': lhs is missing
+    e.within("main.json", "rule 'focus_high'")
+    →  main.json: rule 'focus_high': lhs is missing
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ class ProkiError(Exception):
 
     def within(self, *where: str) -> Self:
         """Add the contexts `where` around the error (outermost first), and return it, so
-        it can be re-raised: `raise e.within("config.json") from None`."""
+        it can be re-raised: `raise e.within("main.json") from None`."""
         self.where[:0] = where
         return self
 

@@ -1,7 +1,7 @@
 """The base of every action, and the helpers actions use for their expressions.
 
 What an action is: one step a program takes when it enters a state (core/programs.py),
-such as setting a variable, asking a question, or ringing an alarm. An action only does
+such as setting a variable, asking a question, or locking the screen. An action only does
 its step. It doesn't know which program or state it's in, and it never moves the program
 (that's the state's `next`).
 

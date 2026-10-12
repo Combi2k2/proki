@@ -3,6 +3,7 @@ waiting, finding the commands that start installed programs."""
 
 from __future__ import annotations
 
+import keyword
 import shutil
 import math
 import time
@@ -26,6 +27,16 @@ def snake(name: str) -> str:
 def slugify(name: str) -> str:
     """"Video streaming" → "video_streaming"."""
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+
+
+def ident(name: Any) -> bool:
+    """Whether `name` can name something: a name as in Python, in plain letters
+    (`focus_5m`), and not one of Python's words (`if`, `not`, ...)."""
+    if not isinstance(name, str):   return False
+    if not name.isascii():          return False
+    if not name.isidentifier():     return False
+    if keyword.iskeyword(name):     return False
+    return True
 
 
 # values

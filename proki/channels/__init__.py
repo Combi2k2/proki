@@ -3,7 +3,7 @@
 A channel is a queue on the bus. One side asks and waits, a worker on the other side
 answers. Each file holds both sides of one channel:
 
-    popup.py   "usr": you, through the popup (and its one-way messages: pokes, alarms, ...)
+    popup.py   "usr": you, through the popup (and its one-way messages: pokes, ...)
     jev.py     "jev": jev's answers to named questions, with their probabilities
     llm.py     "llm": an LLM picks an option, writes JSON for a schema, or writes text
     base.py    what they share: the bus, and the call that asks and waits
