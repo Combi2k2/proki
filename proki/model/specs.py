@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import types
 import typing
+import uuid
 from dataclasses import MISSING, Field, dataclass, field, fields
 from typing import Any, ClassVar, Literal
 
@@ -373,6 +374,8 @@ class ActionSpec(Spec):
     KIND : ClassVar[str] = "action"
     DOCS : ClassVar[str] = "One action a state takes as it's entered, in order (core/actions/): its kind, and its params."
 
+    id     : str            = field(default_factory=lambda: uuid.uuid4().hex[:8],
+                                    metadata=doc("what it's known by: the media library keeps its picks by it"))
     program: str            = field(metadata=doc("its program"))
     state  : str            = field(metadata=doc("its state"))
     kind   : str            = field(metadata=doc("set, add, sub, ask, poke, lock, open"))

@@ -7,9 +7,9 @@ the answer goes back to whoever asked. That one does what it means.
     await Popup.ask("Anything still open?")                       "milk"    the text you typed
                                                                   None      dismissed, or too late
 
-    what it may show and play, keys of the media library (one of each drawn as it's asked):
-        media=["bugcat/sad"]     its own pictures, drawn along with the "questions" pool
-        sound=["alarm-clock"]    its own sounds: one plays while it's shown
+    what it may show and play, one picture and one sound drawn as it's asked:
+        id="3f9a1c2e"        its action's picks in the media library, and the
+                             "questions" pool
 
     how it's shown (`show`):
         urgent=True          before the questions waiting their turn
@@ -19,8 +19,8 @@ the answer goes back to whoever asked. That one does what it means.
 Telling, one way ("proki.ui"): nothing comes back.
 
     Popup.poke("Back to work")      {"type": "poke", "text": ...}            a message to read
-    Popup.poke("Away?", "Away", ["bugcat/what"], ["alarm-clock"])           a title, and a picture and a
-                                                                             sound drawn from those keys
+    Popup.poke("Away?", "Away", "3f9a1c2e")                                 a title, and a picture and a
+                                                                             sound drawn from its picks
     Popup.open("task_form")         {"type": "open", "view": ...}            a view: task_form, task_board
     Popup.send({"type": ...})       any other:
                                     "status"   the tray's line, each cycle
@@ -57,22 +57,20 @@ class Popup:
 
     @staticmethod
     async def ask(context: str, options: Options | None = None, timeout: float = 120,
-                  media: list[str] = (), sound: list[str] = (), **show: Any) -> int | str | None:
+                  id: str | None = None, **show: Any) -> int | str | None:
         """Your answer: an option's index, or with no options the text you typed. None when
         there's no answer, and then the question is taken off the screen."""
-        id = next(Channels.ids)
-        show = {k: v for k, v in show.items() if v is not None}
-        if Popup.library is not None:
-            show |= Popup.draw(media=[*Popup.library.get_pool(Popup.POOL), *media], sound=list(sound))
+        asked = next(Channels.ids)
+        show = {k: v for k, v in show.items() if v is not None} | Popup.draw(id, Popup.POOL)
 
         try:
             options = None if options is None else paired(options)
-            answer = await request("usr", {"id": id, "context": context, "options": options, "show": show}, timeout)
+            answer = await request("usr", {"id": asked, "context": context, "options": options, "show": show}, timeout)
         except asyncio.CancelledError:  # no longer asked: off the screen (and its sound stops)
-            Popup.send({"type": "cancel", "id": id})
+            Popup.send({"type": "cancel", "id": asked})
             raise
 
-        if answer is None:       await Channels.bus.publish("proki.ui", {"type": "cancel", "id": id})
+        if answer is None:       await Channels.bus.publish("proki.ui", {"type": "cancel", "id": asked})
         if options is not None:  return picked(answer, options)
         return answer if isinstance(answer, str) and answer.strip() else None
 
@@ -84,17 +82,20 @@ class Popup:
         asyncio.get_running_loop().create_task(Channels.bus.publish("proki.ui", message))
 
     @staticmethod
-    def poke(text: str, title: str | None = None, media: list[str] = (), sound: list[str] = ()) -> None:
-        """A message to read: its `title`, and a picture and a sound drawn from the keys of
-        `media` and `sound` (as their files)."""
-        drawn = Popup.draw(media=list(media), sound=list(sound)) if Popup.library is not None else {}
-        Popup.send({"type": "poke", "text": text, **({"title": title} if title else {}), **drawn})
+    def poke(text: str, title: str | None = None, id: str | None = None) -> None:
+        """A message to read: its `title`, and a picture and a sound drawn from the picks of `id`."""
+        Popup.send({"type": "poke", "text": text, **({"title": title} if title else {}), **Popup.draw(id)})
 
     @staticmethod
-    def draw(**keys: list[str]) -> dict[str, str]:
-        """One file of each list of keys, drawn from the library: {"media": file, ...}
-        (a list with none in the library: left out)."""
-        return {name: file for name, among in keys.items() if (file := Popup.library.draw(among))}
+    def draw(id: str | None, pool: str | None = None) -> dict[str, str]:
+        """A picture and a sound, as their files, drawn from the picks of `id` and the keys of
+        `pool`: {"media": ..., "sound": ...}, one with none left out."""
+        library = Popup.library
+        if library is None:  return {}
+
+        keys  = [*(library.get_pool(pool) if pool else []), *(library.get_picks(id) if id else [])]
+        drawn = {"media": library.draw(keys, "image"), "sound": library.draw(keys, "sound")}
+        return {name: file for name, file in drawn.items() if file}
 
     @staticmethod
     def open(view: str) -> None:

@@ -59,7 +59,8 @@ switched on again), and a global one carries over a restart (the builder makes i
 `persist`). Each start begins every program at its `initial` state.
 
 A program written in code (proki/programs/code/) has a `run` of its own: `Ritual`'s calls
-its `step` once a cycle (programs/code/base.py).
+its `step` once a cycle (programs/code/base.py). Its name starts with "@" (`RESERVED`), as
+in "@planner", which a config program's can't.
 """
 
 from __future__ import annotations
@@ -106,13 +107,15 @@ class State:
 
 
 class Program:
-    registry: ClassVar[dict[str, Program]] = {}  # every program, by name
-    now: ClassVar[datetime | None] = None  # the cycle being run (`tick`)
+    RESERVED: ClassVar[str] = ""                    # what its name starts with: "@" for a program in code (`Ritual`)
+    registry: ClassVar[dict[str, Program]] = {}     # every program, by name
+    now: ClassVar[datetime | None] = None           # the cycle being run (`tick`)
 
     def __init__(self, name: str, states: dict[str, State], initial: str, desc: str = "", tags: Iterable[str] = ()):
-        if not name.isascii():      raise ProgramError(f"program {name!r}: a name is letters, digits and _, not starting with a digit")
-        if not name.isidentifier(): raise ProgramError(f"program {name!r}: a name is letters, digits and _, not starting with a digit")
-        if initial not in states:   raise ProgramError(f"program {name!r}: initial {initial!r} isn't one of its states")
+        bare = name.removeprefix(self.RESERVED) if name.startswith(self.RESERVED) else ""
+        if not bare.isascii():          raise ProgramError(f"program {name!r}: a name is ASCII letters, digits and _, not starting with a digit")
+        if not bare.isidentifier():     raise ProgramError(f"program {name!r}: a name is ASCII letters, digits and _, not starting with a digit")
+        if initial not in states:       raise ProgramError(f"program {name!r}: initial {initial!r} isn't one of its states")
 
         self.name = name
         self.desc = desc  # what it's for, in a line

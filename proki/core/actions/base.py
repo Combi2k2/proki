@@ -24,8 +24,7 @@ when the config is compiled. The fix is to make the window a signal and use the 
 name in the action.
 
 What a question or a poke says (`Context`): a plain text, or a format with values filled
-in at the moment it's said. How it's shown (`Display`): its title, and the pictures and
-sounds it may show and play.
+in at the moment it's said.
 
     "context": "Start a session?"
     "context": {"format": "{h:.1f} h shallow so far. Start a session?", "values": {"h": "shallow_today / 60"}}
@@ -53,7 +52,8 @@ class Action:
     `writes` say what it uses, for the UI to show what a program depends on.
     """
 
-    kinds: ClassVar[dict[str, type[Action]]] = {}  # every kind, by its name in the config
+    kinds: ClassVar[dict[str, type[Action]]] = {}   # every kind, by its name in the config
+    id   : str | None = None                        # its spec's id (model/specs.py), given by the builder
 
     def __init_subclass__(cls, **kwargs: Any):
         """Register the new kind by its snake-case name (`Poke` → "poke")."""
@@ -152,27 +152,3 @@ class Context:
     def __repr__(self) -> str:
         return repr(self.format)
 
-
-class Display:
-    """How a popup is shown, a poke's or a question to you: its `title` (a heading), and the
-    keys of the media library it may show (`media`) and play (`sound`), one of each drawn
-    as it's shown. Each is optional. `kind` names the action in its errors."""
-
-    def __init__(self, kind: str, title: str | None = None, media: list | None = None, sound: list | None = None):
-        if title is not None and (not isinstance(title, str) or not title):
-            raise ActionError(f"{kind}: title is a text ({title!r})")
-        if media is not None and (not isinstance(media, list) or not all(isinstance(k, str) and k for k in media)):
-            raise ActionError(f"{kind}: media is a list of keys ({media!r})")
-        if sound is not None and (not isinstance(sound, list) or not all(isinstance(k, str) and k for k in sound)):
-            raise ActionError(f"{kind}: sound is a list of keys ({sound!r})")
-
-        self.title = title
-        self.media = list(media or [])
-        self.sound = list(sound or [])
-
-    def __bool__(self) -> bool:
-        return bool(self.title or self.media or self.sound)
-
-    def shown(self) -> dict:
-        """As the popup takes it: {title, media, sound}."""
-        return {"title": self.title, "media": self.media, "sound": self.sound}
