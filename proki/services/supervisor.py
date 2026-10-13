@@ -1,18 +1,18 @@
-"""Running the programs proki's services need, so their own tray apps or launchers aren't:
-ActivityWatch's server and watchers, the NATS server.
+"""Running a service's programs, so its own tray app or launcher isn't needed.
 
-A `Supervisor` runs a service's programs (its "modules": ActivityWatch has a server and a
-few watchers, NATS just its server), found with `find_commands` (proki/utils.py). The first
-module is the server, the one the others need up first:
+A `Supervisor` runs a service's programs (its "modules": a server, and maybe a few clients
+of it), each a command line. The first module is the server, the one the others need up
+first:
 
     start()   start them, the server first, the others once `healthy()` says it's up.
               Returns a short status for the tray
     check()   restart any that stopped. Returns their names
     stop()    stop them, the server last
 
-If the service is already running (`healthy()` before proki starts anything), proki leaves
-it alone, unless those are programs proki started in an earlier run that ended without
-cleaning up: proki remembers their process ids (a pid file in `log_dir`) and takes them over.
+If the service is already running (`healthy()` before anything is started), it's left
+alone, unless those are programs started in an earlier run that ended without cleaning up:
+their process ids are remembered (a pid file in `log_dir`), and they're stopped and started
+again. Each module's output goes to its log in `log_dir`.
 """
 
 from __future__ import annotations
@@ -38,17 +38,17 @@ class Supervisor:
         log_dir: Path,
         timeout: float = 10.0,
     ):
-        self.name = name  # for the status: "ActivityWatch", "NATS"
+        self.name = name  # for the status: "ActivityWatch", "NATS", ...
         self.commands = commands  # each module's command line, by module name, the server first
         self.healthy = healthy  # whether the service answers
         self.timeout = timeout
         self.log_dir = log_dir
         self.pid_file = log_dir / "pids"
         self.processes: dict[str, subprocess.Popen] = {}
-        self.external = False  # already running, not started by proki
+        self.external = False  # already running, not started here
 
     def clean(self) -> bool:
-        """Stop the modules a previous proki run started but never stopped."""
+        """Stop the modules an earlier run started but never stopped."""
         if not self.pid_file.exists():
             return False
         found = False
@@ -110,7 +110,7 @@ class Supervisor:
         return restarted
 
     def stop(self) -> None:
-        """Stop the modules proki started, the server last."""
+        """Stop the modules started here, the server last."""
         for module in reversed(list(self.processes)):
             process = self.processes.pop(module)
             if process.poll() is None:

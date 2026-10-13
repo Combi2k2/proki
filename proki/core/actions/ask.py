@@ -21,6 +21,10 @@ the option picked, or a text.
     default   with options, the index when there's no answer (optional, -1: nothing picked).
               A text without an answer is unknown
     timeout   how many seconds to wait (optional): 120 for you, 10 for jev and an LLM
+    title     its heading, asking you (optional)
+    media     pictures it may show, asking you (optional): keys of the app's media library.
+              One is drawn from these and the "questions" pool, which every question shares
+    sound     sounds it may play while it's shown, asking you (optional): keys too, one drawn
 
 No answer means it was dismissed, the call failed, nobody was there to ask, or `timeout`
 went by. While the question waits, `result` is unknown. Only this program waits, the
@@ -42,7 +46,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import ClassVar
 
-from proki.core.actions.base import Action, Context
+from proki.core.actions.base import Action, Context, Display
 from proki.core.signals import Stream, Variable
 from proki.errors import ActionError
 
@@ -54,8 +58,9 @@ TIMEOUT = {
 }
 
 # how a channel is asked: (context, options as (label, criteria) or None, timeout) → the
-# picked option's index, or the text without options (None: no answer)
-Pick = Callable[[str, list[tuple[str, str | None]] | None, float], Awaitable[int | str | None]]
+# picked option's index, or the text without options (None: no answer). You're asked with
+# its title, media and sound too
+Pick = Callable[..., Awaitable[int | str | None]]
 
 
 class Ask(Action):
@@ -64,7 +69,8 @@ class Ask(Action):
     ask_jev: ClassVar[Pick | None] = None
     ask_llm: ClassVar[Pick | None] = None
 
-    def __init__(self, channel: str, context: str | dict, result: str, options: list | None = None, default: int | None = None, timeout: float | None = None):
+    def __init__(self, channel: str, context: str | dict, result: str, options: list | None = None, default: int | None = None, timeout: float | None = None, title: str | None = None,
+                 media: list | None = None, sound: list | None = None):
         target = Stream.registry.get(result)  # the state's, by its full name (the builder made it)
 
         if channel not in TIMEOUT:                              raise ActionError(f"ask: channel is one of {', '.join(TIMEOUT)} ({channel!r})")
@@ -87,8 +93,13 @@ class Ask(Action):
         if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, int | float) or timeout <= 0):
             raise ActionError(f"ask: timeout is in seconds, more than 0 ({timeout!r})")
 
+        display = Display("ask", title, media, sound)
+        if display and channel != "usr":
+            raise ActionError(f"ask: only a question to you has a title, media or sound ({channel})")
+
         self.channel = channel
         self.context = Context(context, "ask")
+        self.display = display
         self.options = None if options is None else [(label, str(e["criteria"]) if e.get("criteria") else None) for label, e in zip(labels, options)]
         self.result = target
         self.default = default
@@ -103,7 +114,8 @@ class Ask(Action):
     async def apply(self) -> None:
         self.result.set(None)  # unknown until the answer comes
         picker = getattr(Ask, f"ask_{self.channel}")
-        answer = None if picker is None else await picker(self.context.said(), self.options, self.timeout)
+        shown  = self.display.shown() if self.channel == "usr" else {}
+        answer = None if picker is None else await picker(self.context.said(), self.options, self.timeout, **shown)
         self.result.set(self.default if answer is None else answer)
 
     def __repr__(self) -> str:

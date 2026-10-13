@@ -1,10 +1,8 @@
-"""ActivityWatch, the tracker proki is built on (imported as `aw`): its REST API
-(http://host:port/api/0, `is_up`: whether it answers), what its watchers record, and how to
-look up a moment in it. proki runs the server and watchers itself (services/supervisor.py,
-`MODULES`), so ActivityWatch's own tray app isn't needed.
+"""ActivityWatch, the tracker (imported as `aw`): its REST API (http://host:port/api/0,
+`is_up`: whether it answers), what its watchers record, and how to look up a moment in it.
 
 Watchers store events in typed buckets as (timestamp, duration, data), with identical
-neighbours merged. The bucket types proki reads:
+neighbours merged. The bucket types read here:
 
     WINDOW   the window watcher      {"app", "title"} (on macOS, also "url" in a browser)
     WEBTAB   the browser extension   {"url", "title"}
@@ -16,7 +14,9 @@ Watchers report every few seconds and send their reports in batches: neighbourin
 leave tiny gaps, and the newest event ends a little before now. So an event's value holds
 until the next event starts, for at most `HOLD` after its end. Longer gaps are unknown.
 
-Only core/primitives/ reads a `Record`. It keeps what it needs as its own tables.
+    ActivityWatchClient   the server: its buckets, and their events
+    Record                what the watchers recorded over a while, each bucket type's
+                          `Events`, fetched when first asked for
 """
 
 from __future__ import annotations
@@ -32,15 +32,6 @@ WINDOW = "currentwindow"
 WEBTAB = "web.tab.current"
 INPUT = "os.hid.input"
 AFK = "afkstatus"
-
-# the programs proki runs (services/supervisor.py): the server first, then the watchers
-# that record the buckets above (WEBTAB comes from the browser extension)
-MODULES = [
-    "aw-server",
-    "aw-watcher-window",    # WINDOW
-    "aw-watcher-afk",       # AFK
-    "aw-watcher-input",     # INPUT: counts of key presses and clicks (never which keys)
-]
 
 # how long a value outlives its event (see above)
 HOLD = {
@@ -96,7 +87,7 @@ class Events:
 
 
 class ActivityWatchClient:
-    """The server at `host`:`port` (the config's [activitywatch])."""
+    """The server at `host`:`port`."""
 
     def __init__(self, host: str, port: int, timeout: float = 10):
         self.api = f"http://{host}:{port}/api/0"

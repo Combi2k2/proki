@@ -6,7 +6,7 @@ One file by what they act on, each with its kinds' examples:
     base.py   `Action`, and what the kinds share (`Context`: what's said)
     var.py    a variable, by an expression's value: set, add, sub
     ask.py    a question to you, jev or an LLM, its answer later in a variable: ask
-    ui.py     the UI, one way: poke (ringing, with alarm), lock, open
+    ui.py     the UI, one way: poke (a title, pictures, sounds), lock, open
 
 A kind's name is its class's in snake case (`Poke`: "poke"), and its params are its
 keyword arguments: {kind: {param: value}}.

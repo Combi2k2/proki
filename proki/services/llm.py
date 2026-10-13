@@ -12,8 +12,7 @@ NVIDIA, Anthropic, OpenAI, Mistral, a local Ollama, ...).
               for a service that has none, the schema written into the question
 
 When the model doesn't answer (an HTTP error, a failed call, an empty answer), `ask` raises
-LlmError. Which services and models there are is the config's
-business (assets/llms.json, read by proki/legacy/config.py: `llm_of`).
+LlmError. Which service and model to ask is the caller's to say.
 """
 
 from __future__ import annotations

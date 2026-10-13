@@ -2,17 +2,20 @@
 
     {"poke": {"context": "Back to work"}}            a message to read (a question is `ask`, ask.py)
     {"poke": {"context": {"format": "{n} pokes today", "values": {"n": "pokes"}}}}
-    {"poke": {"context": "You've been away", "alarm": true}}   one that rings while it's shown
+    {"poke": {"context": "You've been away", "title": "Away", "media": ["bugcat/what"], "sound": ["alarm-clock"]}}
     {"lock": {}}                                     lock the screen
     {"open": {"view": "task_form"}}                  open a view: task_form (a new task), task_board
 
-A poke's `context` is filled in as it's said (base.py: `Context`). With `alarm`, the alarm
-rings while the poke is on the screen, and stops as it's closed: a reminder for when you
-may not be looking (a question never rings: you're there to answer it).
+A poke's `context` is filled in as it's said (base.py: `Context`). Its `title` is a
+heading, and `media` and `sound` are what it may show and play: keys of the media library
+(the app's), one of each drawn as it's shown (base.py: `Display`, a question's too). A
+sound plays while the poke is on the screen, and stops as it's closed: a reminder for when
+you may not be looking.
 
 Each kind has a `handler`, what does it, set by the app (None: nothing happens):
 
-    Poke.handler(text, alarm)   show a message, ringing while it's shown if `alarm`
+    Poke.handler(text, title, media, sound)   show a message: its heading, and the keys to
+                                              draw a picture and a sound from
     Lock.handler()              lock the screen
     Open.handler(view)          open one of the app's views
 """
@@ -22,29 +25,28 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import ClassVar
 
-from proki.core.actions.base import Action, Context
+from proki.core.actions.base import Action, Context, Display
 from proki.errors import ActionError
 
 VIEWS = ("task_form", "task_board")
 
 
 class Poke(Action):
-    handler: ClassVar[Callable[[str, bool], None] | None] = None
+    handler: ClassVar[Callable[..., None] | None] = None
 
-    def __init__(self, context: str | dict, alarm: bool = False):
-        if not isinstance(alarm, bool):  raise ActionError(f"poke: alarm is true or false ({alarm!r})")
+    def __init__(self, context: str | dict, title: str | None = None, media: list | None = None, sound: list | None = None):
         self.context = Context(context, "poke")
-        self.alarm = alarm
+        self.display = Display("poke", title, media, sound)
 
     def reads(self) -> list[str]:
         return list(self.context.values.values())
 
     async def apply(self) -> None:
         if Poke.handler is not None:
-            Poke.handler(self.context.said(), self.alarm)
+            Poke.handler(self.context.said(), **self.display.shown())
 
     def __repr__(self) -> str:
-        return f"poke {self.context!r}" + (" (alarm)" if self.alarm else "")
+        return f"poke {self.context!r}" + (f" ({self.display.title})" if self.display.title else "")
 
 
 class Lock(Action):

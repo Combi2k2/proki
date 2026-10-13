@@ -1,9 +1,8 @@
-"""NATS, proki's message bus: questions to you, jev and an LLM, and messages to the UI.
-proki runs the NATS server itself (services/supervisor.py), like ActivityWatch's.
+"""A message bus: parts of an app, in one process or several, sending each other JSON.
 
-    await bus.subscribe("proki.ask.llm", handle)                       this part answers that subject
-    await bus.request("proki.ask.usr", {"context": ...}, timeout=120)  ask, and wait for the reply
-    await bus.publish("proki.ui", {"type": "alarm", ...})              a one-way message
+    await bus.subscribe("orders.new", handle)                  this part answers that subject
+    await bus.request("orders.new", {"item": ...}, timeout=5)  ask, and wait for the reply
+    await bus.publish("orders.shipped", {"id": ...})           a one-way message
 
 A subject is a mailbox's name. A request goes to one of the subject's subscribers, and the
 reply comes back to a private one-off mailbox the bus makes for that request. No reply
@@ -11,23 +10,20 @@ reply comes back to a private one-off mailbox the bus makes for that request. No
 what it returns is the reply: it can take its time (an LLM, a question you haven't
 answered yet) without holding anything else up.
 
-    NatsBus    a NATS server: every part can be its own process, each subject a queue
-    LocalBus   in this process, for when there's no NATS server, and for tests
+    NatsBus    over a NATS server: every part can be its own process, each subject a queue
+    LocalBus   in this process, for when there's no server, and for tests
 """
 
 from __future__ import annotations
 
 import asyncio
-import socket
 import json
-import nats
+import socket
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import Any, Protocol
 
-# the programs proki runs (services/supervisor.py). The server's address (the config's
-# [nats] host and port) is added to its command where it's started
-MODULES = ["nats-server",]
+import nats
 
 Handler = Callable[[dict], Awaitable[dict | None]]  # a subscriber: its reply (ignored for one-way messages)
 
@@ -83,7 +79,7 @@ class NatsBus(Bus):
 
     @classmethod
     async def connect(cls, host: str, port: int, timeout: float = 2) -> NatsBus:
-        """Connect to the server at `host`:`port` (the config's [nats])."""
+        """Connect to the server at `host`:`port`."""
         client = await nats.connect(
             f"nats://{host}:{port}",
             connect_timeout=timeout,
@@ -94,7 +90,7 @@ class NatsBus(Bus):
 
     @staticmethod
     def is_up(host: str, port: int) -> bool:
-        """Whether a server listens at `host`:`port` (before connecting: proki may have to start it)."""
+        """Whether a server listens at `host`:`port` (before connecting: it may have to be started)."""
         try:
             with socket.create_connection((host, port), timeout=0.5):
                 return True

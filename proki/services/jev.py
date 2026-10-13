@@ -22,10 +22,7 @@ Question types:
     noul     yes or no: the probability of yes
 
 Any service that speaks this shape fits: openjev (api.openjev.sh), a local jev, or another
-backend behind the same shape. Its address, key and model are the config's [jev]. Only
-short texts are ever sent: an app's name, a website's domain, a window's or a task's title.
-Programs ask jev through the message bus, where a worker answers with this client
-(channels/jev.py).
+backend behind the same shape. Which one, and what's sent to it, is the caller's to say.
 """
 
 from __future__ import annotations
