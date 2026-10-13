@@ -47,7 +47,7 @@ class Defaults:
     MAIN        : ClassVar[str]      = "main.json"
     MAIN_KEYS   : ClassVar[set[str]] = {"cycle", "inputs", "variables", "signals", "rules"}
     FILE_KEYS   : ClassVar[set[str]] = {"desc", "tags", "variables", "signals", "rules", "program"}
-    PROGRAM_KEYS: ClassVar[set[str]] = {"initial", "variables", "signals", "rules", "states"}
+    PROG_KEYS   : ClassVar[set[str]] = {"initial", "variables", "signals", "rules", "states"}
     STATE_KEYS  : ClassVar[set[str]] = {"desc", "variables", "signals", "rules", "do", "every", "next"}
     SCOPED      : ClassVar[dict[str, type[Spec]]] = {    # what each scope may declare
         "variables": VariableSpec,
@@ -80,7 +80,7 @@ class Defaults:
         """The specs main.json (`main`) and the program files (`programs`, by name) make."""
         specs = Specs()
         with Inside(cls.MAIN):
-            cls.key_check(main, cls.MAIN_KEYS, "a section")
+            cls.check_key(main, cls.MAIN_KEYS, "a section")
             specs.cycle   = main.get("cycle", 10)
             specs.inputs += [InputSpec.parse(e) for e in cls.get_list(main, "inputs")]
             cls.parse_globals(specs, main)
@@ -103,15 +103,21 @@ class Defaults:
     @classmethod
     def parse_program(cls, specs: Specs, name: str, file: dict) -> None:
         """A program's file: what it brings, the program, its states."""
-        cls.key_check(file, cls.FILE_KEYS, "a section")
+        cls.check_key(file, cls.FILE_KEYS, "a section")
         cls.parse_globals(specs, file, name)
+
         body = file.get("program", {})
         if not isinstance(body, dict):
-            raise ConfigError(f"program is {{{', '.join(sorted(cls.PROGRAM_KEYS))}}} ({body!r})")
-        cls.key_check(body, cls.PROGRAM_KEYS, "program")
-        specs.programs.append(ProgramSpec.parse({"name": name, "desc": file.get("desc", ""), "tags": file.get("tags", []),
-                                                 "initial": body.get("initial", "")}))
+            raise ConfigError(f"program is {{{', '.join(sorted(cls.PROG_KEYS))}}} ({body!r})")
+        cls.check_key(body, cls.PROG_KEYS, "program")
+        specs.programs.append(ProgramSpec.parse({
+            "name"   : name,
+            "desc"   : file.get("desc", ""),
+            "tags"   : file.get("tags", []),
+            "initial": body.get("initial", ""),
+        }))
         cls.parse_scoped(specs, body, {"scope": "program", "program": name})
+
         states = body.get("states", {})
         if not isinstance(states, dict):
             raise ConfigError(f"states is {{name: state}} ({states!r})")
@@ -124,38 +130,50 @@ class Defaults:
         """A state: its own variables, signals and rules, its actions, its ways out."""
         if not isinstance(body, dict):
             raise ConfigError(f"a state is {{{', '.join(sorted(cls.STATE_KEYS))}}} ({body!r})")
-        cls.key_check(body, cls.STATE_KEYS, "a state")
+        cls.check_key(body, cls.STATE_KEYS, "a state")
+        specs.states.append(StateSpec.parse({
+            "program": program,
+            "name"   : name,
+            "desc"   : body.get("desc", ""),
+            "every"  : body.get("every", 1),
+        }))
+
         at = {"program": program, "state": name}
-        specs.states.append(StateSpec.parse({"program": program, "name": name, "desc": body.get("desc", ""),
-                                             "every": body.get("every", 1)}))
         cls.parse_scoped(specs, body, {"scope": "state", **at})
         cls.parse_actions(specs, body, at)
         cls.parse_branches(specs, body, at)
 
     @classmethod
     def parse_actions(cls, specs: Specs, body: dict, at: dict) -> None:
-        """A state's "do": each action {kind: params}, and its id."""
+        """A state's "do": a list of actions, each {kind: params} and its id."""
         for i, entry in enumerate(cls.get_list(body, "do")):
-            action = {k: v for k, v in entry.items() if k != "id"} if isinstance(entry, dict) else {}
-            if len(action) != 1 or not isinstance(next(iter(action.values())), dict):
+            act = dict(entry) if isinstance(entry, dict) else {}
+            id  = {"id": act.pop("id")} if "id" in act else {}
+            kind, params = next(iter(act.items()), (None, None))
+            if len(act) != 1 or not isinstance(params, dict):
                 raise ConfigError(f"do[{i}]: an action is {{kind: {{params}}}}, and its id if it has one ({entry!r})")
-            [(kind, params)] = action.items()
-            id = {"id": entry["id"]} if "id" in entry else {}
+
             specs.actions.append(ActionSpec.parse({**at, "kind": kind, "params": params, **id}))
 
     @classmethod
     def parse_branches(cls, specs: Specs, body: dict, at: dict) -> None:
-        """A state's "next": a state, or a list of ways out."""
+        """A state's "next": a state (one way out, always taken), or a list of ways out."""
         ways = body.get("next")
+        if ways is None:           return
         if isinstance(ways, str):  ways = [{"goto": ways}]
-        if ways is not None and (not isinstance(ways, list) or not ways):
+        if not isinstance(ways, list) or not ways:
             raise ConfigError(f"next is a state, or a list of {{goto, when, desc}} ({ways!r})")
-        for way in ways or []:
-            if isinstance(way, dict):
-                way = {**at, **way}
-                if "if" in way:                       way["when"] = way.pop("if")    # "when" was "if" until 2026-10-12
-                if isinstance(way.get("when"), str):  way["when"] = [way["when"]]
-            specs.branches.append(BranchSpec.parse(way))
+
+        for i, way in enumerate(ways):
+            if not isinstance(way, dict):
+                raise ConfigError(f"next[{i}]: a way out is {{goto, when, desc}} ({way!r})")
+
+            when = way.get("when", [])
+            specs.branches.append(BranchSpec.parse({
+                **at,
+                **way,
+                "when": [when] if isinstance(when, str) else when,
+            }))
 
     @classmethod
     def parse_scoped(cls, specs: Specs, data: dict, mine: dict, *kinds: str) -> None:
@@ -169,20 +187,35 @@ class Defaults:
     def dump(cls, specs: Specs, program: str | None = None) -> dict:
         """The file `specs` make for `program` (None: main.json): what `parse` reads back."""
         if program is None:
-            return {"cycle": specs.cycle, "inputs": [cls.dump_spec(s) for s in specs.inputs],
-                    **cls.dump_scoped(specs, "global")}
+            return {
+                "cycle" : specs.cycle,
+                "inputs": [cls.dump_spec(s) for s in specs.inputs],
+                **cls.dump_scoped(specs, "global"),
+            }
+
         spec   = next(p for p in specs.programs if p.name == program)
         states = {s.name: cls.dump_state(specs, s) for s in specs.states if s.program == program}
-        return {**cls.dump_spec(spec, "name", "initial"), **cls.dump_scoped(specs, "global", program),
-                "program": {"initial": spec.initial, **cls.dump_scoped(specs, "program", program), "states": states}}
+        return {
+            **cls.dump_spec(spec, "name", "initial"),
+            **cls.dump_scoped(specs, "global", program),
+            "program": {
+                "initial": spec.initial,
+                **cls.dump_scoped(specs, "program", program),
+                "states" : states,
+            },
+        }
 
     @classmethod
     def dump_state(cls, specs: Specs, state: StateSpec) -> dict:
-        """A state as its program's file writes it."""
+        """A state as its program's file writes it (what's empty left out)."""
         here = lambda s: (s.program, s.state) == (state.program, state.name)
-        body = {"desc": state.desc, **cls.dump_scoped(specs, "state", state.program, state.name),
-                "do": [{a.kind: a.params} for a in specs.actions if here(a)], "every": state.every,
-                "next": [cls.dump_spec(b) for b in specs.branches if here(b)]}
+        body = {
+            "desc" : state.desc,
+            **cls.dump_scoped(specs, "state", state.program, state.name),
+            "do"   : [{a.kind: a.params} for a in specs.actions if here(a)],
+            "every": state.every,
+            "next" : [cls.dump_spec(b) for b in specs.branches if here(b)],
+        }
         return {k: v for k, v in body.items() if v not in ("", [])}
 
     @classmethod
@@ -211,7 +244,7 @@ class Defaults:
         return value
 
     @staticmethod
-    def key_check(data: dict, keys: set[str], what: str) -> None:
+    def check_key(data: dict, keys: set[str], what: str) -> None:
         """ConfigError for a section `data` doesn't take (`keys`: the ones it does)."""
         if unknown := set(data) - keys:
             raise ConfigError(f"{what}: unknown {', '.join(sorted(unknown))} ({', '.join(sorted(keys))})")
