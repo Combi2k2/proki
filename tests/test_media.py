@@ -24,7 +24,7 @@ def test_a_new_library_starts_with_the_devs_files(library, tmp_path):
     assert found["bugcat/sad"] == "image" and found["alarm-clock"] == "sound"
     assert library.draw(["alarm-clock"]) == str(tmp_path / "media/alarm-clock.mp3")
     assert library.draw([]) is None and library.draw(["nothing"]) is None
-    assert library.get_pool("questions") == [] and library.pools() == {"questions": []}  # yours to choose
+    assert library.pools() == {"questions": ["bugcat/what", "bugcat/confused"]}  # the dev's (emojis.json)
 
 
 def test_get_gives_a_kind_a_page_or_keys(library):
@@ -96,12 +96,12 @@ def test_a_pool_is_yours_to_set(library):
 
 
 def test_picks_are_kept_by_an_id_and_the_devs_come_in_once(library):
-    assert library.get_picks("e008f65c") == ["bugcat/what", "alarm-clock"]  # the dev's (picks.json): the away poke's
+    assert library.get_picks("focus_session.away.been_away") == ["bugcat/what", "alarm-clock"]  # the dev's (emojis.json): the away poke's
     library.set_picks("mine", ["bugcat/sad", "alarm-clock"])
     assert library.get_picks("mine") == ["bugcat/sad", "alarm-clock"] and library.get_picks("nobody") == []
     assert library.draw(library.get_picks("mine"), "sound").endswith("alarm-clock.mp3")
     with pytest.raises(ValueError, match="no media"):
         library.set_picks("mine", ["nothing"])
-    library.set_picks("e008f65c", [])
+    library.set_picks("focus_session.away.been_away", [])
     library = Library(library.db, settings.ASSETS_DIR, library.folder)  # the next start: not taken again
-    assert library.get_picks("e008f65c") == []
+    assert library.get_picks("focus_session.away.been_away") == []

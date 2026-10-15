@@ -11,7 +11,7 @@ database (`media`, `media_pools`, `media_picks`).
     deleted_at   when you deleted it (None: it's in the library). A week later it's gone,
                  its copy too
 
-    lib = Library(db, assets, folder, pools)    the first time: the dev's files and picks in.
+    lib = Library(db, assets, folder, pools)    the first time: the dev's files, pools and picks in.
                                                 Never again: one you delete stays deleted
 
     lib.get(kind, keys, offset, limit)          what's in the library, and how many in all
@@ -72,7 +72,7 @@ class Library:
         **dict.fromkeys((".mp3", ".wav", ".ogg"), "sound"),
     }
     KEEP : ClassVar[timedelta] = timedelta(weeks=1)    # how long a deleted one waits, before it's gone
-    PICKS: ClassVar[str]       = "picks.json"          # under the assets: the dev's picks, {id: keys}
+    EMOJIS: ClassVar[str]      = "emojis.json"         # under the assets: the dev's pools and picks, {"pools": ..., "picks": ...}
 
     def __init__(self, db: sqlite3.Connection, assets: Path, folder: Path, pools: Iterable[str] = ()):
         """The library in `db`: the dev's files under `assets` (media/, sounds/), every copy
@@ -81,7 +81,7 @@ class Library:
         tables = {name for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         db.executescript(SCHEMA)
         if "media" not in tables:        self.seed()
-        if "media_picks" not in tables:  self.seed_picks()
+        if "media_picks" not in tables:  self.seed_emojis()
 
     def seed(self) -> None:
         """Every file of the dev's copied in, by its path under the assets."""
@@ -93,11 +93,12 @@ class Library:
                 key = key.removeprefix("sounds/")
                 self.put(key, key, kind, path, "dev")
 
-    def seed_picks(self) -> None:
-        """The dev's picks, for the actions proki ships: the ones of their keys in the library."""
-        path = self.assets / self.PICKS
-        for id, keys in json.loads(path.read_text()).items() if path.exists() else []:
-            self.set_picks(id, [m["key"] for m in self.get(keys=keys)[0]])
+    def seed_emojis(self) -> None:
+        """The dev's pools, and picks for the actions proki ships: the ones of their keys in the library."""
+        path = self.assets / self.EMOJIS
+        emojis = json.loads(path.read_text()) if path.exists() else {}
+        for name, keys in emojis.get("pools", {}).items():  self.set_pool(name, [m["key"] for m in self.get(keys=keys)[0]])
+        for id, keys in emojis.get("picks", {}).items():    self.set_picks(id, [m["key"] for m in self.get(keys=keys)[0]])
 
     # --- the library --------------------------------------------------------------------------
 
