@@ -14,7 +14,7 @@
 
 A global variable may be declared in several files: it's one variable, and a declaration
 with a "value" gives its starting value. A state's "do" is a list of actions, each {kind:
-params} and its "id" if it has one to keep (else it's given one). Its "next" is a state (one
+params} with its "name" (else its kind's: "ask", "ask_2", ...) and "desc". Its "next" is a state (one
 way out, always taken) or a list of ways out, each "when" a rule or a condition, or a list
 of them.
 
@@ -145,15 +145,18 @@ class Defaults:
 
     @classmethod
     def parse_actions(cls, specs: Specs, body: dict, at: dict) -> None:
-        """A state's "do": a list of actions, each {kind: params} and its id."""
+        """A state's "do": a list of actions, each {kind: params}, its name and desc."""
+        names = []
         for i, entry in enumerate(cls.get_list(body, "do")):
-            act = dict(entry) if isinstance(entry, dict) else {}
-            id  = {"id": act.pop("id")} if "id" in act else {}
+            act  = dict(entry) if isinstance(entry, dict) else {}
+            said = {k: act.pop(k) for k in ("id", "name", "desc") if k in act}
             kind, params = next(iter(act.items()), (None, None))
             if len(act) != 1 or not isinstance(params, dict):
-                raise ConfigError(f"do[{i}]: an action is {{kind: {{params}}}}, and its id if it has one ({entry!r})")
+                raise ConfigError(f"do[{i}]: an action is {{kind: {{params}}}}, its name and desc ({entry!r})")
 
-            specs.actions.append(ActionSpec.parse({**at, "kind": kind, "params": params, **id}))
+            said.setdefault("name", ActionSpec.free(kind, names))
+            names.append(said["name"])
+            specs.actions.append(ActionSpec.parse({**at, "kind": kind, "params": params, **said}))
 
     @classmethod
     def parse_branches(cls, specs: Specs, body: dict, at: dict) -> None:
@@ -212,7 +215,7 @@ class Defaults:
         body = {
             "desc" : state.desc,
             **cls.dump_scoped(specs, "state", state.program, state.name),
-            "do"   : [{a.kind: a.params} for a in specs.actions if here(a)],
+            "do"   : [{"name": a.name, **({"desc": a.desc} if a.desc else {}), a.kind: a.params} for a in specs.actions if here(a)],
             "every": state.every,
             "next" : [cls.dump_spec(b) for b in specs.branches if here(b)],
         }

@@ -35,9 +35,10 @@ one may be brought by a program, and goes with it.
 
 from __future__ import annotations
 
+import itertools
 import types
 import typing
-import uuid
+from collections.abc import Iterable
 from dataclasses import MISSING, Field, dataclass, field, fields
 from typing import Any, ClassVar, Literal
 
@@ -369,17 +370,31 @@ class BranchSpec(Spec):
 
 @dataclass(frozen=True, kw_only=True)
 class ActionSpec(Spec):
-    """An action. Its place among its state's is the order of the specs."""
+    """An action. Its place among its state's is the order of the specs. Its id is made once,
+    from where it is and its name ("bedtime.asking.good_night"), and kept as they change."""
 
     KIND : ClassVar[str] = "action"
-    DOCS : ClassVar[str] = "One action a state takes as it's entered, in order (core/actions/): its kind, and its params."
+    DOCS : ClassVar[str] = "One action a state takes as it's entered, in order (core/actions/): its name, its kind, and its params."
 
-    id     : str            = field(default_factory=lambda: uuid.uuid4().hex[:8],
-                                    metadata=doc("what it's known by: the media library keeps its picks by it"))
-    program: str            = field(metadata=doc("its program"))
-    state  : str            = field(metadata=doc("its state"))
-    kind   : str            = field(metadata=doc("set, add, sub, ask, poke, lock, open"))
-    params : dict[str, Any] = field(default_factory=dict, metadata=doc("the kind's params, by name"))
+    id      : str            = field(default="", metadata=doc("what it's known by, made once from its program, state and name: the media library keeps its picks by it"))
+    program : str            = field(metadata=doc("its program"))
+    state   : str            = field(metadata=doc("its state"))
+    name    : str            = field(metadata=doc("its name, one of its own among its state's"))
+    desc    : str            = field(default="", metadata=doc("what it's for, in a line"))
+    kind    : str            = field(metadata=doc("set, add, sub, ask, poke, lock, open"))
+    params  : dict[str, Any] = field(default_factory=dict, metadata=doc("the kind's params, by name"))
+
+    def __post_init__(self) -> None:
+        if not self.id:  object.__setattr__(self, "id", f"{self.program}.{self.state}.{self.name}")
+
+    @staticmethod
+    def free(kind: str, taken: Iterable[str]) -> str:
+        """A name for a new action of `kind` that none of `taken` has: "ask", else "ask_2", ..."""
+        taken = set(taken)
+        return next(name for n in itertools.count(1) if (name := kind if n == 1 else f"{kind}_{n}") not in taken)
+
+    def key(self) -> tuple:
+        return (self.program, self.state, self.name)
 
     def where(self) -> str:
-        return f"{self.program}.{self.state}: {self.kind}"
+        return f"{self.program}.{self.state}.{self.name}"

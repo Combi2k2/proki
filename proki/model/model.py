@@ -144,6 +144,9 @@ class Model:
 
     def added(self, specs: Specs, kind: str, data: dict) -> dict:
         """A new spec of `kind`, from `data` (and `at`, a branch's or an action's place)."""
+        if kind == "action" and "name" not in data:  # its kind's, as free among its state's: "ask", "ask_2", ...
+            taken = [a.name for a in specs.actions if (a.program, a.state) == (data.get("program"), data.get("state"))]
+            data  = {**data, "name": ActionSpec.free(str(data.get("kind")), taken)}
         at    = data.pop("at", None) if kind in self.PLACED else None
         spec  = Spec.kinds[kind].parse(data)
         group = self.group(specs, kind)
