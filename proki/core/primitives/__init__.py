@@ -20,7 +20,7 @@ The primitives:
         app        the app                                         window watcher
         title      the window title                                window watcher
         url        the tab's address, while a browser is in focus  browser extension
-        label      what the app or page is ("video_streaming", "chat", ...), from the app
+        label      what the app or page is ("Videos", "Chat", ...), from the app
                    and the window title, or "" for a window without a label yet
         depth      how deep the work is, from the label's category (`Depth.depth_of`)
 

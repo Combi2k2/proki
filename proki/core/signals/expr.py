@@ -4,7 +4,7 @@ Signals, rules, a variable's starting value and actions all use expressions. The
 written in Python's syntax, but read by proki itself, not run by Python:
 
     ts_mean(keys + mouse_click, 5)
-    ts_sum(label == "video_streaming", 60)
+    ts_sum(label == "Videos", 60)
     ts_mean(focus_2m, 2) - delay(ts_mean(focus_2m, 2), 2)
     ts_count(app, 30) > 20 and not in_session
 
@@ -111,7 +111,7 @@ def _build(node: ast.expr) -> Any:
         case ast.Constant(value=value) if isinstance(value, (int, float, str, bool)):
             return value
         case ast.Tuple(elts=elts) if all(isinstance(e, ast.Constant) for e in elts):
-            return tuple(_build(e) for e in elts)  # for `in`: label in ("ide", "terminal")
+            return tuple(_build(e) for e in elts)  # for `in`: label in ("Code editor", "Terminal")
         case ast.Name(id=name):
             if name not in Stream.registry:
                 raise ExprError(f"unknown name {name!r}")

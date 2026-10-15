@@ -94,11 +94,11 @@ RECORDED = {
     "os.hid.input": [Event(at(m), at(m + 1), {"presses": 40, "clicks": 5, "deltaX": 200, "deltaY": -100})
                      for m in range(10)],
 }
-KINDS = {"Code": "code_editor", "Video": "video_streaming"}  # by app, or by title (a page)
+KINDS = {"Code": "code_editor", "https://www.youtube.com/watch": "video_streaming"}  # by app, or by address (a page)
 
 
-def kind_of(app, title):
-    return KINDS.get(title) or KINDS.get(app)
+def kind_of(app, url):
+    return KINDS.get(url) or KINDS.get(app)
 
 
 def primitives(classify):

@@ -1,4 +1,4 @@
-"""`label`: what the app or page is ("video_streaming", "chat", ...), or "" for a window
+"""`label`: what the app or page is ("Videos", "Chat", ...), or "" for a window
 without one yet (known, just not labeled), unknown (None) when no window is."""
 
 from __future__ import annotations
