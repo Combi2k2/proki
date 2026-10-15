@@ -22,6 +22,7 @@ A step keeps what it found on its program, and the ways out read it there:
 from __future__ import annotations
 
 import inspect
+import itertools
 import json
 import types
 import typing
@@ -61,6 +62,13 @@ class Ritual(Program):
         states = list(states) or [State("on")]
         super().__init__(name, {s.name: s for s in states}, initial or states[0].name,
                          desc=self.DESC or " ".join(doc.split("\n\n")[0].split()), tags=self.TAGS)
+        for state in states:  # each step's name, one of its own in its state, and its id: "@classify.sure.ask_label_sure"
+            taken = []
+            for step in state.do:
+                if not isinstance(step, Step):  continue
+                step.name = next(n for i in itertools.count(1) if (n := step.name if i == 1 else f"{step.name}_{i}") not in taken)
+                step.id   = f"{name}.{state.name}.{step.name}"
+                taken.append(step.name)
 
 
 class Step(Action):
@@ -68,21 +76,29 @@ class Step(Action):
 
         program     its program, at hand in `apply`
         apply()     what it does, each step its own
+        name        its class's, in snake case (`AskLabel`: "ask_label")
+        desc        its docstring's first line
+        id          "program.state.name", given by its program: its picks in the media library
 
-    It isn't one of `Action.kinds`, so the config can't write one. It's shown by its name
-    (`Remind`: "remind").
+    It isn't one of `Action.kinds`, so the config can't write one.
     """
 
-    program: Ritual
+    program : Ritual
+    name    : str
 
     def __init_subclass__(cls, **kwargs: Any):
         super(Action, cls).__init_subclass__(**kwargs)  # past Action's: not a kind of the config
 
     def __init__(self, program: Ritual):
         self.program = program
+        self.name    = snake(type(self).__name__)
+
+    @property
+    def desc(self) -> str:
+        return (type(self).__doc__ or "").strip().split("\n")[0]
 
     def __repr__(self) -> str:
-        return snake(type(self).__name__)
+        return self.name
 
 
 Action.kinds.pop(snake(Step.__name__))  # nor is Step itself
