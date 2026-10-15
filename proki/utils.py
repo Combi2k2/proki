@@ -4,12 +4,12 @@ waiting, finding the commands that start installed programs."""
 from __future__ import annotations
 
 import keyword
-import shutil
 import math
-import time
 import re
-from collections.abc import Callable
+import shutil
+import time
 from collections import Counter
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -20,12 +20,12 @@ import numpy as np
 # names
 
 def snake(name: str) -> str:
-    """TsMean → ts_mean (how a class is named in expressions and the config)."""
+    """TsMean as ts_mean: how a class is named in expressions and the config."""
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
 def slugify(name: str) -> str:
-    """"Video streaming" → "video_streaming"."""
+    """"Video streaming" as "video_streaming"."""
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
@@ -42,11 +42,19 @@ def ident(name: Any) -> bool:
 # values
 
 def fill(text: str, values: dict[str, Any]) -> str:
-    """`text` with its {name} / {name:format} filled in from `values` (as it is, where it can't)."""
+    """`text` with its {name} / {name:format} filled in from `values`: an unknown value
+    (None) as "-", whatever its format. As it is, where it can't."""
     try:
-        return text.format_map(values)
+        return text.format_map({name: Unknown() if value is None else value for name, value in values.items()})
     except (KeyError, IndexError, ValueError, TypeError):
         return text
+
+
+class Unknown:
+    """A value not known, as `fill` writes it: "-", whatever the format asks."""
+
+    def __format__(self, spec: str) -> str:
+        return "-"
 
 
 def same(a: Any, b: Any) -> bool:
@@ -79,7 +87,7 @@ def sigmoid(z: float) -> float:
 
 
 def bell(z: float) -> float:
-    """e^(-z²/2): 1 at 0, 61% at ±1, 14% at ±2."""
+    """e^(-z^2 / 2): 1 at 0, 61% at 1 or -1, 14% at 2 or -2."""
     return float(np.exp(-z * z / 2))
 
 
@@ -91,7 +99,7 @@ def chance(p: float, rng: np.random.Generator | None = None) -> bool:
 # text similarity
 
 def grams(text: str, n: int = 3) -> list[str]:
-    """Character n-grams of each word (with its edges): "Gmail" → " gm", "gma", ..., "il "."""
+    """Character n-grams of each word, with its edges: "Gmail" gives " gm", "gma", ..., "il "."""
     out = []
     for word in re.findall(r"\w+", text.lower()):
         word = f" {word} "
@@ -137,7 +145,7 @@ def find_commands(
 ) -> dict[str, list[str]] | None:
     """Each module's start command: its installed program (arguments can follow).
 
-        ["nats-server"]  →  {"nats-server": ["/opt/homebrew/bin/nats-server"]}
+        find_commands(["nats-server"], [])    {"nats-server": ["/opt/homebrew/bin/nats-server"]}
 
     `directories` are tried in order. In each, a module's program is looked for:
 
