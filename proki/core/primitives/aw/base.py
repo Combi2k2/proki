@@ -2,6 +2,7 @@
 
     Recording         what ActivityWatch recorded, fetched once a run with the app's client
     focused(t)        the window watcher's event at time t: the app and window in focus
+    tab_url(t)        the address of the browser's tab in focus at time t
     Window            mixin: one field of that event (app, title)
     InputRate         mixin: input per minute over the cycle (keys, mouse_*)
 """
@@ -13,7 +14,10 @@ from typing import Any, ClassVar
 
 from proki.core.primitives.base import Primitive
 from proki.core.signals.stream import Stream
+from proki.platforms import current as platform
 from proki.services import aw
+
+BROWSER_APPS = platform().BROWSER_APPS
 
 
 class Recording:
@@ -42,6 +46,18 @@ Primitive.sources.append(Recording.fetch)
 def focused(t: datetime) -> aw.Event | None:
     """The window watcher's event at `t`: the app and window in focus."""
     return None if Recording.rec is None else Recording.rec[aw.WINDOW].covering(t)
+
+
+def tab_url(t: datetime) -> str | None:
+    """The address of the tab in focus at `t`, while a browser app is (None otherwise).
+
+    The browser extension reports a tab change right away, but a tab you stay on only now
+    and then, so the current tab is its latest event, however old."""
+    e = focused(t)
+    if e is None or e.data.get("app") not in BROWSER_APPS:
+        return None
+    tab = Recording.rec[aw.WEBTAB].latest(t)
+    return tab.data.get("url") if tab else None
 
 
 class Window:

@@ -12,10 +12,10 @@ from proki.core.primitives.proki.base import Labeled
 
 
 class Depth(Labeled, Primitive):
-    """How deep the window in focus is: `Depth.depth_of(app, title)`, a function the app
+    """How deep the window in focus is: `Depth.depth_of(app, url)`, a function the app
     plugs in (it maps the window's label to its category's depth)."""
 
-    depth_of: ClassVar[Callable[[str, str], float | None]] = staticmethod(lambda app, title: None)
+    depth_of: ClassVar[Callable[[str, str | None], float | None]] = staticmethod(lambda app, url: None)
 
-    def of(self, app: str, title: str) -> Any:
-        return Depth.depth_of(app, title)
+    def of(self, app: str, url: str | None) -> Any:
+        return Depth.depth_of(app, url)

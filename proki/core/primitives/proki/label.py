@@ -11,10 +11,10 @@ from proki.core.primitives.proki.base import Labeled
 
 
 class Label(Labeled, Primitive):
-    """`Label.label_of(app, title)` of the window in focus (the app sets it: its labels).
+    """`Label.label_of(app, url)` of the window in focus (the app sets it: its labels).
     "" when it has none, so `label in ("email", ...)` is false there, not unknown."""
 
-    label_of: ClassVar[Callable[[str, str], str | None]] = staticmethod(lambda app, title: None)
+    label_of: ClassVar[Callable[[str, str | None], str | None]] = staticmethod(lambda app, url: None)
 
-    def of(self, app: str, title: str) -> Any:
-        return Label.label_of(app, title) or ""
+    def of(self, app: str, url: str | None) -> Any:
+        return Label.label_of(app, url) or ""
