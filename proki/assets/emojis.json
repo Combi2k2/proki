@@ -9,9 +9,9 @@
     "focus_session.away.been_away": ["bugcat/what", "alarm-clock"],
     "focus_session.ended.session_ended": ["bugcat/fall_asleep"],
     "@classify.tracking.ask_tracking": ["bugcat/peeking"],
-    "@classify.labeling.ask_label": ["bugcat/what"],
-    "@classify.unsure.ask_label_unsure": ["bugcat/freak_out"],
-    "@classify.maybe.ask_label_maybe": ["bugcat/shy"],
-    "@classify.sure.ask_label_sure": ["bugcat/ok"]
+    "@classify.noidea.confirm_no_idea": ["bugcat/what"],
+    "@classify.unsure.confirm_unsure": ["bugcat/freak_out"],
+    "@classify.maybe.confirm_maybe": ["bugcat/shy"],
+    "@classify.sure.confirm_sure": ["bugcat/ok"]
   }
 }

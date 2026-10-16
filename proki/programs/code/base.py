@@ -62,7 +62,7 @@ class Ritual(Program):
         states = list(states) or [State("on")]
         super().__init__(name, {s.name: s for s in states}, initial or states[0].name,
                          desc=self.DESC or " ".join(doc.split("\n\n")[0].split()), tags=self.TAGS)
-        for state in states:  # each step's name, one of its own in its state, and its id: "@classify.sure.ask_label_sure"
+        for state in states:  # each step's name, one of its own in its state, and its id: "@classify.sure.confirm_sure"
             taken = []
             for step in state.do:
                 if not isinstance(step, Step):  continue
