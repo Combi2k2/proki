@@ -24,7 +24,6 @@ from __future__ import annotations
 import inspect
 import itertools
 import json
-import types
 import typing
 import sqlite3
 from collections.abc import Callable, Iterable
@@ -38,6 +37,7 @@ from proki.core.actions import Action
 from proki.core.programs import Branch, Program, State
 from proki.core.signals import Stream, Variable
 from proki.errors import ConfigError
+from proki.typehint import hinted
 from proki.utils import snake
 
 
@@ -197,7 +197,7 @@ class Table(Generic[Row]):
     def __init__(self, db: sqlite3.Connection):
         self.db    = db
         self.names = [f.name for f in fields(self.ROW)]
-        self.kinds = {name: kind(hint) for name, hint in typing.get_type_hints(self.ROW).items()}
+        self.kinds = {name: hinted(hint) for name, hint in typing.get_type_hints(self.ROW).items()}
         self.db.execute(f"CREATE TABLE IF NOT EXISTS {self.NAME} ({', '.join(self.column(n) for n in self.names)})")
 
     def create(self, row: Row) -> Any:
@@ -255,14 +255,6 @@ class Table(Generic[Row]):
         cursor = self.db.execute(sql, args)
         if not part:  self.db.commit()
         return cursor
-
-
-def kind(hint: Any) -> tuple[Any, bool]:
-    """A field's type, and whether it can be None: `str | None` gives (str, True)."""
-    if typing.get_origin(hint) in (typing.Union, types.UnionType):
-        args = [a for a in typing.get_args(hint) if a is not type(None)]
-        return (args[0] if len(args) == 1 else Any), len(args) < len(typing.get_args(hint))
-    return hint, False
 
 
 def quoted(names: Iterable[str]) -> str:

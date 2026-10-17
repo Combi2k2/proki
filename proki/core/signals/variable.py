@@ -30,7 +30,8 @@ from proki.core.signals.expr import compile_expr
 from proki.core.signals.signal import Signal
 from proki.core.signals.stream import Stream
 from proki.errors import VariableError
-from proki.utils import kind, same
+from proki.typehint import typeof
+from proki.utils import same
 
 
 class VariableStore(Protocol):
@@ -103,7 +104,7 @@ class Variable(Stream):
             saved = Variable.store.load(self.name)
         except KeyError:
             return False
-        if not isinstance(start, str) and None not in (start, saved) and kind(start) != kind(saved):
+        if not isinstance(start, str) and None not in (start, saved) and typeof(start) != typeof(saved):
             return False  # the config changed what it holds
         self.value = saved
         return True

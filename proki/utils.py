@@ -74,11 +74,6 @@ def is_number(x: Any) -> bool:
     return isinstance(x, int | float)  # bool too: true counts as 1
 
 
-def kind(x: Any) -> str:
-    """What sort of value: "bool", "number", "str", "NoneType", ... (1 and 1.0 alike)."""
-    return "bool" if isinstance(x, bool) else "number" if isinstance(x, int | float) else type(x).__name__
-
-
 # chances
 
 def sigmoid(z: float) -> float:
