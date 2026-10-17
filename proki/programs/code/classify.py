@@ -264,7 +264,7 @@ class AskTracking(Step):
     """Whether to track an app or a website: OK, Never, or later (no answer)."""
 
     program: Classify
-    SAYS = "You're using “{key}”  jmnk which proki doesn't track yet. Track it?"
+    SAYS = "You're using “{key}”, which proki doesn't track yet. Track it?"
 
     async def apply(self) -> None:
         p, key = self.program, self.program.key
