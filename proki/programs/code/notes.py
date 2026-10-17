@@ -1,21 +1,23 @@
 """@notes: what you note down, sorted into its bucket, asking you to confirm.
 
-Whatever is written to the global variable `note`, a text (capture's question, shutdown's
-"what's still open?", the UI's "New note…"), goes into the inbox as it's written: `note` is
-an `Inlet`, made here, before the config is built. Then, on its own, how urgent it is: jev
-guesses, and you say to deal with it now (OK) or later (`Inlet.weigh`).
+A note comes in through the global variable `note`, as a text: capture's question,
+shutdown's "what's still open?", the UI's "New note…". `note` is an `Inlet`, made here
+before the config is built: what's written to it goes into the inbox at once. Then, on its
+own, how urgent it is: jev guesses, and you say to deal with it now (OK) or later
+(`Inlet.weigh`).
 
-Each note in the inbox is sorted at its time (`due`), once you're at the computer and no
-question is open, the oldest first. A note you said to deal with now is due then. Any other
-is sorted with the others: at the time you chose in shutdown (`notes_sort_at`), if that's
-after it was noted, else at the first 04:00 after it was, so a day without a shutdown is
-sorted the next morning.
+A note in the inbox is sorted at its time (`due`), the oldest first, once you're at the
+computer and no question is open:
+
+    now         you said to deal with it now
+    shutdown's  the time you chose there (`notes_sort_at`), if it's after the note was noted
+    04:00       else the first after it was noted (`SORT_AT`): a day without a shutdown is
+                sorted the next morning
 
 The buckets are labels, each with what it means (`BUCKETS`): to jev, and to you as you hover
 it. A note is of its bucket's kind (`KINDS`): an `UnsortedNote` in the inbox, then a
-`TodoNote`, an `IdeaNote` or a `ThoughtNote`. They're kept in proki's key store ("notes"),
-each bucket a queue of the notes no program has taken yet. A program downstream reads its
-bucket (`Notes.get`), and takes a note out of it once it's done with it (`Notes.pop`):
+`TodoNote`, an `IdeaNote` or a `ThoughtNote`. Each bucket is a queue in proki's key store
+(`Notes`): a program downstream reads its own, and removes a note once it's done with it.
 "Todo" is the task planner's.
 
     idle        the inbox's oldest note due, you there, no question open (`Look`)
@@ -103,43 +105,48 @@ KINDS = {INBOX: UnsortedNote, "Todo": TodoNote, "Idea": IdeaNote, "Random though
 
 
 class Notes:
-    """The buckets in the key store: {bucket: [note, ...]}, each in the order noted."""
+    """The buckets, in the key store ("notes": {bucket: [note, ...]}), each in the order noted.
+
+        read(bucket)                    its notes, of its kind
+        add(bucket, text, at, **more)   a new one, last: the note (`more`: its kind's fields)
+        change(bucket, id, **fields)    some of its fields
+        remove(bucket, id)              out of the bucket: the note (None: not there)
+        move(id, start, to)             into the end of bucket `to`, of its kind
+    """
 
     KEY = "notes"
 
     def __init__(self, kv: StateDB):
         self.kv = kv
 
-    def get(self, bucket: str) -> list[Note]:
-        """The notes in `bucket`, of its kind (fields of another kind are left out: a note kept
-        before kinds had the inbox's everywhere)."""
+    def read(self, bucket: str) -> list[Note]:
+        """Fields of another kind are left out: a note kept before kinds had the inbox's
+        everywhere."""
         kind  = KINDS.get(bucket, Note)
         names = {f.name for f in fields(kind)}
         return [kind(**{k: v for k, v in note.items() if k in names}) for note in self.kv.get(self.KEY, {}).get(bucket, [])]
 
-    def put(self, bucket: str, text: str, at: datetime, **more) -> Note:
-        """A new note, last in `bucket` (`more`: its kind's fields)."""
+    def add(self, bucket: str, text: str, at: datetime, **more) -> Note:
         if bucket not in KINDS:  raise ValueError(f"no bucket {bucket!r}")
         note = KINDS[bucket](uuid.uuid4().hex[:8], text, at.astimezone(UTC).isoformat(), **more)
-        self.keep(bucket, [*self.get(bucket), note])
+        self.keep(bucket, [*self.read(bucket), note])
         return note
 
-    def pop(self, bucket: str, id: str) -> Note | None:
-        """The note, out of `bucket` (None: it's not there)."""
-        notes = self.get(bucket)
+    def change(self, bucket: str, id: str, **changed) -> None:
+        self.keep(bucket, [type(note)(**asdict(note) | changed) if note.id == id else note for note in self.read(bucket)])
+
+    def remove(self, bucket: str, id: str) -> Note | None:
+        notes = self.read(bucket)
         found = next((note for note in notes if note.id == id), None)
         self.keep(bucket, [note for note in notes if note.id != id])
         return found
 
-    def change(self, bucket: str, id: str, **changed) -> None:
-        """The note in `bucket`, its fields `changed` (none if it's not there)."""
-        self.keep(bucket, [type(note)(**asdict(note) | changed) if note.id == id else note for note in self.get(bucket)])
-
     def move(self, id: str, start: str, to: str) -> None:
-        """Into the end of bucket `to`, as it was noted, of that bucket's kind."""
-        if note := self.pop(start, id):  self.keep(to, [*self.get(to), KINDS[to](note.id, note.text, note.at)])
+        """As it was noted: what its kind in `start` had more is left behind."""
+        if note := self.remove(start, id):  self.keep(to, [*self.read(to), KINDS[to](note.id, note.text, note.at)])
 
     def keep(self, bucket: str, notes: list[Note]) -> None:
+        """The bucket, as `notes`."""
         if bucket not in KINDS:  raise ValueError(f"no bucket {bucket!r}")
         self.kv.set(self.KEY, self.kv.get(self.KEY, {}) | {bucket: [asdict(note) for note in notes]})
 
@@ -178,7 +185,7 @@ class Inlet(Variable):
         super().set(value)
         if not self.notes or not isinstance(value, str) or not value.strip():  return
 
-        note = self.notes.put(INBOX, value.strip(), Program.now or datetime.now(UTC))
+        note = self.notes.add(INBOX, value.strip(), Program.now or datetime.now(UTC))
         try:
             task = asyncio.get_running_loop().create_task(self.weigh(note))
         except RuntimeError:  # no loop: not asked, so sorted with the others
@@ -216,7 +223,7 @@ class Look(Step):
         if popup_open():  return
         if self.away():   return
 
-        if note := next((n for n in p.notes.get(INBOX) if due(n) <= Program.now), None):
+        if note := next((n for n in p.notes.read(INBOX) if due(n) <= Program.now), None):
             p.note, p.state = note, "sorting"
 
 
@@ -236,7 +243,7 @@ class Sort(Step):
             if chances := {name: c for i, name in enumerate(NAMES) if (c := odds.get(f"o{i}"))}:
                 best = max(chances, key=chances.get)
                 p.notes.change(INBOX, note.id, guess=best, conf=chances[best])
-                p.note = note = next(n for n in p.notes.get(INBOX) if n.id == note.id)
+                p.note = note = next(n for n in p.notes.read(INBOX) if n.id == note.id)
 
         if note.guess is None:   p.state = "noidea"
         elif note.conf >= 0.7:   p.state = "sure"
