@@ -3,8 +3,8 @@
 A note comes in through the global variable `note`, as a text: capture's question,
 shutdown's "what's still open?", the UI's "New note…". `note` is an `Inlet`, made here
 before the config is built: what's written to it goes into the inbox at once. Then, on its
-own, how urgent it is: jev guesses, and you say to deal with it now (OK) or later
-(`Inlet.weigh`).
+own, jev's guesses, in one question: how urgent it is, for you to say to deal with it now (OK)
+or later, and its bucket, kept with it for when it's sorted (`Inlet.weigh`).
 
 A note in the inbox is sorted at its time (`due`), the oldest first, once you're at the
 computer and no question is open:
@@ -20,9 +20,8 @@ it. A note is of its bucket's kind (`KINDS`): an `UnsortedNote` in the inbox, th
 (`Notes`): a program downstream reads its own, and removes a note once it's done with it.
 "Todo" is the task planner's.
 
-    idle        the inbox's oldest note due, you there, no question open (`Look`)
-    sorting     jev's bucket for the note, once: which question to ask, by how sure jev
-                is of it (`Sort`)
+    idle        the inbox's oldest note due, you there, no question open: which question to
+                ask, by how sure jev is of its bucket (`Look`)
     noidea      no bucket from jev: which is it? (`ConfirmNoIdea`)
     unsure      jev's bucket, jev under 40% sure (`ConfirmUnsure`)
     maybe       jev's bucket, jev 40 to 70% sure (`ConfirmMaybe`)
@@ -173,8 +172,8 @@ def quoted(text: str) -> str:
 
 class Inlet(Variable):
     """The global variable `note`: each note written to it, a text, goes into the inbox at once,
-    so none waits for a program to look, nor is missed while a question waits. Then how urgent
-    it is is asked, on its own (`weigh`). Without `notes`, it's only a variable."""
+    so none waits for a program to look, nor is missed while a question waits. Then jev's guesses,
+    its bucket and how urgent it is, on their own (`weigh`). Without `notes`, it's only a variable."""
 
     def __init__(self, notes: Notes | None = None):
         super().__init__("note", None, desc="a note any program writes: into the inbox at once, for @notes to sort", persist=False)
@@ -194,10 +193,17 @@ class Inlet(Variable):
         task.add_done_callback(self.weighed.discard)
 
     async def weigh(self, note: UnsortedNote) -> None:
-        """How urgent the note is: jev's chance, worded by `URGENT`, for you to say. OK: now, so
-        it's due; Later, or no answer: with the others."""
-        answers = await jev.ask(f"A note someone wrote: {note.text}", {"urgent": {
-            "type": "noul", "instructions": "Does this need dealing with right away, today?"}})
+        """jev's guesses, in one question: its bucket, kept with it, and how urgent it is, worded
+        by `URGENT`, for you to say. OK: now, so it's due; Later, or no answer: with the others."""
+        answers = await jev.ask(f"A note someone wrote: {note.text}", {
+            "urgent": {"type": "noul", "instructions": "Does this need dealing with right away, today?"},
+            "bucket": {"type": "choice", "instructions": "What is this note?",   # jev gets plain keys: o0, o1, ...
+                       "criteria": {f"o{i}": means for i, (_, means) in enumerate(BUCKETS)}}
+        })
+        odds    = ((answers or {}).get("bucket") or {}).get("probabilities") or {}
+        if chances := {name: c for i, name in enumerate(NAMES) if (c := odds.get(f"o{i}"))}:
+            best = max(chances, key=chances.get)
+            self.notes.change(INBOX, note.id, guess=best, conf=chances[best])
         chance  = ((answers or {}).get("urgent") or {}).get("noul")
         says    = next(says for least, says in URGENT if (0.5 if chance is None else chance) >= least)
         if await Popup.ask(f"{quoted(note.text)}\n\n{says}", ["Now"], TIMEOUT) == 0:
@@ -207,7 +213,8 @@ class Inlet(Variable):
 # --- the program ------------------------------------------------------------------------------
 
 class Look(Step):
-    """The inbox's oldest note due: while you're at the computer, and no question is open."""
+    """The inbox's oldest note due, while you're at the computer and no question is open, and
+    which question to ask by how sure jev is of its bucket (no guess: which is it?)."""
 
     program: NoteKeeper
 
@@ -224,31 +231,11 @@ class Look(Step):
         if self.away():   return
 
         if note := next((n for n in p.notes.read(INBOX) if due(n) <= Program.now), None):
-            p.note, p.state = note, "sorting"
-
-
-class Sort(Step):
-    """jev's bucket for the note, once, and which question to ask by how sure jev is of it."""
-
-    program: NoteKeeper
-
-    async def apply(self) -> None:
-        p, note = self.program, self.program.note
-        if note.id not in p.asked:
-            p.asked.add(note.id)
-            answers = await jev.ask(f"A note someone wrote: {note.text}", {"bucket": {  # jev gets plain keys: o0, o1, ...
-                "type": "choice", "instructions": "What is this note?",
-                "criteria": {f"o{i}": means for i, (_, means) in enumerate(BUCKETS)}}})
-            odds = ((answers or {}).get("bucket") or {}).get("probabilities") or {}
-            if chances := {name: c for i, name in enumerate(NAMES) if (c := odds.get(f"o{i}"))}:
-                best = max(chances, key=chances.get)
-                p.notes.change(INBOX, note.id, guess=best, conf=chances[best])
-                p.note = note = next(n for n in p.notes.read(INBOX) if n.id == note.id)
-
-        if note.guess is None:   p.state = "noidea"
-        elif note.conf >= 0.7:   p.state = "sure"
-        elif note.conf >= 0.4:   p.state = "maybe"
-        else:                    p.state = "unsure"
+            p.note = note
+            if note.guess is None:   p.state = "noidea"
+            elif note.conf >= 0.7:   p.state = "sure"
+            elif note.conf >= 0.4:   p.state = "maybe"
+            else:                    p.state = "unsure"
 
 
 class Confirm(Step):
@@ -296,7 +283,6 @@ class NoteKeeper(Ritual):
 
     def __init__(self, notes: Notes):
         self.notes = notes
-        self.asked : set[str]            = set()   # the notes jev was asked about
         self.state : str | None          = None    # the question's state, once looked
         self.note  : UnsortedNote | None = None    # and the note it's about
         Inlet(notes)
@@ -305,15 +291,12 @@ class NoteKeeper(Ritual):
         back = [make_branch("idle", "answered, or not")]
         wait = timedelta(0)  # each state's: the next cycle
         super().__init__("@notes", [
-            State("idle", do=[Look(self)], every=wait, desc="a note to sort", next=[
-                go("sorting", "a note in the inbox due, you there, no question open"),
-                make_branch("idle", "nothing to do"),
-            ]),
-            State("sorting", do=[Sort(self)], every=wait, desc="which question to ask about the note's bucket", next=[
+            State("idle", do=[Look(self)], every=wait, desc="a note to sort, and which question to ask about its bucket", next=[
                 go("noidea", "no bucket from jev"),
                 go("unsure", "jev's bucket, jev under 40% sure"),
                 go("maybe", "jev's bucket, jev 40 to 70% sure"),
                 go("sure", "jev's bucket, jev 70% sure or more"),
+                make_branch("idle", "nothing to do"),
             ]),
             State("noidea", do=[ConfirmNoIdea(self)], every=wait, desc="which bucket the note is for", next=back),
             State("unsure", do=[ConfirmUnsure(self)], every=wait, desc="whether jev's bucket is right, jev unsure", next=back),
