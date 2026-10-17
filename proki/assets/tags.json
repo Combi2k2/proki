@@ -1,0 +1,14 @@
+{
+  "work":    ["jobs", "projects", "career", "research", "business", "network"],
+  "study":   ["courses", "degrees", "papers", "skills", "learning", "scholarships"],
+  "admin":   ["documents", "visa", "forms", "contracts", "insurance", "official"],
+  "finance": ["bills", "budget", "banking", "tax", "savings", "investing", "shopping"],
+  "health":  ["medical", "fitness", "food", "sleep", "mental", "grooming"],
+  "social":  ["partner", "family", "friends", "events", "network", "community"],
+  "home":    ["cleaning", "laundry", "cooking", "repairs", "housing", "errands", "pets"],
+  "growth":  ["goals", "habits", "journaling", "values", "confidence", "decisions"],
+  "leisure": ["creative", "hobbies", "gaming", "reading", "culture", "sports", "rest"],
+  "digital": ["files", "email", "accounts", "devices", "notes", "automation"],
+  "travel":  ["trips", "booking", "transit", "commute", "packing"],
+  "civic":   ["voting", "volunteering", "donations", "environment"]
+}
