@@ -6,8 +6,8 @@ labels, and a first set of well-known apps and websites with theirs, are in
 assets/labels.json. A label is kept by its place in that list, so a new one goes at the end.
 
 A label is found, in order, from: yours, the one an app came with or jev gave (yours to
-confirm), or the most similar one (TF-IDF over the tokens of the names) when it's as
-similar as `SIMILAR`. Only the app's name or the website's host is sent to jev.
+confirm), or the most similar one (TF-IDF over the tokens of the names) when it's similar
+enough. Only the app's name or the website's host is sent to jev.
 
     looking     what's in focus, and what to ask about it (`Look`): which question, for a
                 label, by how sure jev is of the one it has, if any. jev is asked as soon as
@@ -21,8 +21,8 @@ similar as `SIMILAR`. Only the app's name or the website's host is sent to jev.
     sure        jev's label, jev 70% sure or more, or the one it came with (`ConfirmSure`)
 
 A label is chosen from them all, in one list (to confirm one: it's picked already, OK keeps
-it). No answer ("Later") asks again in `LATER`. Each question is a step of its own, so it has
-its own picture: its picks, by its id ("@classify.sure.confirm_sure"). The `label` and
+it). No answer ("Later") asks again in two hours. Each question is a step of its own, so it
+has its own picture: its picks, by its id ("@classify.sure.confirm_sure"). The `label` and
 `depth` inputs read the labels from `Apps.label` and `Apps.depth`.
 """
 
@@ -256,7 +256,7 @@ class AskTracking(Step):
     """Whether to track an app or a website: OK, Never, or later (no answer)."""
 
     program: Classify
-    SAYS = "You're using “{key}”, which proki doesn't track yet. Track it?"
+    SAYS = "You're using “{key}”, which I haven't track yet. Track it?"
 
     async def apply(self) -> None:
         p, key = self.program, self.program.key
@@ -269,8 +269,8 @@ class AskTracking(Step):
 
 
 class Confirm(Step):
-    """A label to confirm: what it `SAYS`, over all the labels, the one it has picked already.
-    OK keeps the one picked as yours, Later (no answer) asks again in `LATER`."""
+    """A label to confirm: what its question says, over all the labels, the one it has picked
+    already. OK keeps the one picked as yours, Later (no answer) asks again in a while."""
 
     program: Classify
     SAYS: str
@@ -294,7 +294,7 @@ class ConfirmNoIdea(Confirm):
 class ConfirmUnsure(Confirm):
     """jev's label to confirm, jev under 40% sure."""
 
-    SAYS = "proki thinks “{key}” might be {label}, but isn't sure. Mind telling me what it is?"
+    SAYS = "“{key}” might be {label}, but I'm not so sure. What is it?"
 
 
 class ConfirmMaybe(Confirm):
@@ -338,10 +338,10 @@ class Classify(Ritual):
                 go("sure", "tracked, jev's label, jev 70% sure or more, or the one it came with"),
                 *back,
             ]),
-            State("noidea", do=[ConfirmNoIdea(self)], every=wait, desc="what the app or the website is", next=back),
-            State("unsure", do=[ConfirmUnsure(self)], every=wait, desc="whether jev's label is right, jev unsure", next=back),
-            State("maybe", do=[ConfirmMaybe(self)], every=wait, desc="whether jev's label is right", next=back),
-            State("sure", do=[ConfirmSure(self)], every=wait, desc="whether the label it has is right", next=back),
+            State("noidea", do=[ConfirmNoIdea(self)], every=wait, desc="what the app or the website is",            next=back),
+            State("unsure", do=[ConfirmUnsure(self)], every=wait, desc="whether jev's label is right, jev unsure",  next=back),
+            State("maybe",  do=[ConfirmMaybe(self)],  every=wait, desc="whether jev's label is right",              next=back),
+            State("sure",   do=[ConfirmSure(self)],   every=wait, desc="whether the label it has is right",         next=back),
         ])
 
     async def guess(self, key: str, now: datetime) -> None:
