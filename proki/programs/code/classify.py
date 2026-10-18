@@ -9,12 +9,12 @@ A label is found, in order, from: yours, the one an app came with or jev gave (y
 confirm), or the most similar one (TF-IDF over the tokens of the names) when it's as
 similar as `SIMILAR`. Only the app's name or the website's host is sent to jev.
 
-    looking     what's in focus, and what to ask about it (`Look`). jev is asked as soon
-                as a tracked app or website without a label shows up, once a run
+    looking     what's in focus, and what to ask about it (`Look`): which question, for a
+                label, by how sure jev is of the one it has, if any. jev is asked as soon as
+                a tracked app or website without a label shows up, once a run. proki's own
+                popups (a question, answered) aren't leaving what's in focus, its main window is
     tracking    an app or a website you never answered for, a minute in focus: track it?
-                (`AskTracking`)
-    labeling    a tracked app or website whose label isn't yours: which question to ask,
-                by how sure jev is of the label it has, if any (`AskLabel`)
+                (`AskTracking`). OK: jev is asked for its label, and its question is next
     noidea      no label, nor a similar one: what is it? (`ConfirmNoIdea`)
     unsure      jev's label, jev under 40% sure: is it right? (`ConfirmUnsure`)
     maybe       jev's label, jev 40 to 70% sure (`ConfirmMaybe`)
@@ -40,17 +40,18 @@ import numpy as np
 import tiktoken
 
 from proki import platforms, settings
-from proki.channels import Popup, jev
 from proki.core.programs import Program, State
 from proki.core.signals import Stream
-from proki.programs.code.base import Ritual, Step, Table, make_branch, popup_open
+from proki.programs.code.base import Ritual, Step, Table, ask_jev, ask_usr, make_branch, popup_open
 from proki.utils import slugify
 
 BROWSER_APPS = platforms.current().BROWSER_APPS
-IGNORED      = {"Electron", "proki", *platforms.current().SYSTEM_APPS}   # proki's own windows, and the system's
+OWN          = {"Electron", "proki"}                      # proki's windows: a popup answered isn't leaving what's in focus,
+MAIN         = "proki"                                    # its main window (by its title) is
+IGNORED      = {*OWN, *platforms.current().SYSTEM_APPS}   # proki's and the system's: never asked about
 SIMILAR      = 0.5                   # cosine similarity that settles a label without asking
 LATER        = timedelta(hours=2)    # "Ask later"
-TIMEOUT      = 24 * 3600             # how long a question waits for you, in seconds
+TIMEOUT      = 60                    # how long a question waits for you, in seconds: then it's later
 
 
 class Depth(Enum):
@@ -212,51 +213,42 @@ class Look(Step):
         super().__init__(program)
         self.focus : str | None      = None    # the app or website in focus (`key_of`), and since when
         self.since : datetime | None = None
-        self.asked : set[str]        = set()   # what jev was asked about
 
     @staticmethod
     def watch() -> tuple[str, str | None] | None:
-        """The app in focus this cycle, and its page (None: none, you're away, or it's one never
-        asked about)."""
+        """The app in focus this cycle, and its page (None: none, you're away, or it's the
+        system's, or proki's main window)."""
         get = lambda name: Stream.registry[name].current() if name in Stream.registry else None
         app = get("app")
 
-        if not app:             return None
-        if app in IGNORED:      return None
-        if not get("active"):   return None
+        if not app:                                     return None
+        if app in IGNORED - OWN:                        return None
+        if app in OWN and get("title") == MAIN:         return None
+        if not get("active"):                           return None
 
         return app, get("url")
 
     async def apply(self) -> None:
         p, now = self.program, Program.now
-        window = self.watch()
-        key    = key_of(*window) if window else None  # None too for a browser on no web page
+        window  = self.watch()
+        p.state = p.key = None
+        if window and window[0] in OWN:  return  # answering a question: still on what's in focus
+
+        key = key_of(*window) if window else None  # None too for a browser on no web page
         if self.focus != key:
             self.focus = key
             self.since = now
-
-        p.state = p.key = None
         if key is None:  return
+        await p.guess(key, now)
         row = p.apps.get(key)
-
-        if row and row.track and row.label is None and key not in self.asked:  # jev's label, for you to confirm
-            self.asked.add(key)
-            answers = await jev.ask(f"An app or a website someone uses: {key}", {"label": {  # jev gets plain keys: o0, o1, ...
-                "type": "choice", "instructions": "What kind of app or website is this?",
-                "criteria": {f"o{i}": f"{label.name}: {label.desc}" for i, label in enumerate(LABELS)}}})
-            odds = ((answers or {}).get("label") or {}).get("probabilities") or {}
-            if chances := {i: c for i in range(len(LABELS)) if (c := odds.get(f"o{i}"))}:
-                best = max(chances, key=chances.get)
-                p.apps.keep(key, now, label=best, source="openjev", conf=chances[best])
-                row = p.apps.get(key)
 
         if popup_open():                    return  # one question at a time
         if now - self.since < p.ask_after:  return
         if p.later.get(key, now) > now:     return
 
-        if row is None:                                             p.state = "tracking"  # never answered for
-        elif not row.track or row.confirmed:                        return
-        elif row.label is not None or p.apps.similar(key) is None:  p.state = "labeling"  # else a similar one's, worked out
+        if row is None:                         p.state = "tracking"  # never answered for
+        elif not row.track or row.confirmed:    return
+        else:                                   p.state = p.question(key)
         p.key = key if p.state else None
 
 
@@ -268,24 +260,12 @@ class AskTracking(Step):
 
     async def apply(self) -> None:
         p, key = self.program, self.program.key
-        answer = await Popup.ask(self.SAYS.format(key=key), ["OK", "Never"], TIMEOUT, id=self.id)
+        answer = await ask_usr(self.SAYS.format(key=key), ["OK", "Never"], TIMEOUT, id=self.id)
         if answer is None:  p.later[key] = Program.now + LATER
         else:               p.apps.keep(key, Program.now, track=answer == 0)
-
-
-class AskLabel(Step):
-    """Which question to ask about a label: by how sure jev is of the one it has, if any."""
-
-    program: Classify
-
-    async def apply(self) -> None:
-        p    = self.program
-        row  = p.apps.get(p.key)
-        conf = row.conf
-        if row.label is None:               p.state = "noidea"
-        elif conf is None or conf >= 0.7:   p.state = "sure"
-        elif conf >= 0.4:                   p.state = "maybe"
-        else:                               p.state = "unsure"
+        if answer == 0:     # its label's question, next
+            await p.guess(key, Program.now)
+            p.state = p.question(key)
 
 
 class Confirm(Step):
@@ -299,7 +279,7 @@ class Confirm(Step):
         p, key = self.program, self.program.key
         has    = p.apps.get(key).label  # its label's place, picked already (None: none)
         says   = self.SAYS.format(key=key, label=LABELS[has].name if has is not None else "")
-        answer = await Popup.ask(says, [label.name for label in LABELS], TIMEOUT, id=self.id, selected=has)
+        answer = await ask_usr(says, [label.name for label in LABELS], TIMEOUT, id=self.id, selected=has)
         if answer is None:    p.later[key] = Program.now + LATER
         elif answer == has:   p.apps.keep(key, Program.now, source="usr")  # it's right
         else:                 p.apps.keep(key, Program.now, track=True, label=answer, source="usr", conf=None)
@@ -338,24 +318,48 @@ class Classify(Ritual):
         self.later : dict[str, datetime] = {}      # "Ask later": not before then
         self.state : str | None          = None    # the question's state, once looked
         self.key   : str | None          = None    # and what it's about: an app, or an app's or a website's key
+        self.asked : set[str]            = set()   # what jev was asked about
         go   = lambda state, desc: make_branch(state, desc, **{state: lambda: self.state == state})
         back = [make_branch("looking", "answered, or not")]
         wait = timedelta(0)  # each state's: the next cycle
         super().__init__("@classify", [
             State("looking", do=[Look(self)], every=wait, desc="what's in focus, and whether to ask about it", next=[
                 go("tracking", "an app or a website you never answered for, a minute in focus"),
-                go("labeling", "a tracked app or website whose label isn't yours, a minute in focus"),
+                go("noidea", "tracked, no label, nor a similar one, a minute in focus"),
+                go("unsure", "tracked, jev's label, jev under 40% sure, a minute in focus"),
+                go("maybe", "tracked, jev's label, jev 40 to 70% sure, a minute in focus"),
+                go("sure", "tracked, jev's label, jev 70% sure or more, or the one it came with, a minute in focus"),
                 make_branch("looking", "nothing to ask"),
             ]),
-            State("tracking", do=[AskTracking(self)], every=wait, desc="whether to track the app or the website", next=back),
-            State("labeling", do=[AskLabel(self)], every=wait, desc="which question to ask about its label", next=[
-                go("noidea", "no label, nor a similar one"),
-                go("unsure", "jev's label, jev under 40% sure"),
-                go("maybe", "jev's label, jev 40 to 70% sure"),
-                go("sure", "jev's label, jev 70% sure or more, or the one it came with"),
+            State("tracking", do=[AskTracking(self)], every=wait, desc="whether to track the app or the website", next=[
+                go("noidea", "tracked, no label, nor a similar one"),
+                go("unsure", "tracked, jev's label, jev under 40% sure"),
+                go("maybe", "tracked, jev's label, jev 40 to 70% sure"),
+                go("sure", "tracked, jev's label, jev 70% sure or more, or the one it came with"),
+                *back,
             ]),
             State("noidea", do=[ConfirmNoIdea(self)], every=wait, desc="what the app or the website is", next=back),
             State("unsure", do=[ConfirmUnsure(self)], every=wait, desc="whether jev's label is right, jev unsure", next=back),
             State("maybe", do=[ConfirmMaybe(self)], every=wait, desc="whether jev's label is right", next=back),
             State("sure", do=[ConfirmSure(self)], every=wait, desc="whether the label it has is right", next=back),
         ])
+
+    async def guess(self, key: str, now: datetime) -> None:
+        """jev's label for a tracked app or website that has none, for you to confirm (asked
+        once a run)."""
+        row = self.apps.get(key)
+        if row is None or not row.track or row.label is not None or key in self.asked:  return
+        self.asked.add(key)
+        odds = await ask_jev(f"An app or a website someone uses: {key}", "What kind of app or website is this?",
+                             [(label.name, label.desc) for label in LABELS])
+        if odds:
+            best = max(odds, key=odds.get)
+            self.apps.keep(key, now, label=best, source="openjev", conf=odds[best])
+
+    def question(self, key: str) -> str | None:
+        """The question about a tracked app's or website's label, by how sure jev is of the one
+        it has (None: it has none, and a similar one's is worked out)."""
+        row = self.apps.get(key)
+        if row.label is None:                   return "noidea" if self.apps.similar(key) is None else None
+        if row.conf is None or row.conf >= 0.7: return "sure"
+        return "maybe" if row.conf >= 0.4 else "unsure"
