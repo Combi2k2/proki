@@ -15,6 +15,9 @@ the answer goes back to whoever asked. That one does what it means.
         urgent=True          before the questions waiting their turn
         text="..."           what's typed already
         title="Bedtime"      its heading
+        immediate=True       to answer now: no "Later"
+
+    An option "OK" or "Later" is that button itself (ui/src/pages/popup.tsx).
 
 Telling, one way ("proki.ui"): nothing comes back.
 
