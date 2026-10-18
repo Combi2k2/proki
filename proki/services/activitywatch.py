@@ -12,7 +12,8 @@ neighbours merged. The bucket types read here:
 
 Watchers report every few seconds and send their reports in batches: neighbouring events
 leave tiny gaps, and the newest event ends a little before now. So an event's value holds
-until the next event starts, for at most `HOLD` after its end. Longer gaps are unknown.
+until the next event starts, for at most `HOLD` after its end. Longer gaps are unknown. Two
+events can start at once (a window watcher's report, and its 0 s twin): the longer holds.
 
     ActivityWatchClient   the server: its buckets, and their events
     Record                what the watchers recorded over a while, each bucket type's
@@ -58,7 +59,7 @@ class Events:
     """One bucket type's events, oldest first, searchable by time."""
 
     def __init__(self, events: list[Event], hold: timedelta = timedelta(0)):
-        self.events = sorted(events, key=lambda e: e.start)
+        self.events = sorted(events, key=lambda e: (e.start, e.end))  # twins: the longer last, the one that holds
         self._starts = [e.start for e in self.events]
         self._untils = [e.end + hold for e in self.events]
 

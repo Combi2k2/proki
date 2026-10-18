@@ -143,6 +143,13 @@ def test_values_hold_over_small_gaps_but_not_long_ones():
     assert app.read(at(2.5)) is None  # 30 s: the watcher stopped
 
 
+def test_of_two_events_starting_at_once_the_longer_holds():
+    twins = Record.of(at(0), at(3), {"currentwindow": [Event(at(0), at(2), {"app": "Chrome"}),
+                                                          Event(at(0), at(0), {"app": "Chrome"})]})  # as ActivityWatch has them
+    Recording.rec = twins
+    assert App("app", "app").read(at(1.5)) == "Chrome"
+
+
 def test_runs_continue_where_they_left_off():
     primitives(kind_of)
     x = Signal("x", "ts_sum(keys, 10)")
