@@ -14,8 +14,7 @@ computer and no question is open:
     04:00       else the first after it was noted (`SORT_AT`): a day without a shutdown is
                 sorted the next morning
 
-The buckets are labels, each with what it means (`BUCKETS`): to jev, and to you as you hover
-it. A note is of its bucket's kind (`KINDS`): an `UnsortedNote` in the inbox, then a
+The buckets are labels, each with what it means (`BUCKETS`) for jev. A note is of its bucket's kind (`KINDS`): an `UnsortedNote` in the inbox, then a
 `TodoNote`, an `IdeaNote` or a `ThoughtNote`. Each bucket is a queue in proki's key store
 (`Notes`): a program downstream reads its own, and removes a note once it's done with it.
 "Todo" is the task planner's.
@@ -39,10 +38,9 @@ import uuid
 from dataclasses import asdict, dataclass, fields
 from datetime import UTC, datetime, timedelta
 
-from proki.channels import Popup, jev
 from proki.core.programs import Program, State
 from proki.core.signals import Stream, Variable
-from proki.programs.code.base import Ritual, Step, make_branch, make_variable, popup_open
+from proki.programs.code.base import Ritual, Step, ask_jev, ask_usr, make_branch, make_variable, popup_open
 from proki.storage import StateDB
 
 LATER   = timedelta(hours=2)   # "Later"
@@ -195,18 +193,14 @@ class Inlet(Variable):
     async def weigh(self, note: UnsortedNote) -> None:
         """jev's guesses, in one question: its bucket, kept with it, and how urgent it is, worded
         by `URGENT`, for you to say. OK: now, so it's due; Later, or no answer: with the others."""
-        answers = await jev.ask(f"A note someone wrote: {note.text}", {
-            "urgent": {"type": "noul", "instructions": "Does this need dealing with right away, today?"},
-            "bucket": {"type": "choice", "instructions": "What is this note?",   # jev gets plain keys: o0, o1, ...
-                       "criteria": {f"o{i}": means for i, (_, means) in enumerate(BUCKETS)}}
-        })
-        odds    = ((answers or {}).get("bucket") or {}).get("probabilities") or {}
-        if chances := {name: c for i, name in enumerate(NAMES) if (c := odds.get(f"o{i}"))}:
-            best = max(chances, key=chances.get)
-            self.notes.change(INBOX, note.id, guess=best, conf=chances[best])
-        chance  = ((answers or {}).get("urgent") or {}).get("noul")
-        says    = next(says for least, says in URGENT if (0.5 if chance is None else chance) >= least)
-        if await Popup.ask(f"{quoted(note.text)}\n\n{says}", ["Now"], TIMEOUT) == 0:
+        said   = f"A note someone wrote: {note.text}"
+        odds   = await ask_jev(said, "What is this note?", BUCKETS)
+        chance = await ask_jev(said, "Does this need dealing with right away, today?")
+        if odds:
+            best = max(odds, key=odds.get)
+            self.notes.change(INBOX, note.id, guess=NAMES[best], conf=odds[best])
+        says   = next(says for least, says in URGENT if (0.5 if chance is None else chance) >= least)
+        if await ask_usr(f"{quoted(note.text)}\n\n{says}", ["OK"], TIMEOUT) == 0:
             self.notes.change(INBOX, note.id, due=datetime.now(UTC).isoformat())
 
 
@@ -249,7 +243,7 @@ class Confirm(Step):
         p, note = self.program, self.program.note
         has     = NAMES.index(note.guess) if note.guess else None   # its bucket's place, picked already (None: none)
         says    = f"{quoted(note.text)}\n\n{self.SAYS.format(bucket=note.guess)}"
-        answer  = await Popup.ask(says, BUCKETS, TIMEOUT, id=self.id, selected=has)
+        answer  = await ask_usr(says, BUCKETS, TIMEOUT, id=self.id, selected=has)
         if answer is None:  p.notes.change(INBOX, note.id, due=(Program.now + LATER).isoformat())
         else:               p.notes.move(note.id, INBOX, NAMES[answer])
 
