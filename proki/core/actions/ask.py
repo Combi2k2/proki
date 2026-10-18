@@ -22,6 +22,10 @@ the option picked, or a text.
               A text without an answer is unknown
     timeout   how many seconds to wait (optional): 120 for you, 10 for jev and an LLM
     title     its heading, asking you (optional)
+    immediate asking you, it's to answer now: no "Later" (optional, false)
+
+Asking you, an option "OK" or "Later" is that button of the popup itself: picking it picks
+the option. Without one, "Later" is no answer.
 
 Asking you, it shows a picture and plays a sound, drawn from its picks (the media library's,
 by the action's `id`) and the picture from the "questions" pool too.
@@ -70,7 +74,8 @@ class Ask(Action):
     ask_llm: ClassVar[Pick | None] = None
 
     def __init__(self, channel: str, context: str | dict, result: str, options: list | None = None,
-                 default: int | None = None, timeout: float | None = None, title: str | None = None):
+                 default: int | None = None, timeout: float | None = None, title: str | None = None,
+                 immediate: bool = False):
         target = Stream.registry.get(result)  # the state's, by its full name (the builder made it)
 
         if channel not in TIMEOUT:                              raise ActionError(f"ask: channel is one of {', '.join(TIMEOUT)} ({channel!r})")
@@ -96,14 +101,17 @@ class Ask(Action):
         if title is not None:
             if not isinstance(title, str) or not title:     raise ActionError(f"ask: title is a text ({title!r})")
             if channel != "usr":                            raise ActionError(f"ask: only a question to you has a title ({channel})")
+        if not isinstance(immediate, bool):                 raise ActionError(f"ask: immediate is true or false ({immediate!r})")
+        if immediate and channel != "usr":                  raise ActionError(f"ask: only a question to you is immediate ({channel})")
 
-        self.channel = channel
-        self.context = Context(context, "ask")
-        self.title   = title
-        self.options = None if options is None else [(label, str(e["criteria"]) if e.get("criteria") else None) for label, e in zip(labels, options)]
-        self.result  = target
-        self.default = default
-        self.timeout = TIMEOUT[channel] if timeout is None else timeout
+        self.channel   = channel
+        self.context   = Context(context, "ask")
+        self.title     = title
+        self.immediate = immediate
+        self.options   = None if options is None else [(label, str(e["criteria"]) if e.get("criteria") else None) for label, e in zip(labels, options)]
+        self.result    = target
+        self.default   = default
+        self.timeout   = TIMEOUT[channel] if timeout is None else timeout
 
     def reads(self) -> list[str]:
         return list(self.context.values.values())
@@ -114,7 +122,7 @@ class Ask(Action):
     async def apply(self) -> None:
         self.result.set(None)  # unknown until the answer comes
         picker = getattr(Ask, f"ask_{self.channel}")
-        shown  = {"title": self.title, "id": self.id} if self.channel == "usr" else {}
+        shown  = {"title": self.title, "id": self.id, "immediate": self.immediate or None} if self.channel == "usr" else {}
         answer = None if picker is None else await picker(self.context.said(), self.options, self.timeout, **shown)
         self.result.set(self.default if answer is None else answer)
 
