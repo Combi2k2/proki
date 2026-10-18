@@ -6,8 +6,14 @@
     make_variable(name, value)  a variable, starting at `value` (the one there is, if any)
     find_variable(name)         a variable, by name (ConfigError if there's none)
 
-    choose(context, options)    a question whose options each mean something to the program
+    ask_usr(context, options)   your answer: the option you picked, or what you typed
+    ask_jev(context, question, options)
+                                jev's: each option's probability, or the one of yes
     popup_open()                whether a question waits for you
+
+A question's options are the same for you and for jev: "Start", or ("Start", what it means),
+in order, and an answer is an option's index. You see the labels, jev the labels and what
+they mean.
 
     Table[Row]                  a table of proki.db, a row for each `Row` (a dataclass)
 
@@ -32,7 +38,8 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, ClassVar, Generic, TypeVar
 
-from proki.channels import Popup, queued
+from proki.channels import Popup, jev, queued
+from proki.channels.base import Options, paired
 from proki.core.actions import Action
 from proki.core.programs import Branch, Program, State
 from proki.core.signals import Stream, Variable
@@ -149,18 +156,38 @@ def popup_open() -> bool:
     return queued("usr") > 0
 
 
-async def choose(context: str, options: list[tuple[str, str]], timeout: float = 24 * 3600, **show: Any) -> str | None:
-    """A question whose options each mean something to the program.
+async def ask_usr(context: str, options: Options | None = None, timeout: float = 24 * 3600,
+                  selected: int | None = None, immediate: bool = False, **show: Any) -> int | str | None:
+    """Your answer: the index of the option you picked, or with no options the text you typed
+    (None: no answer).
 
         context     the question
-        options     (label, what it means), in order
+        options     "Start", or ("Start", what it means), in order
         timeout     seconds it waits for your answer
-        **show      what's shown with it, as for `Popup.ask`
-
-    What the option you picked means (None: no answer).
+        selected    the index of the option picked already, if any
+        immediate   it's to answer now: no "Later"
+        **show      what's shown with it, as for `Popup.ask` (`id`, `urgent`, ...)
     """
-    index = await Popup.ask(context, [label for label, _ in options], timeout, **show)
-    return None if index is None else options[index][1]
+    return await Popup.ask(context, options, timeout, selected=selected, immediate=immediate or None, **show)
+
+
+async def ask_jev(context: str, question: str, options: Options | None = None, timeout: float = 10) -> Any:
+    """jev's answer: each option's probability, by its index (the ones it gives any; {}: no
+    answer), or with no options the probability of yes (None: no answer).
+
+        context     what jev reads
+        question    what it's asked about it
+        options     as for `ask_usr`: jev reads each label, and what it means
+    """
+    asked  = ({"type": "noul", "instructions": question} if options is None else
+              {"type": "choice", "instructions": question,  # jev gets plain keys (o0, o1, ...): a label is any text
+               "criteria": {f"o{i}": f"{label}: {means}" if means else label for i, (label, means) in enumerate(paired(options))}
+              })
+    answer = ((await jev.ask(context, {"q": asked}, timeout)) or {}).get("q")
+    answer = answer if isinstance(answer, dict) else {}
+    odds   = answer.get("noul") if options is None else (answer.get("probabilities") or {})
+    odds   = {i: float(p) for i in range(len(options)) if (p := odds.get(f"o{i}"))} if options is not None else odds
+    return odds
 
 
 # --- tables -------------------------------------------------------------------------------
