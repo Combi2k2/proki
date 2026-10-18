@@ -51,7 +51,7 @@ from proki.utils import snake
 class Ritual(Program):
     """A program in code, laid out in states as a config one is.
 
-        name        its name, "@" first ("@planner")
+        name        its name, "@" first ("@task_planner")
         states      its states (none: a single one, "on")
         initial     the state it starts in (None: the first)
 
