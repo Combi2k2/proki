@@ -34,9 +34,13 @@ A branch without `when` always passes (the else). An unknown condition isn't tru
 A program's life (`run`), one task per program:
 
     1. enter a state: its actions run, in order. A question waits here for its answer
-    2. wait until `every` has passed since it was entered
+    2. wait until `every` has passed since it was entered (0: no wait, on at once)
     3. try `next`, like if / elif / else: the first branch that passes is entered (back to
        1). None passes: wait `every` more, and try again
+
+A state is entered once a cycle at most: one entered again in the same cycle, itself or
+through others, waits for the next. So a state with `every` 0 that loops, loops once a
+cycle, and a chain of them is gone through in one.
 
 Each program goes on with its job on its own: nothing waits for another program. Time is
 the engine's: a program waits for cycles, not seconds (`until`), and each cycle the engine
@@ -58,9 +62,9 @@ the state is left, a program's when the program starts over (each start of proki
 switched on again), and a global one carries over a restart (the builder makes it
 `persist`). Each start begins every program at its `initial` state.
 
-A program written in code (proki/programs/code/) has a `run` of its own: `Ritual`'s calls
-its `step` once a cycle (programs/code/base.py). Its name starts with "@" (`RESERVED`), as
-in "@planner", which a config program's can't.
+A program written in code (proki/programs/code/) is laid out in states too (`Ritual`,
+programs/code/base.py), its actions in Python. Its name starts with "@" (`RESERVED`), as in
+"@task_planner", which a config program's can't.
 """
 
 from __future__ import annotations
@@ -135,13 +139,19 @@ class Program:
         states' at their starting values."""
         for variable in [*self.vars, *(v for state in self.states.values() for v in state.vars)]:
             variable.reset()
-        name = self.initial
+        name, cycle, seen = self.initial, None, set()   # seen: the states entered this cycle
         while True:
+            if name in seen and cycle == Program.now:
+                await self.until(Program.now)  # a state once a cycle at most: again, the next
+            if cycle != Program.now:
+                cycle, seen = Program.now, set()
+            seen.add(name)
             state, entered = self.states[name], Program.now
             self.current = name
             await self.act(state.do)
-            await self.until(entered + state.every)
-            
+            if state.every:
+                await self.until(entered + state.every)
+
             while (goto := self.choose(state)) is None:
                 await self.until(Program.now + state.every)
             for variable in state.vars:  # leaving it: its variables start over
