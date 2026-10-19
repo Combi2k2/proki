@@ -10,7 +10,8 @@ Everything is declared (`claim`) under its full name, the scope's prefix and its
 A name is found from the inside out, like in a programming language (`refer`): in state
 asking of program suggest, `answer` is that state's if it has one, else the program's,
 else the global one. So a name declared inside hides the one of the same name around it.
-Nothing reaches into another program's or another state's scope.
+Nothing reaches into another program's or another state's scope. Only a reserved prefix
+is dotted: a program in code keeps it for its own names, written as they are.
 
 Every name in an expression is written out in full (`spell`) before it's compiled, so
 what runs never needs to know about scopes.
@@ -19,7 +20,7 @@ what runs never needs to know about scopes.
 from __future__ import annotations
 
 import ast
-from typing import Any
+from typing import Any, ClassVar
 
 from proki.errors import (
     ConfigError,
@@ -29,6 +30,8 @@ from proki.errors import (
 
 class Scope:
     """Where something is written: the global scope (`Scope()`), or one inside another."""
+
+    RESERVED: ClassVar[set[str]] = set()   # the prefixes programs in code keep: their names dotted, never another's
 
     def __init__(self, name: str = "", outer: Scope | None = None):
         self.outer = outer
@@ -47,6 +50,8 @@ class Scope:
         that one."""
         if self.taken(full := self.prefix + name):
             raise ConfigError(f"{name!r} is defined twice")
+        if self.outer is None and name in self.RESERVED:
+            raise ConfigError(f"{name!r} is reserved: its names are a program's")
         self.names.add(full)
 
     def taken(self, full: str) -> bool:
@@ -59,6 +64,16 @@ class Scope:
         if not isinstance(name, str):  return None
         return next((full for prefix in self.prefixes if self.taken(full := prefix + name)), None)
 
+    @staticmethod
+    def reserve(*prefixes: str) -> None:
+        """Keep `prefixes` for a program in code's own names: dotted, as they are."""
+        Scope.RESERVED.update(prefixes)
+
+    @staticmethod
+    def reserved(node: ast.AST) -> bool:
+        """Whether a node is a reserved prefix's name."""
+        return isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in Scope.RESERVED
+
     def spell(self, expr: Any) -> Any:
         """`expr` with its names written out in full, found from here outwards.
 
@@ -67,8 +82,8 @@ class Scope:
             "count"          →   "count"                        else the global one
 
         A name found nowhere stays as written (compiling it says it's unknown), and so does
-        anything that isn't text. ExprError for a dotted name: nothing reaches into another
-        program's or state's scope."""
+        anything that isn't text, and a reserved prefix's name. ExprError for any other dotted
+        name: nothing reaches into another program's or state's scope."""
         if not isinstance(expr, str):
             return expr
         try:
@@ -78,11 +93,13 @@ class Scope:
 
         nodes = list(ast.walk(tree))
         funcs = {id(node.func) for node in nodes if isinstance(node, ast.Call)}
+        kept  = {id(node.value) for node in nodes if self.reserved(node)}   # a reserved prefix: as it is
 
         for node in nodes:
-            if isinstance(node, ast.Attribute): raise ExprError(f"{expr!r}: not allowed in an expression: {ast.unparse(node)}")
+            if isinstance(node, ast.Attribute) and not self.reserved(node):
+                raise ExprError(f"{expr!r}: not allowed in an expression: {ast.unparse(node)}")
             if isinstance(node, ast.Name):
-                if id(node) in funcs:   continue
+                if id(node) in funcs | kept:  continue
                 if full := self.refer(node.id):
                     node.id = full
         return ast.unparse(tree)

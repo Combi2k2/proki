@@ -264,8 +264,8 @@ class Builder:
         for a in actions:                                                    self.build_action(a, scope, state)
 
         with spec.inside():
-            if isinstance(spec.every, bool) or not isinstance(spec.every, int | float) or spec.every <= 0:
-                raise ProgramError(f"every is in minutes, more than 0 ({spec.every!r})")
+            if isinstance(spec.every, bool) or not isinstance(spec.every, int | float) or spec.every < 0:
+                raise ProgramError(f"every is in minutes, 0 or more ({spec.every!r})")   # 0: its next at once
         state.every = timedelta(minutes=spec.every)
         for i, b in enumerate(branches):
             self.build_branch(b, i, program, state, scope, branches[:i])
