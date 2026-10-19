@@ -9,10 +9,11 @@ written in Python's syntax, but read by proki itself, not run by Python:
     ts_count(app, 30) > 20 and not in_session
 
 What an expression can contain:
-    numbers, text in quotes, True / False
+    numbers, text in quotes, True / False, None (unknown)
     + - * / // %, comparisons (== != < <= > >=), `in` / `not in` a tuple of constants
-    and, or, not
-    the operators of core/ops/ (ts_mean, every, delay, ...)
+    `is None` / `is not None`: whether a value is unknown (never unknown itself)
+    and, or, not, `a if test else b` (unknown if the test is)
+    the operators of core/ops/ (ts_mean, every, delay, min, max, ...)
     names of inputs, signals and variables
 
 Time is always in minutes: windows, delays, and rates (keys is presses per minute).
@@ -81,6 +82,11 @@ def _and(*values: Any) -> Any:
     return None if None in values else True
 
 
+def _if(test: Any, body: Any, orelse: Any) -> Any:
+    """`body if test else orelse`: unknown if the test is."""
+    return None if test is None else body if test else orelse
+
+
 def _or(*values: Any) -> Any:
     """`or`: True if any value is true, else unknown if any is unknown, else False."""
     if any(v is not None and v for v in values):
@@ -100,7 +106,8 @@ COMPARE = {
     ast.Lt: operator.lt, ast.LtE: operator.le,
     ast.Gt: operator.gt, ast.GtE: operator.ge,
     ast.Eq: operator.eq, ast.NotEq: operator.ne,
-    ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b
+    ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b,
+    ast.Is: operator.is_, ast.IsNot: operator.is_not,
 }
 
 
@@ -108,7 +115,7 @@ def _build(node: ast.expr) -> Any:
     """One node of the syntax tree as a constant or a stream. ExprError for anything an
     expression can't contain."""
     match node:
-        case ast.Constant(value=value) if isinstance(value, (int, float, str, bool)):
+        case ast.Constant(value=value) if value is None or isinstance(value, (int, float, str, bool)):
             return value
         case ast.Tuple(elts=elts) if all(isinstance(e, ast.Constant) for e in elts):
             return tuple(_build(e) for e in elts)  # for `in`: label in ("Code editor", "Terminal")
@@ -129,5 +136,8 @@ def _build(node: ast.expr) -> Any:
         case ast.Compare(left=left, ops=comparisons, comparators=rights) if all(type(c) in COMPARE for c in comparisons):
             operands = [_build(left), *(_build(r) for r in rights)]
             fs = [COMPARE[type(c)] for c in comparisons]
-            return _lift(lambda *vs: all(f(a, b) for f, a, b in zip(fs, vs, vs[1:])), *operands)
+            known = any(type(c) in (ast.Is, ast.IsNot) for c in comparisons)  # `is None` reads unknown values itself
+            return _lift(lambda *vs: all(f(a, b) for f, a, b in zip(fs, vs, vs[1:])), *operands, unknown=known)
+        case ast.IfExp(test=test, body=body, orelse=orelse):
+            return _lift(_if, _build(test), _build(body), _build(orelse), unknown=True)
     raise ExprError(f"not allowed in an expression: {ast.unparse(node)}")

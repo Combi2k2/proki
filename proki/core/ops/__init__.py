@@ -9,6 +9,8 @@ All times are in minutes: windows `w`, delays `d`, spans `p`.
 Every cycle (one value per cycle):
     lift(f, x, y, ...)   f of the values (behind + - * /, comparisons, and / or / not)
     delay(x, d)          x as it was d minutes ago
+    min(x, y, ...)       the smallest of the values (and max(x, y, ...) the largest)
+    clip(x, lo, hi)      x, kept between lo and hi
 
 Over the last w minutes (a "window"):
     ts_sum(x, w)     the total over time: a rate per minute gives a count. True / False
@@ -31,9 +33,12 @@ one, so `ts_mean(every(focus, 5), 7 * 1440)` is right from the start. Operators 
 """
 
 from proki.core.ops.base import Constant, Operator, Queued
+from proki.core.ops.clip import Clip
 from proki.core.ops.delay import Delay
 from proki.core.ops.every import Every
 from proki.core.ops.lift import Lift
+from proki.core.ops.max import Max
+from proki.core.ops.min import Min
 from proki.core.ops.ts_count import TsCount
 from proki.core.ops.ts_max import TsMax
 from proki.core.ops.ts_mean import TsMean
@@ -48,9 +53,12 @@ __all__ = [
     "Operator",
     "Queued",
     "FUNCTIONS",
+    "Clip",
     "Delay",
     "Every",
     "Lift",
+    "Max",
+    "Min",
     "TsCount",
     "TsMax",
     "TsMean",
