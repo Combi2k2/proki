@@ -1,21 +1,28 @@
-"""The signal language: how proki turns what it records into numbers it can act on.
+"""The signal language: how proki turns what it records into values it can act on.
 
-    stream.py     Stream: a value per cycle, and how the cycles run
-    expr.py       expressions: text like "ts_mean(keys, 5) > 30", compiled into streams
-    signal.py     Signal: a named expression
-    variable.py   Variable: app state that actions set (in_session, deadline_eod, ...)
+    Stream          a value per cycle, and how the cycles run
+    compile_expr    an expression, text like "ts_mean(keys, 5) > 30", made a stream
+    Signal          an expression, named
+    Variable        state a program keeps, set by its actions
 
-The primitives they're built from (app, keys, clock, ...) are in core/primitives/, the
-operators (ts_mean, every, ...) in core/ops/.
+Every value has a type, as it says or as it's worked out from what it reads. What streams
+are built from: the inputs (what's recorded, and the clock), and the operators (ts_mean,
+every, ...).
 """
 
-from proki.core.signals.stream import NEVER, Storage, Stream, Value
-from proki.core.signals.expr import compile_expr, parse
-from proki.core.signals.signal import Signal
+from proki.core.signals.stream   import NEVER, Storage, Stream, Value
+from proki.core.signals.signal   import Signal
 from proki.core.signals.variable import Variable, VariableStore
+from proki.core.signals.expr     import compile_expr, parse
 
 __all__ = [
-    "NEVER", "Storage", "Stream", "Value",
-    "Signal", "compile_expr", "parse",
-    "Variable", "VariableStore",
+    "NEVER",
+    "Storage",
+    "Stream",
+    "Value",
+    "Signal",
+    "Variable",
+    "VariableStore",
+    "compile_expr",
+    "parse",
 ]
