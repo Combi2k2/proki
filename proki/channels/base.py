@@ -11,12 +11,9 @@ from __future__ import annotations
 
 import itertools
 from collections import Counter
-from collections.abc import Sequence
 from typing import Any, ClassVar
 
 from proki.services.nats import Bus, LocalBus
-
-Options = Sequence[str | tuple[str, str | None]]  # "Start", or ("Start", what it means)
 
 
 class Channels:
@@ -40,13 +37,3 @@ async def request(channel: str, data: dict, timeout: float) -> Any:
 def queued(channel: str) -> int:
     """How many questions to `channel` wait for an answer."""
     return Channels.out[channel]
-
-
-def paired(options: Options) -> list[list]:
-    """Each option as [label, criteria] ("Start" becomes ["Start", None])."""
-    return [list(o) if isinstance(o, tuple) else [o, None] for o in options]
-
-
-def picked(answer: Any, options: list) -> int | None:
-    """`answer` if it's the index of one of `options`, else None."""
-    return answer if isinstance(answer, int) and not isinstance(answer, bool) and 0 <= answer < len(options) else None

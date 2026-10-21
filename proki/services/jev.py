@@ -20,6 +20,9 @@ Question types:
 
     choice   pick one of `criteria` (option → what it means): its key, and each one's probability
     noul     yes or no: the probability of yes
+    score    a level on a scale, `criteria` its levels in order (what each means, lowest first):
+             the score (2.97: between levels, by how likely each is), each level's probability
+             by its place ("0", "1", ...), the levels as `legend`, and the `confidence`
 
 Any service that speaks this shape fits: openjev (api.openjev.sh), a local jev, or another
 backend behind the same shape. Which one, and what's sent to it, is the caller's to say.

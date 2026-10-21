@@ -1,4 +1,4 @@
-"""The popup: everything proki says to you, through the UI (ui/main.js).
+"""The popup: everything proki says to you, through the UI.
 
 Asking, on the "usr" channel ("proki.ask.usr"): the question waits for your answer, and
 the answer goes back to whoever asked. That one does what it means.
@@ -24,7 +24,7 @@ Telling, one way ("proki.ui"): nothing comes back.
     Popup.poke("Back to work")      {"type": "poke", "text": ...}            a message to read
     Popup.poke("Away?", "Away", "3f9a1c2e")                                 a title, and a picture and a
                                                                              sound drawn from its picks
-    Popup.open("task_form")         {"type": "open", "view": ...}            a view: task_form, task_board
+    Popup.open("tasks")             {"type": "open", "view": ...}            a view of the app: today, tasks, ...
     Popup.send({"type": ...})       any other:
                                     "status"   the tray's line, each cycle
                                     "quit"     the UI closes
@@ -42,15 +42,13 @@ sets it), and sent as their files. Without one, none.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from typing import Any, ClassVar
 
-from proki.channels.base import (
-    Channels,
-    Options,
-    paired,
-    picked,
-    request
-)
+from proki.channels.base import Channels, request
+
+Options = Sequence[str | tuple[str, str | None]]  # "Start", or ("Start", what it means)
+
 
 class Popup:
     library: ClassVar[Any] = None  # the media library (services/media.py), drawn from
@@ -103,3 +101,13 @@ class Popup:
     @staticmethod
     def open(view: str) -> None:
         Popup.send({"type": "open", "view": view})
+
+
+def paired(options: Options) -> list[list]:
+    """Each option as [label, criteria] ("Start" becomes ["Start", None])."""
+    return [list(o) if isinstance(o, tuple) else [o, None] for o in options]
+
+
+def picked(answer: Any, options: list) -> int | None:
+    """`answer` if it's the index of one of `options`, else None."""
+    return answer if isinstance(answer, int) and not isinstance(answer, bool) and 0 <= answer < len(options) else None
