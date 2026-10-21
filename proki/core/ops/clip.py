@@ -9,4 +9,4 @@ from proki.core.ops.lift import Lift
 
 class Clip(Lift):
     def __init__(self, x: Operand, low: Operand, high: Operand):
-        super().__init__(lambda v, lo, hi: min(max(v, lo), hi), x, low, high)
+        super().__init__(lambda v, lo, hi: min(max(v, lo), hi), x, low, high, type="number")

@@ -1,8 +1,7 @@
 """ts_count(x, w): how many times x changed to a new value in the last w minutes.
 
-    ts_count(app, 2)            app switches in the last 2 minutes
-    ts_count(in_session, 60)    sessions started in the last hour (True / False: how many
-                                times it became True)
+    ts_count(app, 2)        app switches in the last 2 minutes
+    ts_count(recorded, 60)  this app switches on and off in the last hour
 
 Unknown values are skipped: x before and after a gap is compared directly. The first
 value ever seen doesn't count as a change.

@@ -1,8 +1,8 @@
 """ts_sum(x, w): x added up over time, in the last w minutes.
 
 Each value counts for the time it covers, in minutes:
-    ts_sum(keys, 10)            key presses in the last 10 minutes (keys is per minute)
-    ts_sum(in_session, 60)      minutes in a session in the last hour (True counts as 1)
+    ts_sum(keys, 10)        key presses in the last 10 minutes (keys is per minute)
+    ts_sum(active, 60)      minutes on the computer in the last hour (True counts as 1)
 """
 
 from __future__ import annotations

@@ -9,4 +9,4 @@ from proki.core.ops.lift import Lift
 
 class Max(Lift):
     def __init__(self, *xs: Operand):
-        super().__init__(max, *xs)
+        super().__init__(max, *xs, type="number")

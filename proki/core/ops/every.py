@@ -32,10 +32,15 @@ class Every(Operator):
 
     HOWS = ("mean", "sum", "max", "min", "last")
 
+    keeps = True
+
     def __init__(self, x: Operand, p: float, how: str = "mean"):
         if how not in self.HOWS:
             raise ExprError(f"every: `how` is one of {', '.join(self.HOWS)}, not {how!r}")
         self.inputs, self.period, self.how = [as_stream(x)], minutes(p), how
+        if how in ("last", "max", "min"):  # a value of its input's kept: its input's type, else a number
+            self._typed = None
+            self._infer = lambda of: of(self.inputs[0])
         self.span: int | None = None  # the span being collected (its number since EPOCH)
         self.value: Any = None
         self._reset()

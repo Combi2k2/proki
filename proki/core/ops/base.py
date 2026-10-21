@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, ClassVar
 
 from proki.core.signals.stream import NEVER, Stream
+from proki.core.signals.types import typeof
 from proki.utils import snake
 
 Operand = Stream | float | int | bool | str | None
@@ -23,6 +24,7 @@ class Operator(Stream):
     base or an internal operator that expressions shouldn't call by name."""
 
     functions: ClassVar[dict[str, type[Operator]]] = {}
+    _typed = "number"   # most work out a number (ts_mean, min, ...): the others work theirs out
 
     def __init_subclass__(cls, function: bool = True, **kwargs: Any):
         super().__init_subclass__(**kwargs)
@@ -37,7 +39,7 @@ class Constant(Stream):
     fresh = False
 
     def __init__(self, value: Any):
-        self.constant = value
+        self.constant, self._typed = value, typeof(value)
 
     def compute(self) -> Any:
         return self.constant
@@ -54,6 +56,8 @@ class Queued(Operator, function=False):
     `span` are dropped (`drop`, `pop`). On its first cycle, the queue is filled from the
     input's table, if the input keeps one, so the window starts full. Subclasses keep
     running totals in `take` and `pop` so each cycle costs little."""
+
+    keeps = True
 
     def __init__(self, x: Operand, span: timedelta):
         self.inputs, self.span = [as_stream(x)], span

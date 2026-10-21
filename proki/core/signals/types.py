@@ -31,7 +31,8 @@ NAMES = {
     "any"    : {},
 }
 
-Type = str | dict
+Type    = str | dict
+NUMBERS = ("number", "integer")   # a time is a number too
 
 
 def schema(type: Type | None) -> dict:
@@ -83,6 +84,23 @@ def short(type: Type) -> Type:
     """A type said by its name, if it has one (a schema, else)."""
     made = schema(type)
     return next((name for name, known in NAMES.items() if known == made), made)
+
+
+def accept(type: Type | None, given: Type | None) -> bool:
+    """Whether what's of type `given` can be what's of `type`, as far as types tell: either
+    unknown (any), numbers of any kind (a time, a whole number), the same kind, an object
+    whose fields both have do, an array whose items do."""
+    made, said = schema(type), schema(given)
+    if not made or not said or made == said:  return True
+    kinds = made.get("type"), said.get("type")
+    if all(kind in NUMBERS for kind in kinds):  return True
+    if kinds[0] != kinds[1]:                    return False
+    if kinds[0] == "object":
+        mine, theirs = made.get("properties", {}), said.get("properties", {})
+        return all(accept(mine[key], theirs[key]) for key in mine.keys() & theirs.keys())
+    if kinds[0] == "array":
+        return accept(made.get("items"), said.get("items"))
+    return True
 
 
 def typename(type: Type | None) -> str:

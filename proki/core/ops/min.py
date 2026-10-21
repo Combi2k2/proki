@@ -9,4 +9,4 @@ from proki.core.ops.lift import Lift
 
 class Min(Lift):
     def __init__(self, *xs: Operand):
-        super().__init__(min, *xs)
+        super().__init__(min, *xs, type="number")

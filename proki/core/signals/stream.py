@@ -33,13 +33,14 @@ from __future__ import annotations
 
 from bisect import bisect_right
 from collections import deque
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import datetime, timedelta
 from typing import Any, ClassVar, Protocol
 
 from proki.errors import ExprError
 
 Value = float | bool | str | None
+Infer = Callable[[Callable[["Stream"], Any]], Any]  # a type, from the types of what it reads (`of(stream)`)
 NEVER = timedelta.max  # the period of a stream that never changes (a constant)
 ALIVE = timedelta(minutes=10)  # a persisted value unchanged this long is saved again: a longer gap, proki wasn't running
 
@@ -75,8 +76,8 @@ class Stream:
 
     name: str = ""
     desc: str = ""  # what it is, in a line (an operator has none)
-    _typed: str | dict | None = None  # what it says its values are: a kind's (an input's, an operator's), or
-                                      # as declared (a variable's, a signal's, a field's). None: worked out (`typed`)
+    _typed: str | dict | None = None  # compile time type
+    _infer: Infer | None = None  # how its type's worked out from what it reads (None: it has one already)
     inputs: Sequence[Stream] = ()  # the streams it reads (each subclass sets its own)
     period: timedelta | None = None  # how often it takes a new value. None: every cycle
     window: timedelta | None = None  # how far back its table goes
@@ -93,12 +94,9 @@ class Stream:
 
     @property
     def type(self) -> str | dict:
-        """What its values are: as it says, else as worked out from what it's made of."""
-        return self._typed if self._typed not in (None, "any") else self.typed()
-
-    def typed(self) -> str | dict:
-        """What its values are, worked out from what it's made of (any: it can't tell)."""
-        return "any"
+        """What its values are (any: it can't tell), worked out once (`settle`)."""
+        if self._typed is None and self._infer is not None:  settle([self])
+        return "any" if self._typed is None else self._typed
 
     def advance(self, t: datetime) -> None:
         """Move on to the cycle at time `t`. The base forgets last cycle's value. A window
@@ -238,6 +236,41 @@ class Stream:
             for s in playing:
                 s._playback, s._cached = None, False
             Stream.now = until
+
+
+def settle(streams: Iterable[Stream], again: bool = False) -> None:
+    """The type of each of `streams`, and of the streams they read, worked out from what each
+    reads and kept (`again`: anew, the ones worked out before too). One whose type comes
+    round to itself reads itself as any there."""
+    made: list[Stream] = []
+    seen: set[Stream] = set()
+
+    def walk(stream: Stream) -> None:
+        if stream in seen:
+            return
+        seen.add(stream)
+        made.append(stream)
+        for i in stream.inputs:
+            walk(i)
+
+    def of(stream: Stream) -> Any:
+        if stream._typed is None and stream._infer is not None and stream not in working:
+            working.add(stream)
+            try:
+                stream._typed = stream._infer(of)
+            finally:
+                working.discard(stream)
+        return "any" if stream._typed is None else stream._typed
+
+    for stream in streams:
+        walk(stream)
+    if again:
+        for stream in made:
+            if stream._infer is not None:  stream._typed = None
+    
+    working: set[Stream] = set()
+    for stream in made:
+        of(stream)
 
 
 def retained(streams: Iterable[Stream]) -> list[Stream]:

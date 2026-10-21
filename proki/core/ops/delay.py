@@ -20,6 +20,8 @@ class Delay(Queued):
 
     def __init__(self, x: Operand, d: float):
         super().__init__(x, minutes(d))
+        self._typed = None
+        self._infer = lambda of: of(self.inputs[0])  # its input's
 
     at: datetime | None = None
     shown: datetime | None = None  # when x took the value delay gives now

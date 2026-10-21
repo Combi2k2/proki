@@ -14,7 +14,7 @@ Every cycle (one value per cycle):
 
 Over the last w minutes (a "window"):
     ts_sum(x, w)     the total over time: a rate per minute gives a count. True / False
-                     gives minutes (ts_sum(in_session, 60): minutes in a session this hour)
+                     gives minutes (ts_sum(session.active, 60): minutes in a session this hour)
     ts_mean(x, w)    the average of the known values
     ts_max(x, w)     the largest (and ts_min(x, w) the smallest)
     ts_count(x, w)   how many times x changed to a new value (for True / False: how many

@@ -20,9 +20,10 @@ from proki.core.ops.base import (
 
 
 class Lift(Operator, function=False):  # reached through + - * /, comparisons, and / or / not
-    def __init__(self, f: Callable[..., Any], *xs: Operand, unknown: bool = False):
+    def __init__(self, f: Callable[..., Any], *xs: Operand, unknown: bool = False, type: Any = "any"):
         self.f, self.inputs = f, [as_stream(x) for x in xs]
         self.unknown = unknown  # True: `f` gets unknown values and decides itself (and / or)
+        self._typed, self._infer = (None, type) if callable(type) else (type, None)  # what `f` gives: a type, or how it's worked out
 
     def advance(self, t: datetime) -> None:
         super().advance(t)
