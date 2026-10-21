@@ -20,7 +20,8 @@ from proki.errors import SignalError
 class Signal(Stream):
     """A named expression. Its value each cycle is the expression's."""
 
-    def __init__(self, name: str, expr: str, backfill: bool = False, window: timedelta | None = None, persist: bool = False, desc: str = ""):
+    def __init__(self, name: str, expr: str, backfill: bool = False, window: timedelta | None = None, persist: bool = False, desc: str = "",
+                 type: str | dict = "any"):
         if not name:    raise SignalError("signal name can't be empty")
         if not expr:    raise SignalError("signal expr can't be empty")
         if persist and (not backfill or window is None):
@@ -31,6 +32,7 @@ class Signal(Stream):
         self.name = name
         self.desc = desc
         self.expr = expr  # e.g. "ts_mean(keys, 5)"
+        self._typed, self._infer = (type, None) if type not in (None, "any") else (None, lambda of: of(self.inputs[0]))  # as it says, else its expression's
         self.backfill = backfill
         self.window = window
         self.persist = persist
