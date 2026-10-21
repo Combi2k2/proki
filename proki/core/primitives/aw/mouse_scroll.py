@@ -7,5 +7,8 @@ from proki.core.primitives.base import Primitive
 
 
 class MouseScroll(InputRate, Primitive):
+    _typed = "number"
+    desc   = "how much you scrolled per minute"
+
     def count(self, data: dict) -> float:
         return abs(data.get("scrollX", 0)) + abs(data.get("scrollY", 0))

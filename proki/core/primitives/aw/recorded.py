@@ -1,4 +1,4 @@
-"""`recorded`: whether ActivityWatch recorded anything (false: it or proki was off, or the computer asleep)."""
+"""`running`: whether ActivityWatch recorded anything (false: it or proki was off, or the computer asleep)."""
 
 from __future__ import annotations
 
@@ -13,6 +13,10 @@ from proki.services import aw
 class Recorded(Primitive):
     """Whether ActivityWatch recorded anything at the moment: false while it (or proki,
     which runs it) was off, or the computer asleep."""
+
+    _typed = "boolean"
+    name   = "running"
+    desc   = "whether your activity is recorded now: false while proki is off, or the computer asleep"
 
     buckets = (aw.WINDOW, aw.INPUT)
 

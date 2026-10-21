@@ -1,4 +1,4 @@
-"""`url`: the tab's address, while a browser is in focus (browser extension)."""
+"""`tab_url`: the tab's address, while a browser is in focus (browser extension)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,10 @@ from proki.services import aw
 
 class Url(Primitive):
     """The address of the tab in focus, while a browser app is in focus (else unknown)."""
+
+    _typed = "string"
+    desc   = "the address of the browser tab in focus (unknown outside a browser)"
+    name   = "tab_url"
 
     buckets = (aw.WINDOW, aw.WEBTAB)
 

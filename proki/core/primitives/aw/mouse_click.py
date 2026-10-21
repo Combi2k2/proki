@@ -7,5 +7,8 @@ from proki.core.primitives.base import Primitive
 
 
 class MouseClick(InputRate, Primitive):
+    _typed = "number"
+    desc   = "mouse clicks per minute"
+
     def count(self, data: dict) -> float:
         return data.get("clicks", 0)

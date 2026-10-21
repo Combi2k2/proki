@@ -7,5 +7,8 @@ from proki.core.primitives.base import Primitive
 
 
 class MouseMove(InputRate, Primitive):
+    _typed = "number"
+    desc   = "how far the mouse moved per minute, in pixels"
+
     def count(self, data: dict) -> float:
         return abs(data.get("deltaX", 0)) + abs(data.get("deltaY", 0))
