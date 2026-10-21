@@ -1,60 +1,51 @@
-"""Primitives: the basic streams everything else is built from, read from what ActivityWatch
-recorded or from the clock.
+"""Primitives: the basic streams everything else is built from, read from what your computer
+recorded, or from its clock.
 
-One file per primitive, in a folder by where it comes from:
-
-    aw/      what ActivityWatch recorded
-    sys/     this computer's clock
-    proki/   what proki works out about the window in focus (its label)
-
-Each folder's base.py holds what its primitives share. The top base.py holds `Primitive`
-and `run`, which drives the cycles. A primitive's name is its class's in snake case
-(`MouseMove` in aw/mouse_move.py is "mouse_move").
-
-The primitives:
-
-    recorded       whether ActivityWatch recorded anything (False: it or proki was off,
-                   or the computer was asleep)
+    running         whether anything was recorded (false: proki was off, or the computer asleep)
 
     the app, window or tab in focus
-        app        the app                                         window watcher
-        title      the window title                                window watcher
-        url        the tab's address, while a browser is in focus  browser extension
-        label      what the app or page is ("Videos", "Chat", ...), from the app
-                   and the window title, or "" for a window without a label yet
-        depth      how deep the work is, from the label's category (`Depth.depth_of`)
+        app_name        the app
+        app_title       the window's title
+        tab_url         the tab's address, while a browser is in focus
+        label           what the app or page is ("Videos", "Chat", ...), or "" for one with no
+                        label yet
+        depth           how deep the work is, from its label's category
 
-    the time (of the cycle, not from ActivityWatch)
-        clock      minutes since local midnight (0 to 1440)
-        weekday    0 Monday to 6 Sunday, local
-        time       minutes since 1970 (never wraps: `time - last_suggested`)
+    the time of the cycle
+        daytime         minutes since local midnight (0 to 1440)
+        time            minutes since 1970 (never wraps: `time - last_suggested`)
+        weekday         0 Monday to 6 Sunday
+        dd, mm, yy      the day of the month (1 to 31), the month (1 to 12), the year (2026)
 
-    input, per minute, over each cycle (aw-watcher-input sends an event every ~5 s)
-        keys           key presses (the watcher counts down and up, so its `presses` / 2)
-        mouse_move     mouse movement, in pixels
-        mouse_click    mouse clicks
-        mouse_scroll   scrolling, in scroll units
+    input, per minute, over each cycle
+        keys_pressed    keys pressed
+        mouse_move      mouse movement, in pixels
+        mouse_click     mouse clicks
+        mouse_scroll    scrolling, in scroll units
 
-Which primitives exist, and how much history each keeps, is the config's "inputs"
-(proki/model/).
+A primitive is in a folder by where it comes from, each folder with what its primitives
+share. Which ones run, and how much of its past each keeps, is the config's "inputs".
 
-How values are read: ActivityWatch stores events (start, duration, data), and a value
-holds for the length of its event. A primitive's value in a cycle comes from the event
-holding at that moment. Where nothing was recorded, it's unknown (None).
+How values are read: what's recorded comes as events (a start, a length, data), and a value
+holds for its event's length. A primitive's value in a cycle is the event's holding at that
+moment. Where nothing was recorded, it's unknown (None).
 
-How the cycles run (`Primitive.run(now)`, every 10 s): fetch what ActivityWatch recorded
-since the last cycle (`Recording`, with the client the app gives it), then run each cycle
-up to now. On the first run, it starts a day
-back (the longest table), so every table starts full. After a pause (proki off, the
-computer asleep), the cycles in between are run from the recording, and `recorded` is
-False where nothing was.
+How the cycles run (`Primitive.run(now)`, once a cycle): what was recorded since the last one
+is fetched, then each cycle up to now is run. The first run starts a day back (the longest
+table), so every table starts full. After a pause (proki off, the computer asleep), the
+cycles in between are run from what was recorded, `running` false where nothing was.
 
-Signals read ActivityWatch only through here.
+Signals read what was recorded only through here.
 """
 
-from proki.core.primitives.base import Primitive
-from proki.core.primitives.aw import App, Keys, MouseClick, MouseMove, MouseScroll, Recorded, Recording, Title, Url
-from proki.core.primitives.sys import Clock, Time, Weekday
+from proki.core.primitives.base  import Primitive
 from proki.core.primitives.proki import Depth, Label
+from proki.core.primitives.aw    import App, Keys, MouseClick, MouseMove, MouseScroll, Recorded, Recording, Title, Url
+from proki.core.primitives.sys   import Daytime, Dd, Mm, Time, Weekday, Yy
 
-__all__ = ["Primitive", "Recording", "App", "Clock", "Depth", "Keys", "MouseClick", "MouseMove", "MouseScroll", "Label", "Recorded", "Time", "Title", "Url", "Weekday"]
+__all__ = [
+    "Primitive", "Recording",
+    "App", "Title", "Url", "Recorded", "Keys", "MouseClick", "MouseMove", "MouseScroll",
+    "Depth", "Label",
+    "Daytime", "Time", "Weekday", "Dd", "Mm", "Yy",
+]
