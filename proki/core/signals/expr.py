@@ -6,7 +6,7 @@ written in Python's syntax, but read by proki itself, not run by Python:
     ts_mean(keys + mouse_click, 5)
     ts_sum(label == "Videos", 60)
     ts_mean(focus_2m, 2) - delay(ts_mean(focus_2m, 2), 2)
-    ts_count(app, 30) > 20 and not in_session
+    ts_count(app_name, 30) > 20 and not session.active
 
 What an expression can contain:
     numbers, text in quotes, True / False, None (unknown)
@@ -15,6 +15,7 @@ What an expression can contain:
     and, or, not, `a if test else b` (unknown if the test is)
     the operators of core/ops/ (ts_mean, every, delay, min, max, ...)
     names of inputs, signals and variables
+    a field of a value: answer.hours, a key of answer's value (unknown if it has none)
 
 Time is always in minutes: windows, delays, and rates (keys is presses per minute).
 
@@ -22,6 +23,11 @@ Unknown values: a value that can't be worked out is None (unknown). That include
 unknown input, a division by zero, and text where a number goes. Anything worked out
 from an unknown value is unknown too, except `and` / `or` when one side already settles
 the answer (`True or unknown` is True).
+
+Each expression has a type: a name's, an operator's (ts_mean, + - * /: a number; comparisons,
+and / or / not: a boolean; text + text: a text; `a if t else b`: theirs, if they share one), a
+field's from its value's schema. One that rests on what it reads is worked out once all is
+built, as it reads it then.
 
 Mistakes visible in the text itself (an unknown name, a missing argument, `"a" + 1`, a
 window that isn't a number) raise ExprError when the expression is compiled.
@@ -36,6 +42,7 @@ from typing import Any
 
 from proki.core import ops
 from proki.core.signals.stream import Stream
+from proki.core.signals.types import field, typeof
 from proki.errors import ExprError
 
 
@@ -60,14 +67,19 @@ def compile_expr(expr: str) -> Stream:
     return result if isinstance(result, Stream) else ops.Constant(result)
 
 
-def _lift(f: Any, *args: Any, unknown: bool = False) -> Any:
+def _lift(f: Any, *args: Any, unknown: bool = False, type: Any = "any") -> Any:
     """`f` applied to the arguments. If they're all constants, it's worked out right away
     (so `7 * 1440` is a plain number, usable as a window). Otherwise it's a stream that
     applies `f` each cycle (ops.Lift). `unknown=True`: `f` handles unknown arguments
     itself (and / or). Otherwise any unknown argument makes the result unknown."""
     if any(isinstance(a, Stream) for a in args):
-        return ops.Lift(f, *args, unknown=unknown)
+        return ops.Lift(f, *args, unknown=unknown, type=type)
     return None if not unknown and any(a is None for a in args) else f(*args)
+
+
+def _type(x: Any, of: Any) -> Any:
+    """What a built node gives: a stream's type (`of`, as the types are worked out), a constant's."""
+    return of(x) if isinstance(x, Stream) else typeof(x)
 
 
 def _divide(f: Any) -> Any:
@@ -125,19 +137,26 @@ def _build(node: ast.expr) -> Any:
             return Stream.registry[name]
         case ast.Attribute() if (name := ast.unparse(node)) in Stream.registry:
             return Stream.registry[name]
+        case ast.Attribute(value=value, attr=key):  # a field of a value: the longest name there is, then its keys
+            made = _build(value)
+            return _lift(lambda v: v.get(key) if isinstance(v, dict) else None, made, type=lambda of: field(_type(made, of), key))
         case ast.Call(func=ast.Name(id=name), args=args, keywords=[]) if name in ops.FUNCTIONS:
             return ops.FUNCTIONS[name](*(_build(a) for a in args))
         case ast.BinOp(left=left, op=op, right=right) if type(op) in BINARY:
-            return _lift(BINARY[type(op)], _build(left), _build(right))
-        case ast.UnaryOp(op=ast.USub(), operand=operand):   return _lift(operator.neg, _build(operand))
-        case ast.UnaryOp(op=ast.Not(), operand=operand):    return _lift(operator.not_, _build(operand))
+            sides = _build(left), _build(right)
+            joined = (lambda of: "string" if all(_type(x, of) == "string" for x in sides) else "number") if isinstance(op, ast.Add) else "number"  # text + text
+            return _lift(BINARY[type(op)], *sides, type=joined)
+        case ast.UnaryOp(op=ast.USub(), operand=operand):   return _lift(operator.neg, _build(operand), type="number")
+        case ast.UnaryOp(op=ast.Not(), operand=operand):    return _lift(operator.not_, _build(operand), type="boolean")
         case ast.BoolOp(op=op, values=values):
-            return _lift(_and if isinstance(op, ast.And) else _or, *(_build(v) for v in values), unknown=True)
+            return _lift(_and if isinstance(op, ast.And) else _or, *(_build(v) for v in values), unknown=True, type="boolean")
         case ast.Compare(left=left, ops=comparisons, comparators=rights) if all(type(c) in COMPARE for c in comparisons):
             operands = [_build(left), *(_build(r) for r in rights)]
             fs = [COMPARE[type(c)] for c in comparisons]
             known = any(type(c) in (ast.Is, ast.IsNot) for c in comparisons)  # `is None` reads unknown values itself
-            return _lift(lambda *vs: all(f(a, b) for f, a, b in zip(fs, vs, vs[1:])), *operands, unknown=known)
+            return _lift(lambda *vs: all(f(a, b) for f, a, b in zip(fs, vs, vs[1:])), *operands, unknown=known, type="boolean")
         case ast.IfExp(test=test, body=body, orelse=orelse):
-            return _lift(_if, _build(test), _build(body), _build(orelse), unknown=True)
+            branches = _build(body), _build(orelse)
+            same = lambda of: _type(branches[0], of) if _type(branches[0], of) == _type(branches[1], of) else "any"
+            return _lift(_if, _build(test), *branches, unknown=True, type=same)
     raise ExprError(f"not allowed in an expression: {ast.unparse(node)}")
