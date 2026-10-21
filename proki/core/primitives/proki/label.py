@@ -14,6 +14,9 @@ class Label(Labeled, Primitive):
     """`Label.label_of(app, url)` of the window in focus (the app sets it: its labels).
     "" when it has none, so `label in ("email", ...)` is false there, not unknown."""
 
+    _typed = "string"
+    desc   = "what the app or page in focus is: Videos, Chat, ... (empty while it has no label)"
+
     label_of: ClassVar[Callable[[str, str | None], str | None]] = staticmethod(lambda app, url: None)
 
     def of(self, app: str, url: str | None) -> Any:
