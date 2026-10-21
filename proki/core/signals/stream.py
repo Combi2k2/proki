@@ -6,9 +6,9 @@ says otherwise). A `Stream` has one value per cycle. None means unknown.
 
 There are three kinds of streams:
 
-    Primitive   read from what ActivityWatch recorded, or from the clock (core/primitives/)
-    operator    built from other streams, like ts_mean(keys, 5) (core/ops/)
-    Signal      a named expression over other streams (signal.py, expr.py)
+    Primitive   read from what your computer recorded, or from the clock
+    operator    built from other streams, like ts_mean(keys, 5)
+    Signal      a named expression over other streams
 
 Every named stream is kept in `Stream.registry`, and expressions look names up there.
 
@@ -22,8 +22,11 @@ itself, so a stream read by several others still moves on only once.
 
 History: a stream with `backfill` keeps a table of its past values as (time, value)
 rows, covering its `window`. With `persist`, the table is also saved to disk
-(`Stream.storage`), so it survives restarts. Which moments the cycles fall on, and what
-each primitive reads, is up to core/primitives/.
+(`Stream.storage`), so it survives restarts: a row as its value changes, and one every
+few minutes while it doesn't, read back a row a cycle (`expanded`). A longer gap is a
+time proki wasn't running: nothing is known of it. As proki quits, each one's saved table
+says nothing's known from then (`close`). Which moments the cycles fall on, and what
+each primitive reads, is up to the primitives.
 """
 
 from __future__ import annotations
@@ -38,6 +41,7 @@ from proki.errors import ExprError
 
 Value = float | bool | str | None
 NEVER = timedelta.max  # the period of a stream that never changes (a constant)
+ALIVE = timedelta(minutes=10)  # a persisted value unchanged this long is saved again: a longer gap, proki wasn't running
 
 
 class Storage(Protocol):
@@ -71,6 +75,8 @@ class Stream:
 
     name: str = ""
     desc: str = ""  # what it is, in a line (an operator has none)
+    _typed: str | dict | None = None  # what it says its values are: a kind's (an input's, an operator's), or
+                                      # as declared (a variable's, a signal's, a field's). None: worked out (`typed`)
     inputs: Sequence[Stream] = ()  # the streams it reads (each subclass sets its own)
     period: timedelta | None = None  # how often it takes a new value. None: every cycle
     window: timedelta | None = None  # how far back its table goes
@@ -79,9 +85,20 @@ class Stream:
     persist: bool = False  # whether the table is saved to disk
     _playback: deque[tuple[datetime, Any]] | None = None  # rows being replayed (only during `fill`)
     _table: deque[tuple[datetime, Any]] | None = None  # its (time, value) rows, oldest first
+    _saved: tuple[datetime, Any] | None = None  # the last row saved to disk (a persisted table's)
     _cache: Any = None  # this cycle's value, once worked out
     _cached = False
     _epoch = -1  # the epoch the cached value is from
+    keeps: ClassVar[bool] = False  # whether its value carries over from the cycles before (a window's does)
+
+    @property
+    def type(self) -> str | dict:
+        """What its values are: as it says, else as worked out from what it's made of."""
+        return self._typed if self._typed not in (None, "any") else self.typed()
+
+    def typed(self) -> str | dict:
+        """What its values are, worked out from what it's made of (any: it can't tell)."""
+        return "any"
 
     def advance(self, t: datetime) -> None:
         """Move on to the cycle at time `t`. The base forgets last cycle's value. A window
@@ -129,20 +146,29 @@ class Stream:
             self._table = deque()
             if self.persist and Stream.storage is not None and self.window:  # what was saved before this run
                 Stream.storage.forget(self.name, t - self.window)  # what fell out of its window
-                self._table.extend(Stream.storage.load(self.name, t - self.window))
+                saved = Stream.storage.load(self.name, t - self.window - ALIVE)
+                self._saved = saved[-1] if saved else None
+                self._table.extend(row for row in expanded(saved, self.period or Stream.cycle, t) if row[0] > t - self.window)
         if not self.fresh or (self._table and self._table[-1][0] >= t):
             return
         table = self._table
         value = self.current()
         table.append((t, value))
-        if self.persist and Stream.storage is not None:
-            Stream.storage.save(self.name, t, value)
+        if self.persist and Stream.storage is not None and (self._saved is None or self._saved[1] != value or t - self._saved[0] >= ALIVE):
+            Stream.storage.save(self.name, t, value)  # as it changes, and now and then while it doesn't
+            self._saved = (t, value)
         if self.window:  # (t − window, t], like the operators' windows
             oldest, keep = t - self.window, False
         else:  # back to its inputs' oldest
             oldest, keep = max([r for i in self.inputs if (r := i.reach()) is not None], default=None), True
         while oldest is not None and table and (table[0][0] < oldest if keep else table[0][0] <= oldest):
             table.popleft()
+
+    def close(self) -> None:
+        """Proki quitting: its saved table says nothing's known from the next cycle on."""
+        if self.persist and Stream.storage is not None and self._saved is not None and self._saved[1] is not None and Stream.now:
+            Stream.storage.save(self.name, Stream.now + (self.period or Stream.cycle), None)
+            self._saved = (Stream.now, None)
 
     def play(self, t: datetime) -> None:
         """During `fill`: take the value at time `t` from the table instead of working it
@@ -212,3 +238,37 @@ class Stream:
             for s in playing:
                 s._playback, s._cached = None, False
             Stream.now = until
+
+
+def retained(streams: Iterable[Stream]) -> list[Stream]:
+    """The ones among `streams`, and the streams they read, whose value carries over from
+    the cycles before: a window, or one keeping a table. Catching up on the past, only they
+    need each cycle run: the others are worked out at the present one."""
+    seen: set[Stream] = set()
+    kept: list[Stream] = []
+
+    def walk(stream: Stream) -> None:
+        if stream in seen:
+            return
+        seen.add(stream)
+        if stream.keeps or stream.backfill:
+            kept.append(stream)
+        for i in stream.inputs:
+            walk(i)
+
+    for stream in streams:
+        walk(stream)
+    return kept
+
+
+def expanded(rows: list[tuple[datetime, Any]], step: timedelta, until: datetime) -> list[tuple[datetime, Any]]:
+    """Saved rows (each saved as its value changed, and every few minutes while it didn't) as
+    a row a `step`, before `until`: each row's value, until the next row, or for those few
+    minutes at most (a longer gap: nothing known)."""
+    made = []
+    for (t, value), after in zip(rows, [*(r[0] for r in rows[1:]), None]):
+        end = min(t + ALIVE, after if after else max(until, t + step))  # the last: until now at most (one after: as it is)
+        while t < end:
+            made.append((t, value))
+            t += step
+    return made
