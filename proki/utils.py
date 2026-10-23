@@ -1,14 +1,10 @@
 """Small helpers that know nothing about proki: names, values, chances, text similarity,
 waiting, finding the commands that start installed programs."""
 
-from __future__ import annotations
-
 import keyword
-import math
 import re
 import shutil
 import time
-from collections import Counter
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
@@ -16,6 +12,14 @@ from typing import Any
 
 import numpy as np
 
+def same(a: Any, b: Any) -> bool:
+    return type(a) is type(b) and a == b  # True and 1 stay apart
+
+def numeric(x: Any) -> bool:
+    return isinstance(x, int | float)  # bool too: true counts as 1
+
+def boolean(x: Any) -> bool:
+    return isinstance(x, bool)
 
 # names
 
@@ -38,8 +42,28 @@ def ident(name: Any) -> bool:
     if keyword.iskeyword(name):     return False
     return True
 
+# times
+def span(said: float | str) -> timedelta:
+    """Read minutes or a duration such as 30s, 5min, 1h, or 2d."""
+    if isinstance(said, str):
+        units = {"s": 1/60, "min": 1, "h": 60, "d": 1440}
+        found = re.fullmatch(rf"\s*(\d+(?:\.\d+)?)\s*({'|'.join(units)})\s*", said)
+        if not found:
+            raise ValueError(f"a time is minutes, or a number and s, min, h or d ({said!r})")
+        return timedelta(minutes=float(found[1]) * units[found[2]])
+    if boolean(said) or not numeric(said):
+        raise TypeError(f"minutes are a number, not {said!r}")
+    if said < 0:
+        raise ValueError(f"minutes can't be {said:g}")
+    return timedelta(minutes=said)
 
-# values
+# string format
+
+class Unknown:
+    """A value not known, as `fill` writes it: "-", whatever the format asks."""
+
+    def __format__(self, spec: str) -> str:
+        return "-"
 
 def fill(text: str, values: dict[str, Any]) -> str:
     """`text` with its {name} / {name:format} filled in from `values`: an unknown value
@@ -48,31 +72,6 @@ def fill(text: str, values: dict[str, Any]) -> str:
         return text.format_map({name: Unknown() if value is None else value for name, value in values.items()})
     except (KeyError, IndexError, ValueError, TypeError):
         return text
-
-
-class Unknown:
-    """A value not known, as `fill` writes it: "-", whatever the format asks."""
-
-    def __format__(self, spec: str) -> str:
-        return "-"
-
-
-def same(a: Any, b: Any) -> bool:
-    return type(a) is type(b) and a == b  # True and 1 stay apart
-
-
-def minutes(m: float) -> timedelta:
-    """`m` minutes. It must be a number that isn't negative (true / false aren't numbers here)."""
-    if isinstance(m, bool) or not isinstance(m, int | float):
-        raise TypeError(f"minutes are a number, not {m!r}")
-    if m < 0:
-        raise ValueError(f"minutes can't be {m:g}")
-    return timedelta(minutes=m)
-
-
-def is_number(x: Any) -> bool:
-    return isinstance(x, int | float)  # bool too: true counts as 1
-
 
 # chances
 
@@ -90,33 +89,6 @@ def chance(p: float, rng: np.random.Generator | None = None) -> bool:
     """True with probability p (surely at 1, never at 0)."""
     return p >= 1.0 or (p > 0.0 and (rng or np.random.default_rng()).random() < p)
 
-
-# text similarity
-
-def grams(text: str, n: int = 3) -> list[str]:
-    """Character n-grams of each word, with its edges: "Gmail" gives " gm", "gma", ..., "il "."""
-    out = []
-    for word in re.findall(r"\w+", text.lower()):
-        word = f" {word} "
-        out += [word[i:i + n] for i in range(len(word) - n + 1)]
-    return out
-
-
-def vector(tokens: list[str], idf: dict[str, float]) -> dict[str, float]:
-    """The tokens' TF-IDF vector, of length 1 (empty: no tokens)."""
-    counts = Counter(tokens)
-    v = {w: n * idf.get(w, 1.0) for w, n in counts.items()}
-    norm = math.sqrt(sum(x * x for x in v.values()))
-    return {w: x / norm for w, x in v.items()} if norm else {}
-
-
-def cosine(a: dict[str, float], b: dict[str, float]) -> float:
-    """The cosine similarity of two vectors of length 1."""
-    if len(a) > len(b):
-        a, b = b, a
-    return sum(x * b.get(w, 0.0) for w, x in a.items())
-
-
 # waiting
 
 def wait_until(condition: Callable[[], bool], timeout: float) -> None:
@@ -129,7 +101,6 @@ def wait_while(condition: Callable[[], bool], timeout: float) -> None:
     deadline = time.monotonic() + timeout
     while condition() and time.monotonic() < deadline:
         time.sleep(0.2)
-
 
 # commands
 
