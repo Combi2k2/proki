@@ -6,7 +6,7 @@ import re
 import shutil
 import time
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -15,13 +15,17 @@ import numpy as np
 def same(a: Any, b: Any) -> bool:
     return type(a) is type(b) and a == b  # True and 1 stay apart
 
-def numeric(x: Any) -> bool:
-    return isinstance(x, int | float)  # bool too: true counts as 1
-
 def boolean(x: Any) -> bool:
     return isinstance(x, bool)
 
+def numeric(x: Any) -> bool:
+    return isinstance(x, int | float) and not boolean(x)
+
 # names
+
+def joined(at: str, key: str) -> str:
+    """A path one key further: tasks and steps as tasks.steps (either empty: the other)."""
+    return f"{at}.{key}" if at and key else at or key
 
 def snake(name: str) -> str:
     """TsMean as ts_mean: how a class is named in expressions and the config."""
@@ -43,6 +47,14 @@ def ident(name: Any) -> bool:
     return True
 
 # times
+def minutes(t: datetime | None) -> float | None:
+    """A time as minutes since 1970."""
+    return t.timestamp() / 60 if t else None
+
+def moment(m: float | None) -> datetime | None:
+    """Minutes since 1970, as a time."""
+    return None if m is None else datetime.fromtimestamp(m * 60, UTC)
+
 def span(said: float | str) -> timedelta:
     """Read minutes or a duration such as 30s, 5min, 1h, or 2d."""
     if isinstance(said, str):
@@ -51,10 +63,8 @@ def span(said: float | str) -> timedelta:
         if not found:
             raise ValueError(f"a time is minutes, or a number and s, min, h or d ({said!r})")
         return timedelta(minutes=float(found[1]) * units[found[2]])
-    if boolean(said) or not numeric(said):
-        raise TypeError(f"minutes are a number, not {said!r}")
-    if said < 0:
-        raise ValueError(f"minutes can't be {said:g}")
+    if not numeric(said):   raise TypeError(f"minutes are a number, not {said!r}")
+    if said < 0:            raise ValueError(f"minutes can't be {said:g}")
     return timedelta(minutes=said)
 
 # string format
