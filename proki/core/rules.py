@@ -1,31 +1,29 @@
-"""Rules: a comparison of two expressions that gives a chance of acting, not a plain yes/no.
+"""Rules: two expressions compared, giving a chance of acting rather than a plain yes or no.
 
     {"name": "busy", "lhs": "keys_5m", "cmp": "gt", "rhs": 30, "softness": 5}
 
-`lhs` and `rhs` are expressions (a name, a number, `ts_mean(keys, 5)`, ...), compared
-with `cmp`: gt (>), ge (>=), lt (<), le (<=), eq (==) or ne (!=).
+Each side is an expression (a name, a number, `ts_mean(keys, 5)`, ...), compared by `cmp`:
+gt (>), ge (>=), lt (<), le (<=), eq (==) or ne (!=).
 
-Softness: with softness 0 (the default), the rule is a plain comparison: it fires
-(chance 1) when it holds, else not (0). With softness s > 0, the chance rises smoothly
-as lhs passes rhs, like an LLM's temperature. With z = (lhs - rhs) / s:
+With no softness, it's a plain comparison: it fires when it holds, else not. With softness s,
+the chance moves smoothly as lhs passes rhs:
 
-    gt, ge   equal: 50%, s above: 73%, 2s above: 88%, s below: 27%, 2s below: 12%
-    lt, le   the same, mirrored
-    eq       equal: 100%, s apart: 61%, 2s apart: 14%
-    ne       100% minus eq's chance
+    gt, ge    50% equal, 73% s above, 88% 2s above, 27% s below, 12% 2s below
+    lt, le    the same, mirrored
+    eq        100% equal, 61% s apart, 14% 2s apart
+    ne        the rest of eq's
 
-So "busy" above is 50% at 30 keys a minute, 73% at 35, 88% at 40.
+So "busy" is 50% at 30 keys a minute, 73% at 35, 88% at 40.
 
-Only numbers are compared (True / False count as 1 / 0). If either side is unknown or
-text, the rule doesn't fire.
+Only numbers are compared (True and False count as 1 and 0): with either side unknown or
+text, it doesn't fire.
 
-A rule keeps no history: `decide()` samples its chance at that moment, so how often it
-gets the chance to fire is up to whoever asks (a state's `every`). Each side is a hidden
-signal (`<rule>.lhs`, `<rule>.rhs`), so windows in it move on every cycle.
+A rule fires, or not, when it's asked, from the sides as they are then; how often it's asked
+is up to whoever asks. Its sides' windows move on every cycle, asked or not.
 
-Several rules decide together with `Rule.vote()`, by `level`, highest first: a level passes
-when more than half of its rules fire, and the vote stops at the first level that doesn't.
-To require all of several rules, give each its own level.
+Several rules decide together by level, the highest first: a level passes when more than half
+of its rules fire, and the first that doesn't ends it. To require each of several rules, give
+each its own level.
 """
 
 from __future__ import annotations
@@ -38,7 +36,7 @@ import numpy as np
 
 from proki.core.signals import Signal
 from proki.errors import ConfigError, RuleError
-from proki.utils import bell, chance, is_number, sigmoid
+from proki.utils import bell, chance, numeric, sigmoid
 
 COMPARE = {
     "gt": operator.gt, "ge": operator.ge,
@@ -49,7 +47,8 @@ SYMBOL = {"gt": ">", "ge": ">=", "lt": "<", "le": "<=", "eq": "==", "ne": "!="}
 
 
 class Rule:
-    """A soft comparison of two expressions (see above)."""
+    """Two expressions compared, softly (see above). RuleError for a missing side, an unknown
+    comparison, a negative softness or a level that isn't a whole number."""
 
     registry: ClassVar[dict[str, Rule]] = {}  # every rule, by name
 
@@ -69,7 +68,7 @@ class Rule:
             if rhs is None: raise RuleError("rhs is missing")
             if cmp is None or cmp not in COMPARE:
                 raise RuleError(f"compare operator has to be one of {', '.join(COMPARE)}")
-            if isinstance(softness, bool) or not isinstance(softness, int | float):
+            if not numeric(softness):
                 raise RuleError(f"softness is a number ({softness!r})")
             if softness < 0:
                 raise RuleError("softness can't be negative")
@@ -78,7 +77,7 @@ class Rule:
 
             self.name = name
             self.desc = desc  # what it's for, in a line
-            self.lhs = Signal(f"{name}.lhs", str(lhs))
+            self.lhs = Signal(f"{name}.lhs", str(lhs))  # named: moved on every cycle, like any signal
             self.rhs = Signal(f"{name}.rhs", str(rhs))
             self.lhs.inputs, self.rhs.inputs  # compiled now: a mistake shows with the rule's name
             self.cmp = cmp
@@ -89,11 +88,11 @@ class Rule:
         Rule.registry[name] = self
 
     def chance(self) -> float:
-        """The chance of firing now, from 0 to 1, given the sides' current values."""
+        """Its chance of firing now, from 0 to 1."""
         a = self.lhs.current()
         b = self.rhs.current()
-        if not is_number(a):    return 0.0
-        if not is_number(b):    return 0.0
+        if not isinstance(a, int | float):  return 0.0
+        if not isinstance(b, int | float):  return 0.0
         if self.softness == 0:
             return 1.0 if COMPARE[self.cmp](a, b) else 0.0
 
@@ -104,7 +103,7 @@ class Rule:
         return 1 - bell(z)
 
     def decide(self, rng: np.random.Generator | None = None) -> bool:
-        """Whether it fires now: a random draw with its current chance."""
+        """Whether it fires now, drawn at its chance."""
         return chance(self.chance(), rng)
 
     def __repr__(self) -> str:
@@ -113,10 +112,9 @@ class Rule:
 
     @classmethod
     def vote(cls, rules: Iterable[Rule], rng: np.random.Generator | None = None) -> bool:
-        """Whether `rules` trigger now. They're grouped by level and voted level by level,
-        highest first: a level passes when more than half of its rules fire (each drawn
-        once). The first level that doesn't pass ends the vote with False. Lower levels
-        aren't drawn."""
+        """Whether `rules` fire together now: level by level, the highest first, a level passing
+        when more than half of its rules fire. The first that doesn't ends it: no; the ones
+        below aren't asked."""
         levels: dict[int, list[Rule]] = {}
         for rule in rules:
             levels.setdefault(rule.level, []).append(rule)
