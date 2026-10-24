@@ -1,6 +1,8 @@
 """delay(x, d): x as it was d minutes ago.
 
-    focus - delay(focus, 2)   how much focus changed in the last 2 minutes
+    focus - delay(focus, 2)           how much focus changed in the last 2 minutes
+
+Unknown for the first d minutes.
 """
 
 from __future__ import annotations
@@ -9,31 +11,27 @@ from datetime import datetime
 from typing import Any
 
 from proki.core.ops.base import Operand, Queued
-from proki.utils import minutes
+from proki.utils import span
 
 
 class Delay(Queued):
-    """x as it was `d` minutes ago: the latest value x took at or before t - d.
-
-    It's fresh when the value it gives changes, which is d minutes after x took it, not
-    when x itself is fresh. For a slow x, the two differ."""
+    USAGE = "delay(x, d)"
+    ABOUT = "x as it was d minutes ago"
 
     def __init__(self, x: Operand, d: float):
-        super().__init__(x, minutes(d))
-        self._typed = None
-        self._infer = lambda of: of(self.inputs[0])  # its input's
-
-    at: datetime | None = None
-    shown: datetime | None = None  # when x took the value delay gives now
+        super().__init__(x, span(d))
+        self._typed, self._infer = None, lambda of: of(self.inputs[0])  # its input's
+        self.at   : datetime | None = None   # t − d
+        self.shown: datetime | None = None   # when x took the value it gives now
 
     def advance(self, t: datetime) -> None:
         super().advance(t)
         shown = self.queue[0][0] if self.queue and self.at is not None and self.queue[0][0] <= self.at else None
-        self.fresh = shown is not None and shown != self.shown
+        self.fresh = shown is not None and shown != self.shown  # as the value it gives changes, d minutes after x's did
         self.shown = shown
 
     def drop(self, before: datetime) -> None:
-        while len(self.queue) > 1 and self.queue[1][0] <= before:  # keep the one holding at t − d
+        while len(self.queue) > 1 and self.queue[1][0] <= before:  # the one holding at t − d stays
             self.queue.popleft()
         self.at = before
 

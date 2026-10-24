@@ -1,34 +1,25 @@
 """ts_mean(x, w): the average of x's known values in the last w minutes (True counts as 1).
+
+    ts_mean(focus, 5)                 your focus, the last 5 minutes
+    ts_mean(session.active, 60)       the share of this hour you were in a session
+
+Unknown if none is known.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
-from proki.core.ops.base import Operand, Queued
-from proki.utils import minutes
+from proki.core.ops.base import Operand, TsArithmetic
+from proki.utils import span
 
 
-class TsMean(Queued):
-    """Keeps a running total and count of the known values, so each cycle costs little."""
+class TsMean(TsArithmetic):
+    USAGE = "ts_mean(x, w)"
+    ABOUT = "the average of the known values over the last w minutes"
 
     def __init__(self, x: Operand, w: float):
-        super().__init__(x, minutes(w))
-        self.total, self.known = 0.0, 0
-
-    def take(self, t: datetime, v: Any) -> None:
-        super().take(t, v)
-        if v is not None:
-            self.total += float(v)
-            self.known += 1
-
-    def pop(self, row: tuple[datetime, Any]) -> None:
-        if row[1] is not None:
-            self.total -= float(row[1])
-            self.known -= 1
-            if self.known == 0:
-                self.total = 0.0  # no rounding drift
+        super().__init__(x, span(w))
 
     def compute(self) -> Any:
         return self.total / self.known if self.known else None
