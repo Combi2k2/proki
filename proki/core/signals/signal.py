@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from proki.core.signals.expr import compile_expr, parse
+from proki.core.signals.expr import Expr, parse
 from proki.core.signals.stream import Stream
 from proki.errors import SignalError
 
@@ -35,7 +35,7 @@ class Signal(Stream):
     @property
     def inputs(self) -> list[Stream]:  # type: ignore[override]
         if self._tree is None:
-            self._tree = compile_expr(self.expr)
+            self._tree = Expr(self.expr).stream()
         return [self._tree]
 
     def advance(self, t: datetime) -> None:

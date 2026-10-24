@@ -24,7 +24,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, ClassVar, Protocol
 
-from proki.core.signals.expr import compile_expr
+from proki.core.signals.expr import Expr
 from proki.core.signals.signal import Signal
 from proki.core.signals.stream import Stream
 from proki.types import accept, oftype, typename, typeof
@@ -113,7 +113,7 @@ class Variable(Stream):
         """Back to its starting value: the constant, or the expression as it reads now (not
         started yet: as it is)."""
         if self.start is None:
-            self.set(compile_expr(self.initial).current() if isinstance(self.initial, str) else self.initial)
+            self.set(Expr(self.initial).value() if isinstance(self.initial, str) else self.initial)
 
     def _load(self, start: Any) -> bool:
         """Whether it took its saved value: one of the kind it starts as."""

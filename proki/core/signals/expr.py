@@ -52,6 +52,7 @@ from proki.core import ops
 from proki.core.signals.stream import Stream
 from proki.types import field, itemof, listof, typeof, typename
 from proki.errors import ExprError
+from proki.utils import snake
 
 
 @lru_cache(maxsize=256)
@@ -63,16 +64,57 @@ def parse(expr: str) -> ast.expr:
         raise ExprError(f"can't read {expr!r}: {e.msg}") from None
 
 
-def compile_expr(expr: str) -> Stream:
-    """The expression's value, a stream, each name the stream of that name. ExprError, naming
-    the expression, for a mistake the text shows."""
-    try:
-        result = _build(parse(expr))
-    except ExprError:
-        raise
-    except (TypeError, ValueError, ArithmeticError) as e:  # a wrong argument, `"a" + 1`, ...
-        raise ExprError(f"{expr!r}: {e}") from None
-    return result if isinstance(result, Stream) else ops.Constant(result)
+class Expr(str):
+    """An expression: `keys > 5`, `work.tasks[0].status`. ExprError if it isn't one."""
+
+    def __new__(cls, text: Any) -> Expr:
+        made      = super().__new__(cls, str(text))
+        made.tree = parse(made)
+        return made
+
+    @property
+    def lvalue(self) -> bool:
+        """Whether it can be set: `x`, `x.a`, `xs[0].a`."""
+        node = self.tree
+        while isinstance(node, ast.Attribute | ast.Subscript):
+            node = node.value
+        return isinstance(node, ast.Name)
+
+    @property
+    def rvalue(self) -> bool:
+        """Whether it can be worked out: any expression can."""
+        return True
+
+    @property
+    def window(self) -> str | None:
+        """Its first window: "ts_mean" (None: none, or only by a signal's name)."""
+        def walk(stream: Stream) -> str | None:
+            if stream.name and Stream.registry.get(stream.name) is stream:
+                return None  # a named stream: it moves on every cycle anyway
+            if not isinstance(stream, ops.Lift | ops.Constant):
+                return snake(type(stream).__name__)
+            return next((w for i in stream.inputs if (w := walk(i)) is not None), None)
+
+        return walk(self.stream())
+
+    @property
+    def type(self) -> Any:
+        """Its type."""
+        return self.stream().type
+
+    def value(self) -> Any:
+        """Its value now (None: unknown)."""
+        return self.stream().current()
+
+    def stream(self) -> Stream:
+        """Its value, as a stream: a new one each call. ExprError for a mistake the text shows."""
+        try:
+            result = _build(self.tree)
+        except ExprError:
+            raise
+        except (TypeError, ValueError, ArithmeticError) as e:  # a wrong argument, `"a" + 1`, ...
+            raise ExprError(f"{self!r}: {e}") from None
+        return result if isinstance(result, Stream) else ops.Constant(result)
 
 
 def _lift(f: Any, *args: Any, unknown: bool = False, type: Any = "any") -> Any:
