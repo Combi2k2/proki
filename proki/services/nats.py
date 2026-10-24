@@ -1,17 +1,12 @@
 """A message bus: parts of an app, in one process or several, sending each other JSON.
 
-    await bus.subscribe("orders.new", handle)                  this part answers that subject
-    await bus.request("orders.new", {"item": ...}, timeout=5)  ask, and wait for the reply
-    await bus.publish("orders.shipped", {"id": ...})           a one-way message
+    await bus.subscribe("orders.new", handle)                  answer that subject: `async def handle(data)`,
+                                                               what it returns the reply
+    await bus.request("orders.new", {"item": ...}, timeout=5)  ask, and wait for the reply (None: none in time)
+    await bus.publish("orders.shipped", {"id": ...})           a message, no reply
 
-A subject is a mailbox's name. A request goes to one of the subject's subscribers, and the
-reply comes back to a private one-off mailbox the bus makes for that request. No reply
-(nobody answered, or not in time) is None. A subscriber is `async def handle(data)`, and
-what it returns is the reply: it can take its time (an LLM, a question you haven't
-answered yet) without holding anything else up.
-
-    NatsBus    over a NATS server: every part can be its own process, each subject a queue
-    LocalBus   in this process, for when there's no server, and for tests
+    NatsBus    over a NATS server: each part can be its own process
+    LocalBus   in this process: no server, and for tests
 """
 
 from __future__ import annotations
@@ -43,7 +38,7 @@ class Bus(Protocol):
 
 
 class LocalBus(Bus):
-    """Subjects in this process: a request goes to the subject's first subscriber."""
+    """The bus in this process."""
 
     def __init__(self):
         self.handlers: dict[str, list[tuple[Handler, asyncio.Semaphore]]] = {}
@@ -71,8 +66,7 @@ class LocalBus(Bus):
 
 
 class NatsBus(Bus):
-    """A connection to a NATS server. Subscribers of a subject share a queue group, so
-    several processes can serve one subject and each message goes to one of them."""
+    """The bus over a NATS server: several processes can answer one subject, each message answered once."""
 
     def __init__(self, client: Any):
         self.client = client  # nats-py's connection (`NatsBus.connect`)
@@ -90,7 +84,7 @@ class NatsBus(Bus):
 
     @staticmethod
     def is_up(host: str, port: int) -> bool:
-        """Whether a server listens at `host`:`port` (before connecting: it may have to be started)."""
+        """Whether a server is up at `host`:`port`."""
         try:
             with socket.create_connection((host, port), timeout=0.5):
                 return True

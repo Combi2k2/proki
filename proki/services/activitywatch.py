@@ -1,23 +1,18 @@
-"""ActivityWatch, the tracker (imported as `aw`): its REST API (http://host:port/api/0,
-`is_up`: whether it answers), what its watchers record, and how to look up a moment in it.
+"""ActivityWatch, the tracker (as `aw`): what its watchers recorded, and what held at a moment.
 
-Watchers store events in typed buckets as (timestamp, duration, data), with identical
-neighbours merged. The bucket types read here:
+    client = ActivityWatchClient("127.0.0.1", 5600)
+    record = Record.fetch(start, end, client)
+    record["currentwindow"].covering(t)     →  Event(start, end, {"app": "Code", "title": ...}): what
+                                               held at t (None: unknown)
 
-    WINDOW   the window watcher      {"app", "title"} (on macOS, also "url" in a browser)
-    WEBTAB   the browser extension   {"url", "title"}
-    INPUT    the input watcher       {"presses" (down and up), "clicks", "deltaX", "deltaY",
-                                      "scrollX", "scrollY"}, an event every ~5 s
-    AFK      the AFK watcher         {"status": "afk" / "not-afk"}
+What each watcher records:
 
-Watchers report every few seconds and send their reports in batches: neighbouring events
-leave tiny gaps, and the newest event ends a little before now. So an event's value holds
-until the next event starts, for at most `HOLD` after its end. Longer gaps are unknown. Two
-events can start at once (a window watcher's report, and its 0 s twin): the longer holds.
+    the window      {"app", "title"} (on macOS, also "url" in a browser)
+    the web tab     {"url", "title"}
+    the input       {"presses", "clicks", "deltaX", "deltaY", "scrollX", "scrollY"}, every few seconds
+    being away      {"status": "afk" or "not-afk"}
 
-    ActivityWatchClient   the server: its buckets, and their events
-    Record                what the watchers recorded over a while, each bucket type's
-                          `Events`, fetched when first asked for
+A value holds until the next one, or a little after its own end. A longer gap is unknown.
 """
 
 from __future__ import annotations
@@ -29,10 +24,10 @@ from typing import NamedTuple
 
 import requests
 
-WINDOW = "currentwindow"
-WEBTAB = "web.tab.current"
-INPUT = "os.hid.input"
-AFK = "afkstatus"
+WINDOW  = "currentwindow"
+WEBTAB  = "web.tab.current"
+INPUT   = "os.hid.input"
+AFK     = "afkstatus"
 
 # how long a value outlives its event (see above)
 HOLD = {
@@ -50,13 +45,13 @@ class Event(NamedTuple):
 
     @classmethod
     def parse(cls, raw: dict) -> Event:
-        """From the server's JSON: {"timestamp", "duration" (s), "data"}."""
+        """An event, as the server gives it."""
         start = datetime.fromisoformat(raw["timestamp"])
         return cls(start, start + timedelta(seconds=raw["duration"]), raw["data"])
 
 
 class Events:
-    """One bucket type's events, oldest first, searchable by time."""
+    """One watcher's events, oldest first."""
 
     def __init__(self, events: list[Event], hold: timedelta = timedelta(0)):
         self.events = sorted(events, key=lambda e: (e.start, e.end))  # twins: the longer last, the one that holds
@@ -68,7 +63,7 @@ class Events:
             if self._untils[i] > nxt:  self._untils[i] = nxt
 
     def covering(self, t: datetime) -> Event | None:
-        """The event whose value holds at t (start < t <= until)."""
+        """The event whose value holds at t (None: unknown)."""
         i = bisect_left(self._starts, t) - 1
         return self.events[i] if i >= 0 and t <= self._untils[i] else None
 
@@ -103,7 +98,7 @@ class ActivityWatchClient:
             return False
 
     def buckets(self) -> dict[str, dict]:
-        """Every bucket, by id: {"type": "currentwindow", "hostname": ..., ...}."""
+        """Every bucket, by id: what records it, and where."""
         return self._get("/buckets/")
 
     def events(
@@ -113,8 +108,8 @@ class ActivityWatchClient:
         end: datetime | None = None,
         limit: int | None = None,
     ) -> list[dict]:
-        """A bucket's events starting between `start` and `end` (default: any), at most
-        `limit` of them (the server's order isn't guaranteed to be newest first)."""
+        """A bucket's events that start between `start` and `end` (none: any), `limit` at most,
+        in no order."""
         params = {
             "start": start and start.isoformat(),
             "end": end and end.isoformat(),
@@ -130,8 +125,8 @@ class ActivityWatchClient:
 
 
 class Record:
-    """What the watchers recorded between `start` and `end`: `record[WINDOW]` is the
-    window watcher's `Events`, fetched when first asked for."""
+    """What the watchers recorded between `start` and `end`, each one's events by what it
+    records (above)."""
 
     def __init__(self, start: datetime, end: datetime, fetch: Callable[[str], list[Event]]):
         self.start = start
@@ -149,7 +144,7 @@ class Record:
 
     @classmethod
     def of(cls, start: datetime, end: datetime, events: dict[str, list[Event]]) -> Record:
-        """A recording from events in hand (tests, replays)."""
+        """A record of events in hand (tests, replays)."""
         return cls(start, end, lambda bucket_type: events.get(bucket_type, []))
 
     @classmethod
@@ -160,12 +155,8 @@ class Record:
         client: ActivityWatchClient,
         previous: Record | None = None,
     ) -> Record:
-        """From the server, each bucket type when first asked for.
-
-        Each bucket is read from where its newest event known from the `previous` fetch
-        starts, not just from `start`: that event may still be running (a window you stay
-        in, a tab you stay on), and the server only returns events that start in the range.
-        Only those times are kept from `previous`, so it can be let go."""
+        """The record, from the server. With the `previous` one, an event still going on
+        since then (a window you stay in) is in it too."""
         known = dict(previous.newest) if previous is not None else {}
         buckets: dict[str, dict] = {}
 

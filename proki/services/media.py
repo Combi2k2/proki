@@ -1,30 +1,19 @@
-"""A media library: pictures and sounds, each a copy in a folder of its own, listed in a
-database (`media`, `media_pools`, `media_picks`).
+"""The media library: pictures and sounds, the dev's and yours, and pools to draw them from.
 
-    key          what picks and pools know it by, and it never changes. The dev's: its path
-                 under the assets, without its extension ("bugcat/sad", "alarm-clock").
-                 Yours: from its content ("yours/3f9a1c2e"), so a file added twice is kept once
-    name         what you see, yours to rename: the dev's key, or your file's name ("gong")
-    kind         "image" or "sound"
-    file         its copy, in proki's data folder
-    added_by     "dev" (it ships with proki) or "you"
-    deleted_at   when you deleted it (None: it's in the library). A week later it's gone,
-                 its copy too
-
-    lib = Library(db, assets, folder, pools)    the first time: the dev's files, pools and picks in.
-                                                Never again: one you delete stays deleted
-
-    lib.get(kind, keys, offset, limit)          what's in the library, and how many in all
-    lib.add(path)                               a copy of your file in: its key
-    lib.rename(key, name)                       one's name
-    lib.remove(key, used)                       one deleted (not one in `used`)
-    lib.purge()                                 the ones deleted a week ago or more, gone
-
-    lib.pools()                                 every pool: a named list of keys to draw from
+    lib = Library(db, assets, folder, pools)        the library: the dev's files, pools and picks in the
+                                                    first time (one you delete stays deleted)
+    lib.get(kind, keys, offset, limit)              what's in it, and how many in all
+    lib.add(path)                                   your file in: its key
+    lib.rename(key, name)                           one's name
+    lib.remove(key, used)                           one deleted (not one still used): gone a week later
+    lib.purge()                                     the ones deleted a week ago, gone
+    lib.pools()                                     every pool: a named list of keys to draw from
     lib.get_pool(name), lib.set_pool(name, keys)
-    lib.get_picks(id),  lib.set_picks(id, keys) an action's picks: what a poke or a question
-                                                draws from, by its id
-    lib.draw(keys, kind)                        one of `keys` at random, of `kind`, as its file
+    lib.get_picks(id),  lib.set_picks(id, keys)     what a poke or a question draws from, by its id
+    lib.draw(keys, kind)                            one of `keys` at random, as its file
+
+Each is known by its key, which never changes: the dev's its path ("bugcat/sad"), yours its
+content's ("yours/3f9a1c2e": a file added twice is there once). Its name is what you see.
 """
 
 from __future__ import annotations
@@ -75,8 +64,8 @@ class Library:
     EMOJIS: ClassVar[str]      = "emojis.json"         # under the assets: the dev's pools and picks, {"pools": ..., "picks": ...}
 
     def __init__(self, db: sqlite3.Connection, assets: Path, folder: Path, pools: Iterable[str] = ()):
-        """The library in `db`: the dev's files under `assets` (media/, sounds/), every copy
-        in `folder`, and the `pools` whoever uses it draws from (listed even before they're set)."""
+        """The library in `db`: the dev's files from `assets`, the copies in `folder`, and the
+        `pools` it draws from (listed even before they're set)."""
         self.db, self.assets, self.folder, self.names = db, assets, folder, set(pools)
         tables = {name for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         db.executescript(SCHEMA)
@@ -84,7 +73,7 @@ class Library:
         if "media_picks" not in tables:  self.seed_emojis()
 
     def seed(self) -> None:
-        """Every file of the dev's copied in, by its path under the assets."""
+        """The dev's files in."""
         for path in sorted(self.assets.rglob("*")):
             kind = self.KINDS.get(path.suffix.lower())
             if kind is not None:
@@ -94,7 +83,7 @@ class Library:
                 self.put(key, key, kind, path, "dev")
 
     def seed_emojis(self) -> None:
-        """The dev's pools, and picks for the actions proki ships: the ones of their keys in the library."""
+        """The dev's pools, and the picks of the actions proki ships."""
         path = self.assets / self.EMOJIS
         emojis = json.loads(path.read_text()) if path.exists() else {}
         for name, keys in emojis.get("pools", {}).items():  self.set_pool(name, [m["key"] for m in self.get(keys=keys)[0]])
@@ -104,9 +93,8 @@ class Library:
 
     def get(self, kind: str | None = None, keys: list[str] | None = None,
             offset: int = 0, limit: int | None = None) -> tuple[list[dict], int]:
-        """What's in the library, and how many in all: of `kind`, and the ones of `keys` (in
-        their order, one not there left out), else yours first, the newest first. A page of
-        it: from `offset`, `limit` of them."""
+        """What's in the library, and how many in all: of `kind`, the ones of `keys` (in their
+        order) or yours first, the newest first. A page: from `offset`, `limit` of them."""
         where, args = ["deleted_at IS NULL"], []
         if kind:              where.append("kind = ?");                                 args.append(kind)
         if keys is not None:  where.append(f"key IN ({','.join('?' * len(keys))})");    args.extend(keys)
@@ -119,8 +107,8 @@ class Library:
         return rows[offset:None if limit is None else offset + limit], len(rows)
 
     def add(self, path: Path) -> str:
-        """A copy of your file at `path` in, named as the file is (the same file again: the one
-        there already, back if it was deleted). Its key. ValueError for one proki can't play."""
+        """Your file in, named as it is (again: back if it was deleted). Its key. ValueError:
+        one proki can't show or play."""
         kind = self.KINDS.get(path.suffix.lower())
         if kind is None:        raise ValueError(f"{path.name}: a picture or a sound is one of {', '.join(self.KINDS)}")
         if not path.is_file():  raise ValueError(f"{path}: no such file")
@@ -129,7 +117,7 @@ class Library:
         return key
 
     def rename(self, key: str, name: str) -> None:
-        """One's name, a line of text: its key stays. ValueError for one that isn't there."""
+        """One's name, a line of text. ValueError: none there."""
         name = name.strip()
         if not self.has(key):            raise ValueError(f"no media {key!r}")
         if not name or "\n" in name:     raise ValueError("a name is a line of text")
@@ -137,16 +125,15 @@ class Library:
             self.db.execute("UPDATE media SET name = ? WHERE key = ?", (name, key))
 
     def remove(self, key: str, used: set[str]) -> None:
-        """One deleted: out of the library, and gone for good a week later (`purge`).
-        ValueError for one that isn't there, or one still used (`used`: what the pokes'
-        and questions' picks and the pools name)."""
+        """One deleted, gone for good a week later. ValueError: none there, or one in `used`
+        (a pool's, or a poke's or question's picks)."""
         if not self.has(key):   raise ValueError(f"no media {key!r}")
         if key in used:         raise ValueError(f"{key!r} is still used: take it out of there first")
         with self.db:
             self.db.execute("UPDATE media SET deleted_at = ? WHERE key = ?", (now(), key))
 
     def purge(self) -> None:
-        """The ones deleted a week ago or more, gone: their rows, and their copies."""
+        """The ones deleted a week ago or more, gone for good."""
         before = (datetime.now(UTC) - self.KEEP).isoformat()
         gone   = self.db.execute("SELECT file FROM media WHERE deleted_at < ?", (before,)).fetchall()
         with self.db:
@@ -158,7 +145,7 @@ class Library:
     # --- pools, picks, and drawing ------------------------------------------------------------
 
     def pools(self) -> dict[str, list[str]]:
-        """Every pool: the ones named, and any other set."""
+        """Every pool, by name."""
         names = {name for (name,) in self.db.execute("SELECT DISTINCT pool FROM media_pools")}
         return {name: self.get_pool(name) for name in sorted(names | self.names)}
 
@@ -175,7 +162,7 @@ class Library:
         self.relist("media_picks", "id", id, keys)
 
     def draw(self, keys: list[str], kind: str | None = None) -> str | None:
-        """One of `keys` at random, of `kind`, as its file (None: none of them is there)."""
+        """One of `keys` at random, of `kind`, as its file (None: none there)."""
         files = [row["file"] for row in self.get(kind, keys=list(keys))[0]]
         return random.choice(files) if files else None
 
@@ -186,8 +173,7 @@ class Library:
         return self.get(keys=[key])[1] > 0
 
     def put(self, key: str, name: str, kind: str, path: Path, added_by: str) -> None:
-        """The file at `path` copied in as `key` (one already there: back if it was deleted,
-        with the name it had)."""
+        """The file at `path` in, as `key` (there already: back, with its name)."""
         copy = self.folder / f"{key}{path.suffix.lower()}"
         copy.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, copy)
@@ -201,7 +187,7 @@ class Library:
         return [key for (key,) in self.db.execute(f"SELECT key FROM {table} WHERE {column} = ? ORDER BY pos", (name,))]
 
     def relist(self, table: str, column: str, name: str, keys: list[str]) -> None:
-        """A pool's or an action's keys, as `keys`. ValueError for one not in the library."""
+        """A pool's or an action's keys, as `keys`. ValueError: one not there."""
         if missing := set(keys) - {m["key"] for m in self.get(keys=keys)[0]}:
             raise ValueError(f"no media {', '.join(sorted(missing))}")
         with self.db:

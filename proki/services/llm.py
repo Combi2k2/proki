@@ -1,18 +1,14 @@
-"""An LLM: one client for every service that speaks the OpenAI chat-completions API (Gemini,
-NVIDIA, Anthropic, OpenAI, Mistral, a local Ollama, ...).
+"""An LLM: any service that speaks the OpenAI chat API (Gemini, Anthropic, OpenAI, Mistral,
+a local Ollama, ...).
 
     llm = Llm("https://generativelanguage.googleapis.com/v1beta/openai", api_key="...", model="gemini-2.5-flash")
+    llm.ask("Which goal does this task serve?", context={"task": ..., "goals": [...]})    →  a text
+    llm.ask(..., schema={"type": "object", "properties": {...}})                          →  the JSON
 
-    llm.ask("Which goal does this task serve?", context={"task": ..., "goals": [...]})  → text
-    llm.ask(..., schema={"type": "object", "properties": {...}})                        → the JSON, parsed
+    context   what it should know first: a text, or anything JSON holds
+    schema    the JSON schema its answer follows
 
-    context   what the model should know, sent before the question: text, or anything JSON
-              can hold (who it is, what it's for, the facts it needs)
-    schema    a JSON schema the answer must follow: the service's structured output, or,
-              for a service that has none, the schema written into the question
-
-When the model doesn't answer (an HTTP error, a failed call, an empty answer), `ask` raises
-LlmError. Which service and model to ask is the caller's to say.
+No answer (a failed call, an empty one) raises LlmError.
 """
 
 from __future__ import annotations
@@ -35,8 +31,7 @@ class Llm:
         self.timeout = timeout  # seconds
 
     def ask(self, prompt: str, context: Any = None, schema: dict | None = None, temperature: float = 0.2) -> Any:
-        """The answer to `prompt`: text, or the parsed JSON with a `schema`. Raises LlmError
-        when the model doesn't answer."""
+        """The answer to `prompt`: a text, or with a `schema` its JSON. LlmError: no answer."""
         body: dict[str, Any] = {
             "model": self.model,
             "messages": _messages(prompt, context),
@@ -68,7 +63,7 @@ class Llm:
 
 
 def _messages(prompt: str, context: Any) -> list[dict]:
-    """The context (if any) first, as the system's message, then the question."""
+    """What's sent: the context (if any), then the question."""
     messages = []
     if context is not None:
         text = context if isinstance(context, str) else json.dumps(context, ensure_ascii=False, indent=1, default=str)
@@ -77,8 +72,7 @@ def _messages(prompt: str, context: Any) -> list[dict]:
 
 
 def _schema_in_prompt(body: dict, schema: dict) -> dict:
-    """The request for a service without structured output: the schema written into the
-    question instead."""
+    """The request for a service that can't hold to a schema: it's asked for in words."""
     messages = [*body["messages"]]
     messages[-1] = {
         **messages[-1],
@@ -89,8 +83,7 @@ def _schema_in_prompt(body: dict, schema: dict) -> dict:
 
 
 def parse_json(text: str) -> Any:
-    """The JSON in a reply, also when it's fenced (```json) or wrapped in words. Raises
-    LlmError when there's none."""
+    """The JSON in a reply, words around it or not. LlmError: there's none."""
     try:
         return json.loads(text)
     except ValueError:

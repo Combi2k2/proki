@@ -1,18 +1,12 @@
-"""Running a service's programs, so its own tray app or launcher isn't needed.
+"""A service's programs, run by proki: no tray app or launcher of its own needed.
 
-A `Supervisor` runs a service's programs (its "modules": a server, and maybe a few clients
-of it), each a command line. The first module is the server, the one the others need up
-first:
+    sup = Supervisor("NATS", {"server": [...], "client": [...]}, healthy, log_dir)
+    sup.start()     the server first, the others once it's up: a short status for the tray
+    sup.check()     the ones that stopped, started again: their names
+    sup.stop()      all of them, the server last
 
-    start()   start them, the server first, the others once `healthy()` says it's up.
-              Returns a short status for the tray
-    check()   restart any that stopped. Returns their names
-    stop()    stop them, the server last
-
-If the service is already running (`healthy()` before anything is started), it's left
-alone, unless those are programs started in an earlier run that ended without cleaning up:
-their process ids are remembered (a pid file in `log_dir`), and they're stopped and started
-again. Each module's output goes to its log in `log_dir`.
+A service already running is left alone, unless proki started it last time and didn't stop
+it: then it's started again. Each program's output goes to its log in `log_dir`.
 """
 
 from __future__ import annotations
@@ -48,7 +42,7 @@ class Supervisor:
         self.external = False  # already running, not started here
 
     def clean(self) -> bool:
-        """Stop the modules an earlier run started but never stopped."""
+        """Stop what an earlier run started and never stopped: whether there was any."""
         if not self.pid_file.exists():
             return False
         found = False
@@ -78,7 +72,7 @@ class Supervisor:
         return found
 
     def start(self) -> str:
-        """Start every module, the server first. Returns a short status for the tray."""
+        """Start them all, the server first: a short status for the tray."""
         if self.clean():    wait_while(self.healthy, self.timeout)
         if self.healthy():
             self.external = True
@@ -97,7 +91,7 @@ class Supervisor:
         return f"{self.name} started by proki"
 
     def check(self) -> list[str]:
-        """Restart any module that has stopped. Returns the names restarted."""
+        """Start again the ones that stopped: their names."""
         if self.external:
             return []
         restarted = []
@@ -110,7 +104,7 @@ class Supervisor:
         return restarted
 
     def stop(self) -> None:
-        """Stop the modules started here, the server last."""
+        """Stop the ones started here, the server last."""
         for module in reversed(list(self.processes)):
             process = self.processes.pop(module)
             if process.poll() is None:

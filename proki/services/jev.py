@@ -1,31 +1,19 @@
-"""jev: a structured-decision API. You describe a situation in a short text (`state`) and ask
-it named questions. It answers each one with a choice or a probability, never free text.
+"""jev: named questions about a short text, each answered with how likely each answer is.
 
     jev = Jev("https://api.openjev.sh/v1/systemone", api_key="...", model="openjev")
-    jev.ask('A person\'s task: "write the intro"', {
-        "size": {
-            "type": "choice",
-            "instructions": "How long will it take one focused person?",
-            "criteria": {
-                "short": "under 25 minutes",
-                "long": "more than 2 hours"
-            }
-        },
-        "vague": {"type": "noul", "instructions": "Is the task too vague to start?"},
+    jev.ask('A task: "write the intro"', {
+        "size":  {"type": "choice", "instructions": "How long?", "criteria": {"short": "under 25 min", "long": "over 2 h"}},
+        "vague": {"type": "noul",   "instructions": "Too vague to start?"},
+        "ready": {"type": "score",  "instructions": "How ready is it?", "criteria": ["not at all", "somewhat", "ready"]},
     })
-    →  {"size":  {"choice": "short", "probabilities": {"short": 0.8, "long": 0.2}},
-        "vague": {"noul": 0.1}}
+    →  {"size":  {"choice": "short", "probabilities": {"short": 0.8, "long": 0.2}, "confidence": 0.78},
+        "vague": {"noul": 0.1},
+        "ready": {"score": 1.4, "probabilities": {"0": 0.1, "1": 0.4, "2": 0.5}, "legend": [...], "confidence": 0.7}}
 
-Question types:
-
-    choice   pick one of `criteria` (option → what it means): its key, and each one's probability
-    noul     yes or no: the probability of yes
-    score    a level on a scale, `criteria` its levels in order (what each means, lowest first):
-             the score (2.97: between levels, by how likely each is), each level's probability
-             by its place ("0", "1", ...), the levels as `legend`, and the `confidence`
-
-Any service that speaks this shape fits: openjev (api.openjev.sh), a local jev, or another
-backend behind the same shape. Which one, and what's sent to it, is the caller's to say.
+    noul      yes or no: the probability of yes
+    choice    one of its criteria, {key: what it means}: the key picked, and each one's probability
+    score     a level of its criteria, what each means, lowest first: where it is (0 at the first),
+              and each level's probability, by its place
 """
 
 from __future__ import annotations
@@ -43,8 +31,8 @@ class Jev:
         self.timeout = timeout  # seconds per call
 
     def ask(self, state: str, questions: dict) -> dict:
-        """The answers to `questions` (name → question) about `state`, by question name (see
-        above). Raises `requests.RequestException` when the call fails or times out."""
+        """The answers to `questions` about `state`, by name (above). Raises
+        `requests.RequestException` when the call fails or times out."""
         response = requests.post(
             self.api_url,
             headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
