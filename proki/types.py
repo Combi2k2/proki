@@ -8,8 +8,7 @@
 
     {"type": "object", "properties": {"hours": {"type": "number"}}, "required": ["hours"]}
 
-Unknown (None) fits any type. A value set that doesn't fit its type is refused. A field said
-`readOnly` is kept by proki, not answered: an LLM isn't asked for it.
+Unknown (None) fits any type. A value set that doesn't fit its type is refused.
 
 A field of a list read across it gives each item's, and a field that is a list gives them
 all, one list (groups.tasks: every group's tasks).
