@@ -1,36 +1,44 @@
-"""Expressions: the text of the signal language, compiled into a tree of streams.
+"""Expressions: what signals, rules, a variable's starting value and actions are written in.
+They look like Python, but proki reads them itself, never runs them:
 
-Signals, rules, a variable's starting value and actions all use expressions. They are
-written in Python's syntax, but read by proki itself, not run by Python:
+    ts_mean(keys + mouse_click, 5)                    typing and clicking, the last 5 minutes
+    ts_sum(label == "Videos", 60)                     minutes on videos this hour
+    ts_mean(focus, 2) - delay(ts_mean(focus, 2), 2)   how focus moved, 2 minutes on 2
+    ts_count(app, 30) > 20 and not session.active     switching a lot, out of a session
 
-    ts_mean(keys + mouse_click, 5)
-    ts_sum(label == "Videos", 60)
-    ts_mean(focus_2m, 2) - delay(ts_mean(focus_2m, 2), 2)
-    ts_count(app_name, 30) > 20 and not session.active
+What one can hold:
 
-What an expression can contain:
-    numbers, text in quotes, True / False, None (unknown)
-    + - * / // %, comparisons (== != < <= > >=), `in` / `not in` a tuple of constants
-    `is None` / `is not None`: whether a value is unknown (never unknown itself)
-    and, or, not, `a if test else b` (unknown if the test is)
-    the operators of core/ops/ (ts_mean, every, delay, min, max, ...)
-    names of inputs, signals and variables
-    a field of a value: answer.hours, a key of answer's value (unknown if it has none)
+    values       numbers, text in quotes, True / False, None (unknown), a list of them:
+                 ['Something new']
+    names        inputs, signals and variables: focus, session.active
+    arithmetic   + - * / // %; + also joins two texts, or two lists:
+                 groups.name + ['Something new']
+    comparisons  == != < <= > >=; `in` / `not in` a tuple of values: app in ('Code', 'Xcode')
+    unknowns     x is None, x is not None (never unknown themselves)
+    logic        and, or, not; a if test else b
+    operators    ts_mean, every, delay, min, max, ... called by name
+    a field      of a value: answer.hours; of a list, every item's, as a list (a column):
+                 groups.name
+    an item      of a list by its place: groups[0], groups[-1] (the last); a part of one:
+                 queue[1:] (all but the first), queue[:3]
 
-Time is always in minutes: windows, delays, and rates (keys is presses per minute).
+Time is in minutes: windows, delays, rates (keys is presses per minute).
 
-Unknown values: a value that can't be worked out is None (unknown). That includes an
-unknown input, a division by zero, and text where a number goes. Anything worked out
-from an unknown value is unknown too, except `and` / `or` when one side already settles
-the answer (`True or unknown` is True).
+A value that can't be worked out is unknown: an unknown input, a missing field or item, a
+division by zero, text where a number goes. Anything worked out from an unknown value is
+unknown too, unless `and` / `or` is settled by the other side (`True or unknown` is True),
+and `a if test else b` is unknown if the test is.
 
-Each expression has a type: a name's, an operator's (ts_mean, + - * /: a number; comparisons,
-and / or / not: a boolean; text + text: a text; `a if t else b`: theirs, if they share one), a
-field's from its value's schema. One that rests on what it reads is worked out once all is
-built, as it reads it then.
+What each gives:
 
-Mistakes visible in the text itself (an unknown name, a missing argument, `"a" + 1`, a
-window that isn't a number) raise ExprError when the expression is compiled.
+    a name                    its value, of its type
+    arithmetic, operators     a number (text + text: a text; list + list: a list)
+    comparisons, logic        true or false
+    a if t else b, [a, b]     a and b's type, if they share one (a list of it)
+    a field, an item          as its value's or its list's type says
+
+A mistake the text shows is an ExprError as proki reads it: an unknown name, a missing
+argument, `"a" + 1`, a window that isn't a number.
 """
 
 from __future__ import annotations
@@ -42,13 +50,13 @@ from typing import Any
 
 from proki.core import ops
 from proki.core.signals.stream import Stream
-from proki.core.signals.types import field, typeof
+from proki.types import field, itemof, listof, typeof, typename
 from proki.errors import ExprError
 
 
 @lru_cache(maxsize=256)
 def parse(expr: str) -> ast.expr:
-    """The expression's syntax tree. ExprError if it isn't valid syntax."""
+    """The expression, read. ExprError if it isn't written right."""
     try:
         return ast.parse(expr, mode="eval").body
     except SyntaxError as e:
@@ -56,8 +64,8 @@ def parse(expr: str) -> ast.expr:
 
 
 def compile_expr(expr: str) -> Stream:
-    """The expression as a stream, its names looked up in `Stream.registry`. Any mistake
-    the text shows becomes an ExprError naming the expression."""
+    """The expression's value, a stream, each name the stream of that name. ExprError, naming
+    the expression, for a mistake the text shows."""
     try:
         result = _build(parse(expr))
     except ExprError:
@@ -68,22 +76,75 @@ def compile_expr(expr: str) -> Stream:
 
 
 def _lift(f: Any, *args: Any, unknown: bool = False, type: Any = "any") -> Any:
-    """`f` applied to the arguments. If they're all constants, it's worked out right away
-    (so `7 * 1440` is a plain number, usable as a window). Otherwise it's a stream that
-    applies `f` each cycle (ops.Lift). `unknown=True`: `f` handles unknown arguments
-    itself (and / or). Otherwise any unknown argument makes the result unknown."""
+    """`f` of the arguments: of values alone, worked out now (`7 * 1440`, a number a window
+    takes), else each cycle. Any unknown makes it unknown, unless `unknown`: `f` reads
+    unknowns itself (and / or)."""
     if any(isinstance(a, Stream) for a in args):
         return ops.Lift(f, *args, unknown=unknown, type=type)
     return None if not unknown and any(a is None for a in args) else f(*args)
 
 
 def _type(x: Any, of: Any) -> Any:
-    """What a built node gives: a stream's type (`of`, as the types are worked out), a constant's."""
+    """The type of a part of an expression: a stream's (`of`), else its value's."""
     return of(x) if isinstance(x, Stream) else typeof(x)
 
 
+def _pluck(value: Any, key: str) -> Any:
+    """A field of a value: an object's; of a list, each item's, as a list (one list of them
+    all, for a field that's a list); else unknown."""
+    if isinstance(value, dict):         return value.get(key)
+    if not isinstance(value, list | tuple):  return None
+    got = [_pluck(v, key) for v in value]
+    if not any(isinstance(g, list | tuple) for g in got):  return got
+    return [x for g in got if g is not None for x in (g if isinstance(g, list | tuple) else [g])]
+
+
+def _index(value: Any, at: Any) -> Any:
+    """An item of a list by its place (-1: the last), else unknown."""
+    if isinstance(value, list | tuple) and type(at) is int and -len(value) <= at < len(value):
+        return value[at]
+    return None
+
+
+END = 2**62  # a part's end, when it says none: the list's
+
+
+def _slice(value: Any, start: Any, end: Any) -> Any:
+    """A part of a list, from `start` up to `end` (-1: the last), else unknown."""
+    if isinstance(value, list | tuple) and type(start) is int and type(end) is int:
+        return list(value[start:end])
+    return None
+
+
+def _constant(node: ast.expr) -> bool:
+    """Whether a list or a tuple is of plain values (-1 too), or of lists of them."""
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        return isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, int | float)
+    return isinstance(node, ast.Constant) or isinstance(node, ast.List | ast.Tuple) and all(map(_constant, node.elts))
+
+
+def _listed(items: list, of: Any) -> Any:
+    """What a list of values gives: a list of their type, if they share one."""
+    types = {str(_type(x, of)) for x in items}
+    return listof(_type(items[0], of) if len(types) == 1 else "any")
+
+
+def _joined(sides: tuple, of: Any) -> Any:
+    """What + gives: text + text a text, a list + a list a list (of their items' type, if they
+    share one), else a number. A side of any type is taken as the other's."""
+    types = [t for x in sides if (t := _type(x, of)) not in ("any", {})]
+    if not types:
+        return "any"
+    if all(t == "string" for t in types):
+        return "string"
+    if all(typename(t) == "array" for t in types):
+        items = {str(itemof(t)) for t in types}
+        return listof(itemof(types[0]) if len(items) == 1 else "any")
+    return "number"
+
+
 def _divide(f: Any) -> Any:
-    """Division (/ // %) that gives unknown instead of failing when dividing by zero."""
+    """/ // %: unknown by zero."""
     return lambda a, b: None if b == 0 else f(a, b)
 
 
@@ -124,13 +185,18 @@ COMPARE = {
 
 
 def _build(node: ast.expr) -> Any:
-    """One node of the syntax tree as a constant or a stream. ExprError for anything an
-    expression can't contain."""
+    """A part of an expression, as a value or a stream. ExprError for anything an expression
+    can't hold."""
     match node:
         case ast.Constant(value=value) if value is None or isinstance(value, (int, float, str, bool)):
             return value
-        case ast.Tuple(elts=elts) if all(isinstance(e, ast.Constant) for e in elts):
-            return tuple(_build(e) for e in elts)  # for `in`: label in ("Code editor", "Terminal")
+        case ast.Tuple() if _constant(node):
+            return ast.literal_eval(node)  # for `in`: label in ("Code editor", "Terminal")
+        case ast.List() if _constant(node):
+            return ast.literal_eval(node)  # ['Something new'], [['Something new', 'what it means']]
+        case ast.List(elts=elts):  # a list of values: [guess.label, 'Something new']
+            items = [_build(e) for e in elts]
+            return _lift(lambda *vs: list(vs), *items, unknown=True, type=lambda of: _listed(items, of))
         case ast.Name(id=name):
             if name not in Stream.registry:
                 raise ExprError(f"unknown name {name!r}")
@@ -139,13 +205,19 @@ def _build(node: ast.expr) -> Any:
             return Stream.registry[name]
         case ast.Attribute(value=value, attr=key):  # a field of a value: the longest name there is, then its keys
             made = _build(value)
-            return _lift(lambda v: v.get(key) if isinstance(v, dict) else None, made, type=lambda of: field(_type(made, of), key))
+            return _lift(lambda v: _pluck(v, key), made, type=lambda of: field(_type(made, of), key))
+        case ast.Subscript(value=value, slice=ast.Slice(lower=lower, upper=upper, step=None)):  # a part of a list: xs[1:]
+            made = _build(value)
+            ends = _build(lower) if lower else 0, _build(upper) if upper else END
+            return _lift(_slice, made, *ends, type=lambda of: _type(made, of))
+        case ast.Subscript(value=value, slice=index):  # an item of a list, by its place
+            made = _build(value)
+            return _lift(_index, made, _build(index), type=lambda of: itemof(_type(made, of)))
         case ast.Call(func=ast.Name(id=name), args=args, keywords=[]) if name in ops.FUNCTIONS:
             return ops.FUNCTIONS[name](*(_build(a) for a in args))
         case ast.BinOp(left=left, op=op, right=right) if type(op) in BINARY:
             sides = _build(left), _build(right)
-            joined = (lambda of: "string" if all(_type(x, of) == "string" for x in sides) else "number") if isinstance(op, ast.Add) else "number"  # text + text
-            return _lift(BINARY[type(op)], *sides, type=joined)
+            return _lift(BINARY[type(op)], *sides, type=(lambda of: _joined(sides, of)) if isinstance(op, ast.Add) else "number")
         case ast.UnaryOp(op=ast.USub(), operand=operand):   return _lift(operator.neg, _build(operand), type="number")
         case ast.UnaryOp(op=ast.Not(), operand=operand):    return _lift(operator.not_, _build(operand), type="boolean")
         case ast.BoolOp(op=op, values=values):

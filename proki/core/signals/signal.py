@@ -1,10 +1,9 @@
-"""Signals: a name for an expression, so other expressions, rules and programs can use it.
+"""Signals: an expression, named, for other expressions, rules and programs to read.
 
     {"name": "focus_5m", "expr": "ts_mean(focus, 5)"}
 
-The expression is compiled (expr.py) the first time it's needed, so it may use names
-defined after it. A signal can keep a table of its past values (`backfill`), how far
-back (`window`) and save it to disk (`persist`).
+It may read names made after it. It can keep its past (`backfill`), how far back (`window`),
+and save it (`persist`).
 """
 
 from __future__ import annotations
@@ -18,24 +17,18 @@ from proki.errors import SignalError
 
 
 class Signal(Stream):
-    """A named expression. Its value each cycle is the expression's."""
+    """An expression, named: its value each cycle, the expression's."""
 
     def __init__(self, name: str, expr: str, backfill: bool = False, window: timedelta | None = None, persist: bool = False, desc: str = "",
                  type: str | dict = "any"):
-        if not name:    raise SignalError("signal name can't be empty")
-        if not expr:    raise SignalError("signal expr can't be empty")
-        if persist and (not backfill or window is None):
-            raise SignalError("a persisted signal keeps a table of a window: it needs backfill=True and a window")
+        if not name:                                      raise SignalError("signal name can't be empty")
+        if not expr:                                      raise SignalError("signal expr can't be empty")
+        if persist and (not backfill or window is None):  raise SignalError("a persisted signal keeps a table of a window: it needs backfill=True and a window")
+        parse(expr)  # a syntax error shows now, an unknown name once it's first read
 
-        parse(expr)  # a syntax error shows now, an unknown name only once it's compiled
-
-        self.name = name
-        self.desc = desc
-        self.expr = expr  # e.g. "ts_mean(keys, 5)"
+        self.name, self.desc, self.expr = name, desc, expr
+        self.backfill, self.window, self.persist = backfill, window, persist
         self._typed, self._infer = (type, None) if type not in (None, "any") else (None, lambda of: of(self.inputs[0]))  # as it says, else its expression's
-        self.backfill = backfill
-        self.window = window
-        self.persist = persist
         self._tree: Stream | None = None
         Stream.registry[name] = self
 

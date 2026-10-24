@@ -1,32 +1,23 @@
-"""Streams: values that change over time, such as key presses, focus, or whether you're in
-a session.
+"""Streams: values that change over time, such as key presses, focus, or whether you're in a
+session.
 
-Time moves in steps called cycles, one every `Stream.cycle` (10 s unless the config
-says otherwise). A `Stream` has one value per cycle. None means unknown.
+Time moves in cycles, one every `Stream.cycle` (10 s unless the config says otherwise). A
+stream has one value a cycle, None when it's unknown:
 
-There are three kinds of streams:
+    an input        what your computer recorded, or the clock
+    an operator     made of other streams: ts_mean(keys, 5)
+    Signal          an expression, named
+    Variable        a value that's set: by a program, or by you
 
-    Primitive   read from what your computer recorded, or from the clock
-    operator    built from other streams, like ts_mean(keys, 5)
-    Signal      a named expression over other streams
+Every named stream is in `Stream.registry`, where expressions find it by its name.
 
-Every named stream is kept in `Stream.registry`, and expressions look names up there.
+`Stream.tick(t)` runs a cycle: each stream moves on to `t` after what it reads, whatever
+order they were made in. Its value is worked out as it's first read in the cycle, from what
+it reads as it is then; a variable reads as it's set, at once.
 
-Each cycle, every stream does two things:
-
-    advance(t)  move on to the cycle at time t (a window adds the new value, drops old ones)
-    current()   give this cycle's value (worked out the first time it's asked, then cached)
-
-`Stream.tick(t)` runs one cycle for all streams, each stream's inputs before the stream
-itself, so a stream read by several others still moves on only once.
-
-History: a stream with `backfill` keeps a table of its past values as (time, value)
-rows, covering its `window`. With `persist`, the table is also saved to disk
-(`Stream.storage`), so it survives restarts: a row as its value changes, and one every
-few minutes while it doesn't, read back a row a cycle (`expanded`). A longer gap is a
-time proki wasn't running: nothing is known of it. As proki quits, each one's saved table
-says nothing's known from then (`close`). Which moments the cycles fall on, and what
-each primitive reads, is up to the primitives.
+A stream with `backfill` keeps its past, a value a cycle over its `window`. With `persist`
+its past is saved too: after a restart, it's still there, and the time proki wasn't running
+is unknown.
 """
 
 from __future__ import annotations
@@ -40,110 +31,98 @@ from typing import Any, ClassVar, Protocol
 from proki.errors import ExprError
 
 Value = float | bool | str | None
-Infer = Callable[[Callable[["Stream"], Any]], Any]  # a type, from the types of what it reads (`of(stream)`)
-NEVER = timedelta.max  # the period of a stream that never changes (a constant)
-ALIVE = timedelta(minutes=10)  # a persisted value unchanged this long is saved again: a longer gap, proki wasn't running
+Infer = Callable[[Callable[["Stream"], Any]], Any]   # a type, from the types of what it reads (`of(stream)`)
+NEVER = timedelta.max                                # the period of a stream that never changes (a constant)
+ALIVE = timedelta(minutes=10)                        # a saved value unchanged this long is saved again: a longer gap, proki wasn't running
 
 
 class Storage(Protocol):
-    """Where persisted streams save their tables. The app provides one."""
+    """Where the streams that persist save their past. The app gives one."""
 
     def load(self, name: str, since: datetime) -> list[tuple[datetime, Any]]: ...
     def save(self, name: str, t: datetime, value: Any) -> None: ...
-    def forget(self, name: str, before: datetime) -> None: ...  # delete rows at or before `before`
+    def forget(self, name: str, before: datetime) -> None: ...  # its rows at or before `before` let go
 
 
 class Stream:
-    """A time series: one value per cycle.
+    """A value a cycle.
 
-    A stream may take a new value every cycle, or more slowly, every `period` (a stream
-    made by `every(x, 5)` takes one every 5 minutes and holds it in between). `fresh`
-    says whether it took a new value this cycle.
+    One may take a new value more slowly than every cycle, one every `period` (every(x, 5):
+    one every 5 minutes, held in between); `fresh` says whether it took one this cycle.
 
-    History (optional):
-        backfill    keep a table of past values, as (time, value) rows
-        window      how far back the table goes (None: as far as its inputs' tables go)
-        persist     also save the table to disk. On the next start, the saved rows are
-                    loaded and new cycles are added after the last one
+        backfill    it keeps its past, a value a cycle
+        window      how far back (None: as far as what it reads keeps theirs)
+        persist     its past is saved too, and there again after a restart
     """
 
-    registry: ClassVar[dict[str, Stream]] = {}  # every named stream, by name (a newer one replaces an older one)
-    storage: ClassVar[Storage | None] = None  # where persisted tables are saved
-    now: ClassVar[datetime | None] = None  # the time of the cycle being run (`tick` sets it)
-    live: ClassVar[datetime | None] = None  # the present moment the run is catching up to. Cycles before it replay the past
-    cycle: ClassVar[timedelta] = timedelta(seconds=10)  # the time between cycles (the config's "cycle")
-    epoch: ClassVar[int] = 0  # bumped when a variable changes, so every cached value gets worked out again
+    registry  : ClassVar[dict[str, Stream]] = {}            # every named stream, by name (a newer one replaces an older one)
+    storage   : ClassVar[Storage | None] = None             # where the past of the ones that persist is saved
+    now       : ClassVar[datetime | None] = None            # the cycle being run
+    live      : ClassVar[datetime | None] = None            # the present the run catches up to: the cycles before it, the past
+    cycle     : ClassVar[timedelta] = timedelta(seconds=10) # the time between cycles
+    keeps     : ClassVar[bool] = False                      # whether its value carries over from the cycles before (a window's does)
 
-    name: str = ""
-    desc: str = ""  # what it is, in a line (an operator has none)
-    _typed: str | dict | None = None  # compile time type
-    _infer: Infer | None = None  # how its type's worked out from what it reads (None: it has one already)
-    inputs: Sequence[Stream] = ()  # the streams it reads (each subclass sets its own)
-    period: timedelta | None = None  # how often it takes a new value. None: every cycle
-    window: timedelta | None = None  # how far back its table goes
-    fresh: bool = True  # whether it took a new value this cycle
-    backfill: bool = False  # whether it keeps a table
-    persist: bool = False  # whether the table is saved to disk
-    _playback: deque[tuple[datetime, Any]] | None = None  # rows being replayed (only during `fill`)
-    _table: deque[tuple[datetime, Any]] | None = None  # its (time, value) rows, oldest first
-    _saved: tuple[datetime, Any] | None = None  # the last row saved to disk (a persisted table's)
-    _cache: Any = None  # this cycle's value, once worked out
-    _cached = False
-    _epoch = -1  # the epoch the cached value is from
-    keeps: ClassVar[bool] = False  # whether its value carries over from the cycles before (a window's does)
+    name      : str = ""
+    desc      : str = ""                                    # what it is, in a line (an operator has none)
+    inputs    : Sequence[Stream] = ()                       # what it reads
+    period    : timedelta | None = None                     # how often it takes a new value (None: every cycle)
+    window    : timedelta | None = None                     # how far back its past goes
+    fresh     : bool = True                                 # whether it took a new value this cycle
+    backfill  : bool = False                                # whether it keeps its past
+    persist   : bool = False                                # whether its past is saved
+
+    _typed    : str | dict | None = None                    # its type, once known
+    _infer    : Infer | None = None                         # how its type's worked out from what it reads (None: it has one)
+    _cache    : Any = None                                  # this cycle's value, once worked out
+    _cached   : bool = False                                # whether it is
+    _table    : deque[tuple[datetime, Any]] | None = None   # its past, (time, value), the oldest first
+    _saved    : tuple[datetime, Any] | None = None          # the last of it saved
+    _playback : deque[tuple[datetime, Any]] | None = None   # its past, given back while another's is built (`fill`)
 
     @property
     def type(self) -> str | dict:
-        """What its values are (any: it can't tell), worked out once (`settle`)."""
+        """What its values are (any: it can't tell)."""
         if self._typed is None and self._infer is not None:  settle([self])
         return "any" if self._typed is None else self._typed
 
     def advance(self, t: datetime) -> None:
-        """Move on to the cycle at time `t`. The base forgets last cycle's value. A window
-        operator also adds its input's new value and drops the ones that fell out."""
+        """On to the cycle at `t` (a window takes its input's new value, lets the old ones go)."""
         self._cached = False
 
     def current(self) -> Any:
-        """This cycle's value. Worked out on the first call and cached. Worked out again if
-        a variable changed since (see `epoch`)."""
-        if not self._cached or self._epoch != Stream.epoch:
+        """This cycle's value."""
+        if not self._cached:
             self._cache  = self.compute()
             self._cached = True
-            self._epoch  = Stream.epoch
         return self._cache
 
     def compute(self) -> Any:
-        """Work out this cycle's value. Each kind of stream says how."""
+        """This cycle's value, worked out: each kind of stream says how."""
         raise NotImplementedError
 
     def history(self, since: datetime) -> list[tuple[datetime, Any]]:
-        """The table's rows after time `since`, oldest first. Empty if it keeps no table."""
+        """Its past after `since`, (time, value), the oldest first (none: it keeps none)."""
         if self._table is None:
             return []
         rows = list(self._table)
         return rows[bisect_right(rows, since, key=lambda row: row[0]):]
 
     def reach(self) -> datetime | None:
-        """How far back this stream's past is known: its table's oldest row. Without a
-        table, the latest of its inputs' reaches (before that, one input doesn't know)."""
+        """How far back its past is known: its own, else the latest of what it reads."""
         if self._table:
             return self._table[0][0]
         reaches = [r for i in self.inputs if (r := i.reach()) is not None]
         return max(reaches) if reaches else None
 
     def record(self, t: datetime) -> None:
-        """Add this cycle's value to the table, and to disk if persisted.
-
-        Only for a stream with a table, and only when it took a new value. A row the
-        table already has (loaded from disk) isn't added twice. Rows older than the
-        window are dropped. On the first call, a persisted table first loads its saved
-        rows and deletes the ones that fell out of the window."""
+        """This cycle's value, kept in its past (and saved, if it persists), the past out of
+        its window let go."""
         if not self.backfill:
             return
-        if self._table is None:  # the first cycle (fresh or not: readers may look now)
+        if self._table is None:  # its first cycle: what was saved before, in its window
             self._table = deque()
-            if self.persist and Stream.storage is not None and self.window:  # what was saved before this run
-                Stream.storage.forget(self.name, t - self.window)  # what fell out of its window
+            if self.persist and Stream.storage is not None and self.window:
+                Stream.storage.forget(self.name, t - self.window)
                 saved = Stream.storage.load(self.name, t - self.window - ALIVE)
                 self._saved = saved[-1] if saved else None
                 self._table.extend(row for row in expanded(saved, self.period or Stream.cycle, t) if row[0] > t - self.window)
@@ -155,37 +134,32 @@ class Stream:
         if self.persist and Stream.storage is not None and (self._saved is None or self._saved[1] != value or t - self._saved[0] >= ALIVE):
             Stream.storage.save(self.name, t, value)  # as it changes, and now and then while it doesn't
             self._saved = (t, value)
-        if self.window:  # (t − window, t], like the operators' windows
+        if self.window:  # (t − window, t], as the windows are
             oldest, keep = t - self.window, False
-        else:  # back to its inputs' oldest
+        else:  # back to what it reads' oldest
             oldest, keep = max([r for i in self.inputs if (r := i.reach()) is not None], default=None), True
         while oldest is not None and table and (table[0][0] < oldest if keep else table[0][0] <= oldest):
             table.popleft()
 
     def close(self) -> None:
-        """Proki quitting: its saved table says nothing's known from the next cycle on."""
+        """Proki quitting: its saved past says nothing's known from the next cycle on."""
         if self.persist and Stream.storage is not None and self._saved is not None and self._saved[1] is not None and Stream.now:
             Stream.storage.save(self.name, Stream.now + (self.period or Stream.cycle), None)
             self._saved = (Stream.now, None)
 
     def play(self, t: datetime) -> None:
-        """During `fill`: take the value at time `t` from the table instead of working it
-        out (the latest row at or before `t`, fresh if that row is from this cycle)."""
+        """While another's past is built: its value at `t` taken from its past, not worked out."""
         assert self._playback is not None
         self.fresh = False
         while self._playback and self._playback[0][0] <= t:
             self._cache, self._cached, self.fresh = self._playback.popleft()[1], True, True
-            self._epoch = Stream.epoch
 
     @classmethod
     def tick(cls, t: datetime, streams: Iterable[Stream] | None = None) -> None:
-        """Run the cycle at time `t`.
-
-        Each stream (all named ones by default, or `streams`) is advanced once, after its
-        inputs, and then adds its value to its table. A stream that reads itself, directly
-        or through others, raises ExprError."""
+        """The cycle at `t`, for every named stream (or `streams`), each after what it reads.
+        ExprError for one that reads itself."""
         Stream.now = t
-        done: set[Stream] = set()
+        done : set[Stream] = set()
         open_: set[Stream] = set()
 
         def visit(stream: Stream) -> None:
@@ -210,15 +184,8 @@ class Stream:
 
     @classmethod
     def fill(cls, stream: Stream, until: datetime) -> None:
-        """Build the past of a stream added while proki runs.
-
-        The cycles from as far back as its inputs' tables go (or its window) up to `until`
-        are run for this stream alone. Streams with a table give their recorded values
-        instead of being worked out again.
-
-        Known limits (unused today, since streams are only made at startup): an input
-        without a table is worked out again, which disturbs its live window. A slow input
-        can give its present value for the first cycles."""
+        """The past of a stream made while proki runs, up to `until`, as far back as what it
+        reads keeps (or its window): what keeps its past gives it back, not worked out again."""
         start = stream.reach()
         if start is None:
             return
@@ -239,11 +206,10 @@ class Stream:
 
 
 def settle(streams: Iterable[Stream], again: bool = False) -> None:
-    """The type of each of `streams`, and of the streams they read, worked out from what each
-    reads and kept (`again`: anew, the ones worked out before too). One whose type comes
-    round to itself reads itself as any there."""
+    """The type of each of `streams`, and of what they read, worked out from what each reads
+    (`again`: anew, the ones known before too). One coming round to itself reads itself as any."""
     made: list[Stream] = []
-    seen: set[Stream] = set()
+    seen: set[Stream]  = set()
 
     def walk(stream: Stream) -> None:
         if stream in seen:
@@ -267,17 +233,16 @@ def settle(streams: Iterable[Stream], again: bool = False) -> None:
     if again:
         for stream in made:
             if stream._infer is not None:  stream._typed = None
-    
     working: set[Stream] = set()
     for stream in made:
         of(stream)
 
 
 def retained(streams: Iterable[Stream]) -> list[Stream]:
-    """The ones among `streams`, and the streams they read, whose value carries over from
-    the cycles before: a window, or one keeping a table. Catching up on the past, only they
-    need each cycle run: the others are worked out at the present one."""
-    seen: set[Stream] = set()
+    """The ones among `streams`, and what they read, whose value carries over from the cycles
+    before: a window, or one keeping its past. Catching up on the past, only they're run each
+    cycle; the others, at the present one."""
+    seen: set[Stream]  = set()
     kept: list[Stream] = []
 
     def walk(stream: Stream) -> None:
@@ -295,12 +260,11 @@ def retained(streams: Iterable[Stream]) -> list[Stream]:
 
 
 def expanded(rows: list[tuple[datetime, Any]], step: timedelta, until: datetime) -> list[tuple[datetime, Any]]:
-    """Saved rows (each saved as its value changed, and every few minutes while it didn't) as
-    a row a `step`, before `until`: each row's value, until the next row, or for those few
-    minutes at most (a longer gap: nothing known)."""
+    """A saved past, a row a `step` up to `until`: each value until the next, a few minutes at
+    most (a longer gap: nothing known)."""
     made = []
     for (t, value), after in zip(rows, [*(r[0] for r in rows[1:]), None]):
-        end = min(t + ALIVE, after if after else max(until, t + step))  # the last: until now at most (one after: as it is)
+        end = min(t + ALIVE, after if after else max(until, t + step))  # the last: up to now at most
         while t < end:
             made.append((t, value))
             t += step
