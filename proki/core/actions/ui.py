@@ -1,21 +1,12 @@
-"""Actions on the UI, one way (nothing comes back):
+"""Actions on the UI, nothing coming back:
 
-    {"poke": {"context": "Back to work"}}            a message to read (a question is `ask`, ask.py)
-    {"poke": {"context": {"format": "{n} pokes today", "values": {"n": "pokes"}}}}
-    {"poke": {"context": "You've been away", "title": "Away"}}
-    {"lock": {}}                                     lock the screen
-    {"open": {"view": "task_form"}}                  open a view: task_form (a new task), task_board
+    {"poke": {"context": "You've been away", "title": "Away"}}   a message, a heading optional
+    {"lock": {}}                                                 the screen locked
+    {"open": {"path": "'tasks/' + str(work.group.id)"}}          a page of the app opened: its view
+                                                                 (today, tasks, notes, apps, metrics,
+                                                                 programs, media), then what in it
 
-A poke's `context` is filled in as it's said (base.py: `Context`), and its `title` is a
-heading. As it's shown, a picture and a sound are drawn from its picks (the media library's,
-by the action's `id`). The sound plays until the poke is closed: a reminder for when you may
-not be looking.
-
-Each kind has a `handler`, what does it, set by the app (None: nothing happens):
-
-    Poke.handler(text, title, id)   show a message, its heading, and what it draws from
-    Lock.handler()                  lock the screen
-    Open.handler(view)              open one of the app's views
+A poke shows a picture and plays a sound until it's closed: for when you may not be looking.
 """
 
 from __future__ import annotations
@@ -23,22 +14,25 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import ClassVar
 
-from proki.core.actions.base import Action, Context
+from proki.core.actions.base import Action, Context, RValue
 from proki.errors import ActionError
 
-VIEWS = ("task_form", "task_board")
+# each kind's handler is what does it, given by the app (None: nothing happens)
 
 
 class Poke(Action):
-    handler: ClassVar[Callable[..., None] | None] = None
+    ABOUT   = ("a message in the popup, nothing to answer: a title. It gets an id as it's added: one picture "
+               "and one sound are drawn from its picks (set_picks), a sound playing while it's shown")
+    EXAMPLE = {"poke": {"context": {"format": "{h:.0f} h left today", "values": {"h": "(deadline_eod - time) / 60"}}, "title": "Today"}}
+    handler : ClassVar[Callable[..., None] | None] = None   # (text, title, id): the id, what its picture and sound are drawn from
 
-    def __init__(self, context: str | dict, title: str | None = None):
-        if title is not None and (not isinstance(title, str) or not title):  raise ActionError(f"poke: title is a text ({title!r})")
-
+    def __init__(self, context: Context, title: str | None = None):
+        if title is not None and (not isinstance(title, str) or not title):
+            raise ActionError(f"poke: title is a text ({title!r})")
         self.context = Context(context, "poke")
         self.title   = title
 
-    def reads(self) -> list[str]:
+    def read(self) -> list[RValue]:
         return list(self.context.values.values())
 
     async def apply(self) -> None:
@@ -50,7 +44,9 @@ class Poke(Action):
 
 
 class Lock(Action):
-    handler: ClassVar[Callable[[], None] | None] = None
+    ABOUT   = "lock the screen"
+    EXAMPLE = {"lock": {}}
+    handler : ClassVar[Callable[[], None] | None] = None
 
     def __init__(self):
         pass
@@ -64,15 +60,21 @@ class Lock(Action):
 
 
 class Open(Action):
-    handler: ClassVar[Callable[[str], None] | None] = None
+    ABOUT   = "open a page of the UI by its path, an expression: its view, then what in it ('tasks/12': group 12's card)"
+    EXAMPLE = {"open": {"path": "'tasks/' + str(work.group.id)"}}
+    handler : ClassVar[Callable[[str], None] | None] = None
 
-    def __init__(self, view: str):
-        if view not in VIEWS:  raise ActionError(f"open: view is one of {', '.join(VIEWS)} ({view!r})")
-        self.view = view
+    def __init__(self, path: RValue):
+        if not isinstance(path, str) or not path.strip():
+            raise ActionError(f"open: path is an expression ({path!r})")
+        self.path = RValue(path)
 
     async def apply(self) -> None:
-        if Open.handler is not None:
-            Open.handler(self.view)
+        if Open.handler is not None and isinstance(path := self.path.value(), str) and path:
+            Open.handler(path)
+
+    def read(self) -> list[RValue]:
+        return [self.path]
 
     def __repr__(self) -> str:
-        return f"open {self.view}"
+        return f"open {self.path}"
