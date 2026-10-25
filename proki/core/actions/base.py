@@ -133,7 +133,7 @@ class Action:
         """Does it (a question: once it's answered)."""
         raise NotImplementedError
 
-    def read(self) -> list[Expr]:
+    def read(self) -> list[RValue]:
         """The expressions it works out."""
         return []
 
