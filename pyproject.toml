@@ -12,10 +12,11 @@ dependencies = [
     "mcp>=1.20",
     "tiktoken>=0.14.0",
     "jsonschema>=4.26",
+    "keyring>=25.7.0",
 ]
 
 [project.scripts]
-proki = "proki.app:main"
+proki = "proki.__main__:main"
 proki-backfill = "proki.backfill:main"
 
 [dependency-groups]

@@ -140,6 +140,8 @@ def test_the_board_is_tools_too_its_mistakes_their_errors():
     tools = Tools(Engine(settings.SHIPPED_DIR), Shipped(settings.SHIPPED_DIR, storage.StateDB(db)), stores=[Work(db)])
     assert tools.tools["read_records"][0].annotations.read_only_hint and tools.tools["remove_record"][0].annotations.destructive_hint
     assert tools.tools["add_op"][0].input_schema["required"] == ["group", "op"]
+    op = tools.tools["add_op"][0].input_schema["properties"]  # as every client reads it: one type a branch, any value said
+    assert op["after"] == {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}]} and op["fields"]["anyOf"]
 
     _, group = call(tools, "add_record", name="work.groups", fields={"name": "Thesis", "tags": ["papers"], "deadline": "2026-11-01T00:00:00+00:00"})
     _, task = call(tools, "add_record", name="work.tasks", fields={"group": group["id"], "name": "Read the papers", "after": []})

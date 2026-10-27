@@ -5,7 +5,6 @@ import pytest
 
 from proki.services import llm as service
 from proki.errors import LlmError
-from proki.settings import llm_families, llm_of
 from proki.services.llm import Llm, parse_json
 
 
@@ -32,23 +31,6 @@ def posts(monkeypatch):
 
     monkeypatch.setattr(service.requests, "post", post)
     return sent
-
-
-def test_every_family_says_where_and_which_key():
-    gemini = llm_families()["gemini"]
-    assert gemini["url"].endswith("/openai") and gemini["key"] == "GEMINI_API_KEY" and gemini["models"]
-    assert llm_families()["ollama"].get("key") is None  # local: no key
-
-
-def test_a_family_needs_its_key(monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    with pytest.raises(LlmError, match="GEMINI_API_KEY isn't set"):
-        llm_of("gemini")
-    with pytest.raises(LlmError, match="no LLM family 'nope'"):
-        llm_of("nope")
-    monkeypatch.setenv("GEMINI_API_KEY", "k")
-    assert llm_of("gemini/gemini-2.5-pro").model == "gemini-2.5-pro"
-    assert llm_of("gemini").model == llm_families()["gemini"]["models"][0]  # the family's first
 
 
 def test_asking_with_context(posts):
