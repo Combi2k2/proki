@@ -1,13 +1,13 @@
 """The programs' model: their specs, and the changes made to them.
 
-    model.add("rule", {"name": "late", "lhs": "clock", "cmp": "gt", "rhs": 1320})
+    model.add("rule", {"name": "late", "lhs": "daytime", "cmp": "gt", "rhs": 1320})
     model.update("state", {"program": "suggest", "name": "idle"}, {"every": 2})
     model.remove("program", {"name": "suggest"})
     model.apply([("add", "state", {...}), ("add", "branch", {...})])    all of them, or none
     model.swap("suggest", specs)                                        a whole program at once
 
 Each change is made on a copy of the specs (`added`, `updated`, `removed`, `swapped`),
-built aside (`check`, the engine's: what runs isn't touched), and kept only if it builds
+built aside (`check`: what runs isn't touched), and kept only if it builds
 (`keep`). So the model always holds programs that run, and a mistake (ConfigError) says
 where it is.
 
@@ -22,8 +22,8 @@ Adding a branch or an action puts it last among its state's, or `at` a place (`p
 new program comes with its initial state ("idle" by default), which waits and stays.
 
 An action keeps its id as it changes or moves (removed, then added with it), and a program
-swapped in takes the ids of the actions in their places (`carry`): the media library keeps
-a poke's or a question's pictures and sounds by it.
+swapped in takes the ids of the actions in their places (`carry`): a poke's or a
+question's pictures and sounds are kept by it.
 
 Removing takes what it owns too: a program its states, their ways out and actions, its own
 and its states' variables, signals and rules, and the global ones it brings. A state its
@@ -56,7 +56,9 @@ Op = tuple[str, str, dict]  # ("add" | "update" | "remove", kind, data), as `app
 
 
 class Model:
-    LISTS : ClassVar[dict[str, str]] = {    # each kind's list in the specs
+    """The programs' specs, changed only into ones that run."""
+
+    LISTS: ClassVar[dict[str, str]] = {    # each kind's list in the specs
         "input"   : "inputs",
         "variable": "variables",
         "signal"  : "signals",
@@ -80,7 +82,7 @@ class Model:
         changed: Callable[[Specs], None] = lambda specs: None,
     ):
         """The model of `specs`. `check` builds specs aside (ConfigError for a mistake),
-        `changed` is told the specs a change keeps (the engine runs them)."""
+        `changed` is told the specs a change keeps, to run them."""
         self.specs   = specs
         self.check   = check
         self.changed = changed
@@ -88,12 +90,15 @@ class Model:
     # --- changes ------------------------------------------------------------------------------
 
     def add(self, kind: str, data: dict) -> dict:
+        """A new spec of `kind`, from `data`, as JSON."""
         return self.apply([("add", kind, data)])[0]
 
     def update(self, kind: str, ident: dict, changes: dict) -> dict:
+        """The spec `ident` means, with `changes`, as JSON."""
         return self.apply([("update", kind, {**ident, "changes": changes})])[0]
 
     def remove(self, kind: str, ident: dict) -> list[dict]:
+        """The spec `ident` means taken out, with what it owns: all of them, as JSON."""
         return self.apply([("remove", kind, ident)])[0]
 
     def apply(self, ops: Iterable[Op]) -> list:
@@ -112,10 +117,10 @@ class Model:
         return done
 
     def swap(self, program: str | None | list[str | None], part: Specs | list[Specs]) -> None:
-        """`program`'s specs replaced by `part`, what its file makes (model/defaults.py):
+        """`program`'s specs replaced by `part`, what its file makes:
 
             swap("suggest", part)                   a program
-            swap(None, part)                        the global scope (main.json)
+            swap(None, part)                        the global scope
             swap(["suggest", "day"], [p, q])        several: kept together, or none
         """
         progs, parts = (program, part) if isinstance(program, list) else ([program], [part])
@@ -144,7 +149,7 @@ class Model:
 
     def added(self, specs: Specs, kind: str, data: dict) -> dict:
         """A new spec of `kind`, from `data` (and `at`, a branch's or an action's place)."""
-        if kind == "action" and "name" not in data:  # its kind's, as free among its state's: "ask", "ask_2", ...
+        if kind == "action" and "name" not in data:  # its kind's, as free among its state's: "ask_usr", "ask_usr_2", ...
             taken = [a.name for a in specs.actions if (a.program, a.state) == (data.get("program"), data.get("state"))]
             data  = {**data, "name": ActionSpec.free(str(data.get("kind")), taken)}
         at    = data.pop("at", None) if kind in self.PLACED else None
@@ -162,7 +167,8 @@ class Model:
         """The spec `data` means, with its `changes`. Renamed, a program or a state renames
         what it owns."""
         changes = data.pop("changes", {})
-        if not isinstance(changes, dict):  raise ConfigError(f"changes is an object ({changes!r})")
+        if not isinstance(changes, dict):
+            raise ConfigError(f"changes is an object ({changes!r})")
 
         group = self.group(specs, kind)
         i     = self.locate(specs, kind, data)

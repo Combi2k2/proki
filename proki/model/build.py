@@ -1,12 +1,11 @@
-"""Building: the programs' specs made into what runs (core/), each name found from its scope.
+"""Building: the programs' specs made into what runs, each name found from its scope.
 
     Builder(specs).build()   → Built: the inputs, variables, signals, rules and programs
 
-Each spec is made by the method of its kind (`claim_input`, ..., `build_branch`), which
-gives nothing back: it puts what it makes where it belongs, in the builder's lists
-(`inputs`, ..., `programs`) or in the program or state it's in. A `claim_` one claims its
-name in its scope first. A `build_` one makes a part of a program (a state, an action, a
-way out), which has no name in a scope.
+Each spec is made by its kind's method (`claim_input`, ..., `build_branch`): a `claim_` one
+claims its name in its scope first, a `build_` one makes a part of a program that has none
+(a state, an action, a way out). Each puts what it makes where it belongs: in what's built,
+or in its program or state.
 
 In order:
 
@@ -15,28 +14,29 @@ In order:
     3. each program: its own variables, signals and rules, then each of its states: its own
        variables (and the ones its asks answer into), signals and rules, its actions, its
        ways out
-    4. every spec of a program or a state checked to be in one that's there (`homes`)
-    5. every variable's and signal's expression compiled, and no signal reading itself (`check`)
+    4. every spec of a program or a state in one that's there (`homes`)
+    5. every expression compiled, no signal reading itself (`check`)
+    6. what each action sets, of its variable's type (`typecheck`)
 
-A name is claimed in its scope as it's made (model/scope.py): one defined twice in a scope
-is a mistake. What's built is checked by core/ as it's made (an expression's names, a
-rule's sides, an action's params), and a mistake says where its spec is (`Spec.inside`).
-A program in code isn't built here: its name starts with "@", which a spec's never does.
+A name defined twice in a scope is a mistake, and so is anything else wrong as it's made (an
+expression's names, a rule's sides, an action's params): each says where its spec is. A
+program in code isn't built here: its name starts with "@", which a spec's never does.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, ClassVar
+from types import UnionType
+from typing import Any, ClassVar, Union, get_args, get_origin, get_type_hints, is_typeddict
 
-from proki.core.programs import Program, State, Branch
-from proki.core.signals import Signal, Stream, Variable
-from proki.core.actions import Action
-from proki.core.actions.var import Update
+from proki.core.actions import Action, Context, LValue
 from proki.core.primitives import Primitive
+from proki.core.programs import Branch, Program, State
 from proki.core.rules import Rule
+from proki.core.signals import Expr, Signal, Stream, Variable
+from proki.core.signals.stream import settle
 from proki.errors import (
     ConfigError,
     ExprError,
@@ -54,6 +54,8 @@ from proki.model.specs import (
     StateSpec,
     VariableSpec
 )
+from proki.types import schema
+from proki.utils import span
 
 
 @dataclass
@@ -79,7 +81,7 @@ class Specs:
 
 @dataclass
 class Built:
-    """What the specs make, in core/."""
+    """What the specs make."""
 
     inputs      : list[Primitive]
     variables   : list[Variable]
@@ -89,6 +91,7 @@ class Built:
 
     @property
     def streams(self) -> list[Stream]:
+        """Every stream made: the inputs, variables and signals."""
         return [*self.inputs, *self.variables, *self.signals]
 
 
@@ -100,16 +103,18 @@ class Builder:
         self.specs = specs.copy()  # what it declares as it goes (an ask's answer) stays in the build
 
         # what's made, as it's made
-        self.inputs    : list[Primitive]    = []
-        self.variables : list[Variable]     = []  # the global ones, then each program's and state's
-        self.signals   : list[Signal]       = []  # the same
-        self.rules     : list[Rule]         = []  # the global ones (a program's or a state's are its own)
-        self.programs  : list[Program]      = []
-        self.made      : dict[Stream, Spec] = {}  # every expression, compiled at the end (`check`), and its spec
+        self.inputs    : list[Primitive]           = []
+        self.variables : list[Variable]            = []  # the global ones, then each program's and state's
+        self.signals   : list[Signal]              = []  # the same
+        self.rules     : list[Rule]                = []  # the global ones (a program's or a state's are its own)
+        self.programs  : list[Program]             = []
+        self.made      : dict[Stream, Spec]        = {}  # every expression, compiled at the end (`check`), and its spec
+        self.acted     : list[tuple[Action, Spec]] = []  # every action, what it sets type checked at the end (`typecheck`)
 
     # --- the whole ----------------------------------------------------------------------------
 
     def build(self) -> Built:
+        """What the specs make. ConfigError, or one of its kinds, for a mistake, said where it is."""
         specs = self.specs
         if isinstance(specs.cycle, bool) or not isinstance(specs.cycle, int | float) or specs.cycle <= 0:
             raise ConfigError(f"cycle is in seconds, more than 0 ({specs.cycle!r})")
@@ -123,6 +128,7 @@ class Builder:
 
         self.homes()
         self.check()
+        self.typecheck()
 
         return Built(self.inputs, self.variables, self.signals, self.rules, self.programs)
 
@@ -151,6 +157,14 @@ class Builder:
         if loop := self.loops(self.made):
             raise ExprError(f"{' → '.join(loop)}: a signal can't read itself")
 
+    def typecheck(self) -> None:
+        """Every type worked out, once all is made, and what each action sets of a type its
+        variable takes."""
+        settle(list(Stream.registry.values()), again=True)
+        for action, spec in self.acted:
+            with spec.inside():
+                action.typecheck()
+
     @staticmethod
     def loops(streams: Iterable[Stream]) -> list[str] | None:
         """The names around a loop of streams reading each other (a → b → a), if there is one."""
@@ -175,6 +189,7 @@ class Builder:
     # --- what has a name ----------------------------------------------------------------------
 
     def claim_input(self, spec: InputSpec) -> None:
+        """The input, by its name."""
         with spec.inside():
             if spec.name not in Primitive.kinds:
                 raise ConfigError(f"no input is called {spec.name!r} ({', '.join(Primitive.kinds)})")
@@ -187,7 +202,8 @@ class Builder:
         starting expression is compiled at the `check`, like a signal's."""
         with spec.inside():
             scope.claim(spec.name)
-            variable = Variable(scope.prefix + spec.name, scope.spell(spec.value), desc=spec.desc, persist=owner is None)
+            variable = Variable(scope.prefix + spec.name, scope.spell(spec.value), desc=spec.desc, persist=owner is None,
+                                type=typed(spec.type))
         self.variables.append(variable)
         if owner:
             owner.vars.append(variable)
@@ -209,6 +225,7 @@ class Builder:
                 window   = window,
                 persist  = spec.persist,
                 desc     = spec.desc,
+                type     = typed(spec.type),
             )
         self.signals.append(signal)
         self.made[signal] = spec
@@ -235,7 +252,9 @@ class Builder:
         states = [s for s in self.specs.states if s.program == spec.name]
         with spec.inside():
             self.scope.claim(spec.name)
-            self.programs.append(program := Program(spec.name, {s.name: State(s.name, desc=s.desc) for s in states}, spec.initial, spec.desc, spec.tags))
+            made    = {s.name: State(s.name, desc=s.desc) for s in states}
+            program = Program(spec.name, made, spec.initial, spec.desc, spec.tags, spec.title, spec.icon)
+        self.programs.append(program)
 
         scope = self.scope.inner(spec.name)
         for v in self.owned(self.specs.variables, spec.name):  self.claim_variable(v, scope, program)
@@ -245,50 +264,43 @@ class Builder:
             self.build_state(state, program, scope.inner(state.name))
 
     def build_state(self, spec: StateSpec, program: Program, scope: Scope) -> None:
-        """Its variables (the ones its asks answer into declared here, if it doesn't), its
-        signals, its rules, its actions, `every` and its ways out, in `scope`."""
+        """Its variables, signals, actions (and the variables they declare, in order: each sees
+        those before it), rules, `every` and ways out, in `scope`."""
         state    = program.states[spec.name]
         actions  = [a for a in self.specs.actions if (a.program, a.state) == (spec.program, spec.name)]
         branches = [b for b in self.specs.branches if (b.program, b.state) == (spec.program, spec.name)]
 
-        mine     = {"scope": "state", "program": spec.program, "state": spec.name}
-        declared = {v.name for v in self.owned(self.specs.variables, spec.program, spec.name)}
-        for name in dict.fromkeys(filter(None, map(self.reply, actions))):
-            if name not in declared:
-                with spec.inside():
-                    self.specs.variables.append(VariableSpec.parse({"name": name, **mine}))
-
         for v in self.owned(self.specs.variables, spec.program, spec.name):  self.claim_variable(v, scope, state)
         for s in self.owned(self.specs.signals, spec.program, spec.name):    self.claim_signal(s, scope)
-        for r in self.owned(self.specs.rules, spec.program, spec.name):      self.claim_rule(r, scope, state)
         for a in actions:                                                    self.build_action(a, scope, state)
+        for r in self.owned(self.specs.rules, spec.program, spec.name):      self.claim_rule(r, scope, state)
 
         with spec.inside():
-            if isinstance(spec.every, bool) or not isinstance(spec.every, int | float) or spec.every < 0:
-                raise ProgramError(f"every is in minutes, 0 or more ({spec.every!r})")   # 0: its next at once
-        state.every = timedelta(minutes=spec.every)
+            try:
+                state.every = span(spec.every)   # 0: its next at once
+            except ValueError:
+                raise ProgramError(f"every is minutes, 0 or more, or a time: 6s, 5min, 1h ({spec.every!r})") from None
         for i, b in enumerate(branches):
             self.build_branch(b, i, program, state, scope, branches[:i])
         if not branches:
             state.next.append(Branch(program.initial))
 
     def build_action(self, spec: ActionSpec, scope: Scope, state: State) -> None:
-        """The action, what it reads written out in full for `scope`: the variable a set /
-        add / sub changes, its `expr`, the values of a `context`, and the variable an ask
-        answers into (the state's own)."""
-        params = dict(spec.params)
-        if issubclass(Action.kinds.get(spec.kind, Action), Update) and isinstance(params.get("name"), str):
-            params["name"] = scope.spell(params["name"])
-        if "expr" in params:
-            params["expr"] = scope.spell(params["expr"])
-        if isinstance(context := params.get("context"), dict) and isinstance(context.get("values"), dict):
-            params["context"] = {**context, "values": {k: scope.spell(v) for k, v in context["values"].items()}}
-        if (result := self.reply(spec)) is not None:
-            params["result"] = scope.prefix + result
+        """The action, the names in its params written out in full for `scope`: a name it sets
+        that's nobody's is its state's own, declared as it's made."""
+        params = named(spec, lambda kind, name: spell(scope, name) if kind is LValue else scope.spell(name))
+        before = set(Stream.registry)
         with spec.inside():
             action = Action.parse({spec.kind: params})
+            for name in [n for n in Stream.registry if n not in before and type(Stream.registry[n]) is Variable]:
+                if not (name.startswith(scope.prefix) and alone(bare := name.removeprefix(scope.prefix))):
+                    raise ProgramError(f"no variable is called {name!r}")
+                scope.claim(bare)
+                self.variables.append(variable := Stream.registry[name])
+                state.vars.append(variable)
         action.id = spec.id
         state.do.append(action)
+        self.acted.append((action, spec))
 
     def build_branch(self, spec: BranchSpec, i: int, program: Program, state: State, scope: Scope, before: list[BranchSpec]) -> None:
         """Way out `i` of `state`: its rules (found from the state outwards) and its
@@ -318,16 +330,75 @@ class Builder:
         return [s for s in specs if s.scope == scope and (scope == "global" or (s.program, s.state) == (program, state))]
 
     @staticmethod
-    def reply(spec: ActionSpec) -> str | None:
-        """The name of the variable an ask answers into, as its state says it ("answer")."""
-        result = spec.params.get("result") if spec.kind == "ask" else None
-        return result if isinstance(result, str) else None
-
-    @staticmethod
     def delta(backfill: Any) -> timedelta | None:
-        """A `backfill` in minutes, as a window (None if there's none)."""
+        """A `backfill` (minutes, or a time: "1d"), as a window (None if there's none)."""
         if backfill is None:
             return None
-        if isinstance(backfill, bool) or not isinstance(backfill, int | float) or backfill <= 0:
-            raise ConfigError(f"backfill is in minutes, more than 0 ({backfill!r})")
-        return timedelta(minutes=backfill)
+        try:
+            window = span(backfill)
+        except ValueError:
+            window = timedelta(0)
+        if window <= timedelta(0):
+            raise ConfigError(f"backfill is minutes, more than 0, or a time: 1d, 12h ({backfill!r})")
+        return window
+
+
+def typed(type: Any) -> Any:
+    """A spec's type, checked: ConfigError for one there isn't."""
+    try:
+        schema(type)
+    except ValueError as e:
+        raise ConfigError(str(e)) from None
+    return type
+
+
+def spell(scope: Scope, name: str) -> str:
+    """The full name of a variable an action sets or answers into: the one it means, else, a
+    name alone that's nobody's, its state's own."""
+    if alone(name) and scope.spell(name) == name and name not in Stream.registry:
+        return scope.refer(name) or scope.prefix + name
+    return scope.spell(name)
+
+
+def alone(name: str) -> bool:
+    """Whether it's a name alone, not a place in a variable (xs[0].status): one a state can own."""
+    return name.isidentifier()
+
+
+def named(spec: ActionSpec, do: Callable[[type, str], Any]) -> dict:
+    """An action's params, each name in them replaced by `do(what it names, name)`: an RValue it
+    reads, or an LValue it sets, as its kind's params' types say."""
+    made = Action.kinds.get(spec.kind)
+    if made is None or not isinstance(spec.params, dict):
+        return dict(spec.params) if isinstance(spec.params, dict) else spec.params
+    hints = get_type_hints(made.__init__)
+    return {k: walked(v, hints.get(k), do) for k, v in spec.params.items()}
+
+
+def walked(value: Any, hint: Any, do: Callable[[type, str], Any]) -> Any:
+    """`value` as `hint` says, its names given to `do` (see `named`)."""
+    if isinstance(hint, type) and issubclass(hint, Expr):
+        return do(hint, value) if isinstance(value, str) else value
+    if hint is Context:
+        if isinstance(value, dict) and isinstance(values := value.get("values"), dict):
+            return {**value, "values": {k: walked(v, Expr, do) for k, v in values.items()}}
+        return value
+    if get_origin(hint) in (Union, UnionType):
+        return next((walked(value, h, do) for h in get_args(hint) if fits(value, h)), value)
+    if is_typeddict(hint) and isinstance(value, dict):
+        inner = get_type_hints(hint)
+        return {k: walked(v, inner.get(k), do) for k, v in value.items()}
+    if get_origin(hint) is dict and isinstance(value, dict):
+        return {k: walked(v, get_args(hint)[1], do) for k, v in value.items()}
+    if get_origin(hint) is list and isinstance(value, list):
+        return [walked(v, get_args(hint)[0], do) for v in value]
+    return value
+
+
+def fits(value: Any, hint: Any) -> bool:
+    """Whether `value` is written as `hint` says (the first of a union's that it fits is it)."""
+    if isinstance(hint, type) and issubclass(hint, Expr):   return isinstance(value, str)
+    if hint is Context:                                     return isinstance(value, str | dict)
+    if is_typeddict(hint):                                  return isinstance(value, dict)
+    origin = get_origin(hint) or hint
+    return isinstance(origin, type) and isinstance(value, origin)

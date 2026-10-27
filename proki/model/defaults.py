@@ -1,12 +1,12 @@
-"""The programs as JSON files, the way proki ships them, made into specs (model/specs.py).
+"""The programs as JSON files, the way proki ships them, made into specs.
 
     main.json      {"cycle", "inputs", "variables", "signals", "rules"}: the global scope
-    <name>.json    {"desc", "tags", "variables", "signals", "rules", "program"}: a program,
+    <name>.json    {"title", "desc", "icon", "tags", "variables", "signals", "rules", "program"}: a program,
                    and the global variables, signals and rules it brings
 
     {"program": {"initial": "idle", "variables": [...], "signals": [...], "rules": [...], "states": {
         "idle":   {"desc": "...", "every": 0.1, "next": [{"goto": "asking", "when": ["focus_high"]}]},
-        "asking": {"variables": [...], "do": [{"ask": {...}}], "next": "idle"}}}}
+        "asking": {"variables": [...], "do": [{"ask_usr": {...}}], "next": "idle"}}}}
 
     Defaults(folder).specs(names)     main.json and the program files, as specs
     Defaults.parse(main, programs)    JSON already read, as specs
@@ -14,12 +14,12 @@
 
 A global variable may be declared in several files: it's one variable, and a declaration
 with a "value" gives its starting value. A state's "do" is a list of actions, each {kind:
-params} with its "name" (else its kind's: "ask", "ask_2", ...) and "desc". Its "next" is a state (one
-way out, always taken) or a list of ways out, each "when" a rule or a condition, or a list
-of them.
+params} with its "name" (else its kind's: "ask_usr", "ask_usr_2", ...) and "desc". Its
+"next" is a state (one way out, always taken) or a list of ways out, each "when" a rule or
+a condition, or a list of them.
 
 A file's shape is checked as each spec is made (`Spec.parse`), and a mistake names the file.
-Whether they make sense is checked when they're built (model/build.py).
+Whether they make sense is checked when they're built.
 """
 
 from __future__ import annotations
@@ -44,12 +44,14 @@ from proki.model.specs import (
 
 
 class Defaults:
-    MAIN        : ClassVar[str]      = "main.json"
-    MAIN_KEYS   : ClassVar[set[str]] = {"cycle", "inputs", "variables", "signals", "rules"}
-    FILE_KEYS   : ClassVar[set[str]] = {"desc", "tags", "variables", "signals", "rules", "program"}
-    PROG_KEYS   : ClassVar[set[str]] = {"initial", "variables", "signals", "rules", "states"}
-    STATE_KEYS  : ClassVar[set[str]] = {"desc", "variables", "signals", "rules", "do", "every", "next"}
-    SCOPED      : ClassVar[dict[str, type[Spec]]] = {    # what each scope may declare
+    """The programs proki ships, the files in `folder`."""
+
+    MAIN       : ClassVar[str]      = "main.json"
+    MAIN_KEYS  : ClassVar[set[str]] = {"cycle", "inputs", "variables", "signals", "rules"}
+    FILE_KEYS  : ClassVar[set[str]] = {"title", "desc", "icon", "tags", "variables", "signals", "rules", "program"}
+    PROG_KEYS  : ClassVar[set[str]] = {"initial", "variables", "signals", "rules", "states"}
+    STATE_KEYS : ClassVar[set[str]] = {"desc", "variables", "signals", "rules", "do", "every", "next"}
+    SCOPED     : ClassVar[dict[str, type[Spec]]] = {    # what each scope may declare
         "variables": VariableSpec,
         "signals"  : SignalSpec,
         "rules"    : RuleSpec,
@@ -59,7 +61,7 @@ class Defaults:
         self.folder = folder
 
     def specs(self, names: set[str] | None = None) -> Specs:
-        """main.json and the program files (`names`: which programs, all of them by default)."""
+        """The global scope's file and the programs' (`names`: which programs, all by default)."""
         files = sorted(p for p in self.folder.glob("*.json") if p.name != self.MAIN)
         files = filter(lambda p: names is None or p.stem in names, files)
         return self.parse(self.read(self.folder / self.MAIN), {p.stem: self.read(p) for p in files})
@@ -70,14 +72,15 @@ class Defaults:
             data = json.loads(path.read_text())
         except json.JSONDecodeError as e:
             raise ConfigError(f"not JSON: {e.msg} (line {e.lineno})", path.name) from None
-        if not isinstance(data, dict):  raise ConfigError("it's an object: {...}", path.name)
+        if not isinstance(data, dict):
+            raise ConfigError("it's an object: {...}", path.name)
         return data
 
     # --- JSON into specs ----------------------------------------------------------------------
 
     @classmethod
     def parse(cls, main: dict, programs: dict[str, dict]) -> Specs:
-        """The specs main.json (`main`) and the program files (`programs`, by name) make."""
+        """The specs the global scope's file (`main`) and the programs' (`programs`, by name) make."""
         specs = Specs()
         with Inside(cls.MAIN):
             cls.check_key(main, cls.MAIN_KEYS, "a section")
@@ -112,7 +115,9 @@ class Defaults:
         cls.check_key(body, cls.PROG_KEYS, "program")
         specs.programs.append(ProgramSpec.parse({
             "name"   : name,
+            "title"  : file.get("title", ""),
             "desc"   : file.get("desc", ""),
+            "icon"   : file.get("icon", ""),
             "tags"   : file.get("tags", []),
             "initial": body.get("initial", ""),
         }))
@@ -188,7 +193,7 @@ class Defaults:
 
     @classmethod
     def dump(cls, specs: Specs, program: str | None = None) -> dict:
-        """The file `specs` make for `program` (None: main.json): what `parse` reads back."""
+        """The file `specs` make for `program` (None: the global scope's), as `parse` reads it."""
         if program is None:
             return {
                 "cycle" : specs.cycle,
