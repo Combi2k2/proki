@@ -281,7 +281,7 @@ class Work(Linked):
         shape, key = schema(TaskOp, ("id",)), {"id": {"type": "integer"}}
         return [
             Tool("read_ops", "The changes suggested to the groups' tasks, the first suggested first.", {},
-                 lambda args: {"ops": [vars(op) for op in self.ops.read()]}, reads=True),
+                 lambda args: {"ops": [vars(op) for op in self.ops.read()]}, readonly=True),
             Tool("add_op", "A suggested change to a group's tasks, after the others. `op`: add, change or remove. `task`: "
                            "change, remove: its key. `fields`: the task's, add: its name at least. `after`: the keys of "
                            "the tasks it needs done first, ones suggested too. Its id.",
@@ -289,7 +289,7 @@ class Work(Linked):
             Tool("change_op", "Some of a suggested change's fields.", key | shape,
                  lambda args: self.ops.update(args["id"], **{n: v for n, v in args.items() if n != "id"}), ("id",)),
             Tool("remove_op", "A suggested change taken away: accepted (its task added or changed), or not.", key,
-                 lambda args: self.ops.delete(args["id"]), ("id",), destroys=True),
+                 lambda args: self.ops.delete(args["id"]), ("id",), undoable=True),
         ]
 
 
