@@ -3,12 +3,9 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pytest
 
-from conftest import replay
-from proki.compiler import compile_config
+from conftest import built, replay
 from proki.core.rules import Rule
-from proki.core.primitives import Primitive
-from proki.core.signals import Signal, Stream
-from proki.errors import RuleError
+from proki.core.signals import Stream
 from proki.services.activitywatch import Event, Record
 
 T0 = datetime(2026, 10, 1, 10, tzinfo=timezone.utc)
@@ -72,18 +69,22 @@ def test_rules_are_checked():
     for kwargs, problem in [({}, "lhs is missing"), ({"lhs": "x", "cmp": "gt"}, "rhs is missing"),
                             ({"lhs": "x", "rhs": 1}, "has to be one of"), ({"lhs": "x", "cmp": ">", "rhs": 1}, "has to be one of"),
                             ({"lhs": "x", "cmp": "gt", "rhs": 1, "softness": -1}, "negative"),
+                            ({"lhs": "x", "cmp": "gt", "rhs": 1, "softness": "0.1"}, "softness is a number"),
+                            ({"lhs": "x", "cmp": "gt", "rhs": 1, "softness": True}, "softness is a number"),
+                            ({"lhs": "x", "cmp": "gt", "rhs": 1, "level": "high"}, "level is a whole number"),
+                            ({"lhs": "x", "cmp": "gt", "rhs": 1, "level": 1.5}, "level is a whole number"),
                             ({"lhs": "y", "cmp": "gt", "rhs": 1}, "unknown name 'y'")]:
         with pytest.raises(ValueError, match=problem):
             Rule("r", **kwargs)
 
 
 def test_a_rule_reads_its_signals_now_and_is_sampled(tmp_path):
-    config = tmp_path / "config.json"
+    config = tmp_path / "main.json"
     config.write_text('''{
-      "inputs": [{"name": "keys", "backfill": 60}],
-      "rules": [{"name": "busy", "lhs": "ts_mean(keys, 2)", "cmp": "gt", "rhs": 30, "softness": 5}]
+      "inputs": [{"name": "keys_pressed", "backfill": 60}],
+      "rules": [{"name": "busy", "lhs": "ts_mean(keys_pressed, 2)", "cmp": "gt", "rhs": 30, "softness": 5}]
     }''')
-    busy, = compile_config(config).rules
+    busy, = built(config.parent).rules
     typing = [Event(at(m / 12), at((m + 1) / 12), {"presses": 5}) for m in range(5 * 12)]  # 30 a minute
     Stream.now = at(0)
     replay(at(5), Record.of(at(0), at(5), {"os.hid.input": typing}))
@@ -94,7 +95,7 @@ def test_a_rule_reads_its_signals_now_and_is_sampled(tmp_path):
 
 
 def test_config_rules_are_checked(tmp_path):
-    bad = tmp_path / "config.json"
+    bad = tmp_path / "main.json"
     x = '"signals": [{"name": "x", "expr": "1"}], '
     for text, problem in [('{%s"rules": [{"name": "r", "lhs": "x", "cmp": "gt"}]}' % x, "'r': rhs is missing"),
                           ('{%s"rules": [{"name": "r", "lhs": "x", "cmp": "gt", "rhs": 1, "abov": 1}]}' % x, "unknown abov"),
@@ -105,7 +106,7 @@ def test_config_rules_are_checked(tmp_path):
         Stream.registry.clear()
         Rule.registry.clear()
         with pytest.raises(ValueError, match=problem):
-            compile_config(bad)
+            built(bad.parent)
 
 
 def test_levels_vote_by_majority_the_highest_first():
@@ -120,11 +121,3 @@ def test_levels_vote_by_majority_the_highest_first():
     Stream.tick(T0 + Stream.cycle)
     assert Rule.vote(band)
     assert Rule.vote([])  # nothing against
-
-
-def test_softness_is_a_number_and_level_a_whole_one():
-    Signal("x", "1")
-    for kwargs, problem in [({"softness": "0.1"}, "softness is a number"), ({"softness": True}, "softness is a number"),
-                            ({"level": "high"}, "level is a whole number"), ({"level": 1.5}, "level is a whole number")]:
-        with pytest.raises(RuleError, match=problem):
-            Rule("r", "x", "gt", 0, **kwargs)

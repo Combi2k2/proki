@@ -5,18 +5,16 @@ import pytest
 
 from proki.services import llm as service
 from proki.errors import LlmError
-from proki.services.llm import Llm, families, parse_json
+from proki.settings import llm_families, llm_of
+from proki.services.llm import Llm, parse_json
 
 
 class Reply:
-    def __init__(self, status, content=None, lines=()):
-        self.status_code, self.content, self.lines = status, content, lines
+    def __init__(self, status, content=None):
+        self.status_code, self.content = status, content
 
     def json(self):
         return {"choices": [{"message": {"content": self.content}}]}
-
-    def iter_lines(self, decode_unicode=True):
-        return iter(self.lines)
 
 
 @pytest.fixture
@@ -28,7 +26,7 @@ def posts(monkeypatch):
     sent = Sent()
     sent.replies = []
 
-    def post(url, headers, json, timeout, stream=False):
+    def post(url, headers, json, timeout):
         sent.append((url, headers, json))
         return sent.replies.pop(0)
 
@@ -37,59 +35,47 @@ def posts(monkeypatch):
 
 
 def test_every_family_says_where_and_which_key():
-    gemini = families()["gemini"]
-    assert gemini.url.endswith("/openai") and gemini.key == "GEMINI_API_KEY" and gemini.models
-    assert families()["ollama"].key is None  # local: no key
+    gemini = llm_families()["gemini"]
+    assert gemini["url"].endswith("/openai") and gemini["key"] == "GEMINI_API_KEY" and gemini["models"]
+    assert llm_families()["ollama"].get("key") is None  # local: no key
 
 
 def test_a_family_needs_its_key(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(LlmError, match="GEMINI_API_KEY isn't set"):
-        Llm.of("gemini")
+        llm_of("gemini")
     with pytest.raises(LlmError, match="no LLM family 'nope'"):
-        Llm.of("nope")
+        llm_of("nope")
     monkeypatch.setenv("GEMINI_API_KEY", "k")
-    assert Llm.of("gemini/gemini-2.5-pro").models == ("gemini-2.5-pro",)
-    assert len(Llm.of("gemini", fallbacks=1).models) == 2
+    assert llm_of("gemini/gemini-2.5-pro").model == "gemini-2.5-pro"
+    assert llm_of("gemini").model == llm_families()["gemini"]["models"][0]  # the family's first
 
 
 def test_asking_with_context(posts):
     posts.replies = [Reply(200, " Deep. ")]
-    llm = Llm("https://x/v1", api_key="k", model="m", system="You help with focus.")
-    assert llm.ask("Deep or shallow?", context={"activity": "thesis"}) == "Deep."
+    llm = Llm("https://x/v1", "k", "m")
+    assert llm.ask("Deep or shallow?", context={"role": "You help with focus.", "activity": "thesis"}) == "Deep."
     url, headers, body = posts[0]
     assert url == "https://x/v1/chat/completions" and headers == {"Authorization": "Bearer k"}
-    assert [m["role"] for m in body["messages"]] == ["system", "system", "user"]
-    assert '"activity": "thesis"' in body["messages"][1]["content"]
+    assert [m["role"] for m in body["messages"]] == ["system", "user"]  # the context, then the question
+    assert '"activity": "thesis"' in body["messages"][0]["content"]
 
 
 def test_structured_answers_and_a_service_without_them(posts):
     schema = {"type": "object", "properties": {"choice": {"type": "string"}}}
     posts.replies = [Reply(400), Reply(200, 'Sure: {"choice": "deep"}')]  # no structured output: in the prompt
-    assert Llm("https://x/v1", model="m").ask("Classify", schema=schema) == {"choice": "deep"}
+    assert Llm("https://x/v1", None, "m").ask("Classify", schema=schema) == {"choice": "deep"}
     assert posts[0][2]["response_format"]["json_schema"]["schema"] == schema
     assert "response_format" not in posts[1][2] and json.dumps(schema) in posts[1][2]["messages"][-1]["content"]
 
 
-def test_the_next_model_when_one_is_busy_then_a_pause(posts):
-    posts.replies = [Reply(503), Reply(200, "hi")]
-    assert Llm("https://x/v1", model=["busy", "free"]).ask("hi") == "hi"
-    assert [body["model"] for _, _, body in posts] == ["busy", "free"]
-    posts.replies = [Reply(503)]
-    llm = Llm("https://x/v1", model="busy")
+def test_no_answer_raises(posts):
+    posts.replies = [Reply(503), Reply(200, "  ")]
+    llm = Llm("https://x/v1", None, "busy")
     with pytest.raises(LlmError, match="busy: HTTP 503"):
         llm.ask("hi")
-    with pytest.raises(LlmError, match="skipped"):
-        llm.ask("hi")  # every model failed recently: not asked again for a while
-    assert llm.complete("hi") is None
-
-
-def test_streaming(posts):
-    events = ['data: {"choices": [{"delta": {"content": "1 "}}]}', "", ": keep-alive",
-              'data: {"choices": [{"delta": {"content": "2"}}]}', "data: [DONE]"]
-    posts.replies = [Reply(200, lines=events)]
-    assert list(Llm("https://x/v1", model="m").ask("count", stream=True)) == ["1 ", "2"]
-    assert posts[0][2]["stream"] is True
+    with pytest.raises(LlmError, match="an empty answer"):
+        llm.ask("hi")
 
 
 def test_json_in_a_reply():

@@ -5,20 +5,18 @@ import pytest
 from conftest import replay
 from proki.services.activitywatch import Event, Record
 from proki.core.primitives import App, Label, Primitive, Recording
-from proki.core.signals import Signal, Stream, compile_expr
+from proki.core.signals import Signal, Stream, Expr
 from proki.errors import ExprError
-from proki.core.ops import (
-    Constant,
-    Delay,
-    Every,
-    Lift,
-    TsCount,
-    TsMax,
-    TsMean,
-    TsMin,
-    TsRank,
-    TsSum,
-)
+from proki.core.ops import Constant, Lift
+from proki.core.ops.delay import Delay
+from proki.core.ops.every import Every
+from proki.core.ops.ts_corr import TsCorr
+from proki.core.ops.ts_count import TsCount
+from proki.core.ops.ts_max import TsMax
+from proki.core.ops.ts_mean import TsMean
+from proki.core.ops.ts_min import TsMin
+from proki.core.ops.ts_rank import TsRank
+from proki.core.ops.ts_sum import TsSum
 
 T0 = datetime(2026, 10, 1, 10, tzinfo=timezone.utc)
 
@@ -68,6 +66,16 @@ def test_windows_hold_the_last_w_minutes():
     assert feed(TsSum(Seq([True] * 12), 1), 12)[-1] == pytest.approx(1)  # true for a minute
 
 
+def test_ts_corr_is_how_closely_two_move_together():
+    up, down = list(range(12)), list(range(12, 0, -1))
+    assert feed(TsCorr(Seq(up), Seq([2 * v + 1 for v in up]), 2), 12)[-1] == pytest.approx(1)
+    assert feed(TsCorr(Seq(up), Seq(down), 2), 12)[-1] == pytest.approx(-1)
+    assert feed(TsCorr(Seq(up), Seq([v if v % 3 else None for v in up]), 2), 12)[-1] == pytest.approx(1)  # both known only
+    assert feed(TsCorr(Seq(up), Seq([5] * 12), 2), 12)[-1] is None  # one stays the same
+    assert feed(TsCorr(Seq(up), Seq(down), 0.5), 12)[-1] == pytest.approx(-1)  # the last 3 cycles
+    assert Expr("ts_corr(1, 2, 5)").type == "number"
+
+
 def test_ts_count_counts_entries():
     on = [False, True, True, False, True, False, False]
     assert feed(TsCount(Seq(on), 7 / 6), 7)[-1] == 2
@@ -78,10 +86,6 @@ def test_nesting():
     keys = Seq([10] * 30 + [40] * 30)
     rise = Lift(lambda a, b: a - b, TsMean(keys, 2), Delay(TsMean(keys, 2), 5))
     assert feed(rise, 60)[-1] == pytest.approx(30)
-
-
-def test_constants():
-    assert feed(Constant(3), 1) == [3]
 
 
 def window(a, b, app, title=""):
@@ -123,14 +127,14 @@ def test_primitives_read_the_recording_at_the_cycle():
     signals = primitives(kind_of)
     run_to(10)
     values = {signal.name: signal.current() for signal in signals}
-    assert (values["app"], values["title"], values["url"], values["label"]) == ("Code", "", None, "code_editor")
+    assert (values["app_name"], values["app_title"], values["tab_url"], values["label"]) == ("Code", "", None, "code_editor")
     run_to(5)
     values = {signal.name: signal.current() for signal in signals}
-    assert (values["app"], values["url"], values["label"]) == ("Google Chrome", "https://www.youtube.com/watch",
+    assert (values["app_name"], values["tab_url"], values["label"]) == ("Google Chrome", "https://www.youtube.com/watch",
                                                                  "video_streaming")  # the tab, held since 4:00
-    assert (values["keys"], values["mouse_click"], values["mouse_move"]) == (20, 5, 300)
+    assert (values["keys_pressed"], values["mouse_click"], values["mouse_move"]) == (20, 5, 300)
     run_to(3.5)
-    app = next(s for s in signals if s.name == "app")
+    app = next(s for s in signals if s.name == "app_name")
     assert app.current() is None  # 30 s after Code's last event
 
 
@@ -152,7 +156,7 @@ def test_of_two_events_starting_at_once_the_longer_holds():
 
 def test_runs_continue_where_they_left_off():
     primitives(kind_of)
-    x = Signal("x", "ts_sum(keys, 10)")
+    x = Signal("x", "ts_sum(keys_pressed, 10)")
     run_to(4)
     replay(at(10), Record.of(at(0), at(10), RECORDED))
     assert x.current() == pytest.approx(200)  # 20 a minute, from 0:10 to 10:00 (59 cycles + the first)
@@ -161,33 +165,79 @@ def test_runs_continue_where_they_left_off():
 def test_expressions_on_primitives():
     # a cycle every 10 s from 0:10 to 10:00; Code held 15 s past 3:00 (until 3:10's cycle)
     assert value('ts_sum(label == "code_editor", 10)') == pytest.approx((19 + 24) / 6)
-    assert value('ts_sum(app == "Google Chrome", 10)') == pytest.approx(2)
-    assert value('ts_count(app, 10)') == 2  # Chrome, Code (the first app known isn't a change)
+    assert value('ts_sum(app_name == "Google Chrome", 10)') == pytest.approx(2)
+    assert value('ts_count(app_name, 10)') == 2  # Chrome, Code (the first app known isn't a change)
     assert value('ts_count(label == "video_streaming", 10)') == 1
-    assert value('ts_sum(title == "Video", 10)') == pytest.approx(2) and value("url") is None  # Code has no url
-    assert value("ts_mean(keys + mouse_click, 5)") == pytest.approx(25)
+    assert value('ts_sum(app_title == "Video", 10)') == pytest.approx(2) and value("tab_url") is None  # Code has no url
+    assert value("ts_mean(keys_pressed + mouse_click, 5)") == pytest.approx(25)
     assert value("ts_sum(mouse_move, 2)") == pytest.approx(600)
     Signal("in_session", "False")  # any signal can be named
-    assert value("ts_mean(keys, 0.5) > 10 and not in_session") is True
+    assert value("ts_mean(keys_pressed, 0.5) > 10 and not in_session") is True
 
 
 def test_expressions_read_other_signals():
     primitives(kind_of)
-    Signal("keys_2m", "ts_mean(keys, 2)")
+    Signal("keys_2m", "ts_mean(keys_pressed, 2)")
     assert value("keys_2m - delay(keys_2m, 2)") == pytest.approx(0)  # steady typing
 
 
+
+def test_catching_up_runs_only_what_keeps_the_past():
+    """A window needs every cycle before the present: a plain expression only the present one."""
+    Primitive.kinds["keys_pressed"](backfill=True, window=timedelta(minutes=10))  # the past to catch up on
+    worked, counted = [], Signal("counted", "keys_pressed * 1")
+    counted.advance = worked.append
+    smooth = Signal("smooth", "ts_mean(keys_pressed * 2, 1)")
+    typing = [Event(at(m / 12), at((m + 1) / 12), {"presses": 5}) for m in range(12 * 10)]
+    replay(at(10), Record.of(at(0), at(10), {"os.hid.input": typing}))
+    assert worked == [at(10)]  # once, at the present cycle
+    assert smooth.current() == pytest.approx(60)  # its window, full: 30 presses a minute, doubled
+
 def test_signals_need_a_name_and_an_expr():
-    for name, expr in (("", "keys"), ("x", "")):
+    for name, expr in (("", "keys_pressed"), ("x", "")):
         with pytest.raises(ValueError):
             Signal(name, expr)
 
 
 def test_expressions_reject_anything_else():
     assert value("2 * 3") == 6
-    for bad in ("__import__('os')", "keys.real", "[1, 2]", "nope + 1", "ts_mean(keys"):
+    assert value("[1, -2] + [3]") == [1, -2, 3]  # a list of constants
+    assert value("[2 * 3, None]") == [6, None]     # or of any values
+    for bad in ("__import__('os')", "[nope, 2]", "nope + 1", "nope.hours", "ts_mean(keys"):
         with pytest.raises(ExprError):
             value(bad)
+
+
+def test_a_dot_reads_a_field_of_a_value():
+    from proki.core.signals import Variable
+    Variable("answer", {"hours": 2, "who": {"name": "Sam"}})
+    assert value("answer.hours * 60") == 120 and value("answer.who.name") == "Sam"
+    assert value("answer.nope") is None and value("answer.hours.more") is None  # none: unknown
+    Variable("hours", 3)
+    assert value("hours.real") is None  # a number has no fields
+
+
+def test_a_list_is_read_by_its_items_and_its_columns():
+    from proki.core.signals import Variable
+    Variable("groups", [{"name": "Thesis", "desc": "the PhD", "tasks": [{"name": "Intro"}, {"name": "Plan"}]},
+                        {"name": "Job", "desc": "a new one", "tasks": []}])
+    Variable("g", 0)
+    assert value("groups[g].name") == "Thesis" and value("groups[-1].name") == "Job"  # as Python's: -1, the last
+    assert value("groups[2]") is None and value("groups[True]") is None and value("g[0]") is None  # none there: unknown
+    assert value("groups.name") == ["Thesis", "Job"] and value("groups[0].tasks.name") == ["Intro", "Plan"]  # a column
+    assert value("groups.tasks.name") == ["Intro", "Plan"] and value("'Job' in groups.name") is True  # every group's tasks, one list
+
+
+def test_operators_on_a_list_skip_its_unknown_items():
+    from proki.core.signals import Variable
+    Variable("a", [3, None, 1, 2]), Variable("tasks", [{"name": "Intro", "due": 30}, {"name": "Lit"}, {"name": "Plan", "due": 10}])
+    assert (value("min(a)"), value("max(a)"), value("min(3, 1)"), value("argmin(a)"), value("argmax(a)")) == (1, 3, 1, 2, 0)
+    assert value("sort(a)") == [1, 2, 3, None] and value("sort(tasks, tasks.due).name") == ["Plan", "Intro", "Lit"]  # unknown last
+    assert value("tasks[argmin(tasks.due)].name") == "Plan" and value("len(tasks)") == 3
+    assert value("zip(tasks.name, tasks.due)") == [["Intro", 30], ["Lit", None], ["Plan", 10]]
+    Variable("none", [None])
+    assert value("min(none)") is None and value("argmax(none)") is None  # nothing known: unknown
+    assert value("len(3)") is None and value("zip(a, 3)") is None and value("sort(a, tasks)") is None  # not lists, or not as long
 
 
 def test_monotonic_queues_keep_ties():
@@ -234,25 +284,15 @@ def test_fetches_keep_events_that_started_before_the_range():
     assert sorted(start for _, start, _ in server.asked) == [at(0), at(1)]  # from each one's newest event
 
 
-def test_a_fetch_lets_the_previous_record_go():
-    server = FakeServer({"currentwindow": [window(0, 30, "Code")]})
-    first = Record.fetch(at(0), at(29), server)  # type: ignore[arg-type]
-    first["currentwindow"]
-    later = Record.fetch(at(29), at(31), server, first)  # type: ignore[arg-type]
-    later["currentwindow"]
-    assert first.newest == later.newest and all(cell is None or cell.cell_contents is not first
-                                                 for cell in (later._fetch.__closure__ or ()))
-
-
 def test_the_first_run_replays_the_last_day():
     signals = {p.name: p for p in primitives(kind_of)}
-    x = Signal("x", "ts_sum(keys, 10)")
+    x = Signal("x", "ts_sum(keys_pressed, 10)")
     replay(at(10), Record.of(at(-1440), at(10), RECORDED))  # starts a day back
     assert x.current() == pytest.approx(200)  # the whole window, right away
-    table = signals["app"].history(at(-1440))
+    table = signals["app_name"].history(at(-1440))
     assert len(table) == 1440 * 6 and table[-1] == (at(10), "Code")  # a day of rows, kept
-    assert signals["recorded"].history(at(-60))[0][1] is False  # nothing recorded an hour ago
-    assert signals["recorded"].current() is True
+    assert signals["running"].history(at(-60))[0][1] is False  # nothing recorded an hour ago
+    assert signals["running"].current() is True
 
 
 def test_every_resamples_on_the_clock_and_holds():
@@ -298,7 +338,7 @@ def test_mixed_speeds():
 
 def test_expressions_use_slow_streams():
     primitives(kind_of)
-    x = Signal("x", "ts_rank(every(keys, 1), 10)")
+    x = Signal("x", "ts_rank(every(keys_pressed, 1), 10)")
     run_to(10)
     assert x.current() == 0.5  # steady typing: every minute ties
 
@@ -321,15 +361,17 @@ class Saved:
 
 
 def test_persisted_signals_reach_back_further_than_the_replay():
-    old = [(at(-3 * 1440 + m), 50.0) for m in range(0, 60, 1)]  # 3 days ago, from an earlier run
+    old = [*((at(-3 * 1440 + m), 50.0) for m in range(0, 60, 1)), (at(-3 * 1440 + 60), None)]  # 3 days ago, from an earlier run that quit
     Stream.storage = Saved({"keys_1m": old})
     try:
         primitives(kind_of)
-        Signal("keys_1m", "every(keys, 1)", backfill=True, window=timedelta(days=7), persist=True)
+        Signal("keys_1m", "every(keys_pressed, 1)", backfill=True, window=timedelta(days=7), persist=True)
         week = Signal("week", "ts_mean(keys_1m, 7 * 1440)")
         replay(at(10), Record.of(at(-1440), at(10), RECORDED))
         assert week.current() == pytest.approx((60 * 50 + 10 * 20) / 70)  # the old hour and the last 10 minutes
-        assert Stream.storage.saved[-1][:2] == ("keys_1m", at(10))  # type: ignore[union-attr]
+        assert Stream.storage.saved[-1] == ("keys_1m", at(1), 20.0)  # type: ignore[union-attr]  # saved as it changed, not since
+        Stream.registry["keys_1m"].close()
+        assert Stream.storage.saved[-1] == ("keys_1m", at(11), None)  # type: ignore[union-attr]  # quitting: nothing known from then
     finally:
         Stream.storage = None
 
@@ -338,7 +380,7 @@ def test_a_saved_table_is_taken_as_it_is_up_to_its_last_row():
     Stream.storage = Saved({"doubled": [(at(5), 999.0)]})  # saved by an earlier run
     try:
         primitives(kind_of)
-        doubled = Signal("doubled", "keys * 2", backfill=True, window=timedelta(days=7), persist=True)
+        doubled = Signal("doubled", "keys_pressed * 2", backfill=True, window=timedelta(days=7), persist=True)
         replay(at(10), Record.of(at(-1440), at(10), RECORDED))
         rows = doubled.history(at(-1440))
         assert rows[0] == (at(5), 999.0)  # as saved, nothing worked out before it
@@ -349,19 +391,19 @@ def test_a_saved_table_is_taken_as_it_is_up_to_its_last_row():
 
 def test_tables_keep_their_window_or_as_far_as_their_inputs_reach():
     primitives(kind_of)
-    short = Signal("short", "keys + 1", backfill=True, window=timedelta(minutes=1))
-    follows = Signal("follows", "keys + 1", backfill=True)  # no window: as far as `keys` reaches
+    short = Signal("short", "keys_pressed + 1", backfill=True, window=timedelta(minutes=1))
+    follows = Signal("follows", "keys_pressed + 1", backfill=True)  # no window: as far as `keys` reaches
     replay(at(10), Record.of(at(-1440), at(10), RECORDED))
     assert [t for t, _ in short.history(at(-1440))] == [at(10) - i * Stream.cycle for i in range(5, -1, -1)]
-    keys = Stream.registry["keys"]
+    keys = Stream.registry["keys_pressed"]
     assert follows.history(at(-1440))[0][0] == keys.history(at(-1440))[0][0] and follows.reach() == keys.reach()
 
 
 def test_a_signal_added_while_running_is_filled_in_from_the_tables():
     primitives(kind_of)
-    early = Signal("early", "ts_mean(keys, 5)", backfill=True)
+    early = Signal("early", "ts_mean(keys_pressed, 5)", backfill=True)
     replay(at(10), Record.of(at(-1440), at(10), RECORDED))
-    late = Signal("late", "ts_mean(keys, 5)", backfill=True)  # added now: nothing fetched for it
+    late = Signal("late", "ts_mean(keys_pressed, 5)", backfill=True)  # added now: nothing fetched for it
     replay(at(10.5), Record.of(at(-1440), at(10.5), {}))
     assert late.history(at(-1440)) == early.history(at(-1440))  # the same day, from `keys`' table
     assert late.current() == early.current()
@@ -382,24 +424,24 @@ def test_unknown_instead_of_a_failed_cycle():
     assert feed(Lift(lambda a, b: a // b, Seq([7, 7]), Seq([2, 0])), 2) == [3, None]  # nothing the expression can't hold
     assert feed(Lift(lambda a, b: a > b, Seq(["Code"]), Constant(3)), 1) == [None]  # text where a number goes
     Stream.registry["zero"] = Constant(0)
-    assert [compile_expr(e).current() for e in ("7 // zero", "7 % zero", "7 / zero")] == [None, None, None]
+    assert [Expr(e).value() for e in ("7 // zero", "7 % zero", "7 / zero")] == [None, None, None]
 
 
 def test_and_or_know_the_answer_when_one_side_settles_it():
     Stream.registry["unknown"] = Constant(None)
-    assert compile_expr("1 > 0 or unknown").current() is True
-    assert compile_expr("1 > 2 and unknown").current() is False
-    assert compile_expr("1 > 0 and unknown").current() is None
-    assert compile_expr("1 > 2 or unknown").current() is None
+    assert Expr("1 > 0 or unknown").value() is True
+    assert Expr("1 > 2 and unknown").value() is False
+    assert Expr("1 > 0 and unknown").value() is None
+    assert Expr("1 > 2 or unknown").value() is None
 
 
 def test_expression_mistakes_show_when_compiling():
-    Stream.registry["keys"] = Seq([])
-    for expr in ("ts_mean(keys)", "ts_mean(keys, keys)", "ts_mean(keys, True)", "every(keys, 'five')", "'a' + 1",
-                 "ts_mean(keys, -5)"):
+    Stream.registry["keys_pressed"] = Seq([])
+    for expr in ("ts_mean(keys_pressed)", "ts_mean(keys_pressed, keys_pressed)", "ts_mean(keys_pressed, True)", "every(keys_pressed, 'five')", "'a' + 1",
+                 "ts_mean(keys_pressed, -5)"):
         with pytest.raises(ExprError):
-            compile_expr(expr)
-    compile_expr("delay(keys, 0)")  # x itself
+            Expr(expr).stream()
+    Expr("delay(keys_pressed, 0)").stream()  # x itself
 
 
 def test_ts_sum_is_zero_once_its_window_empties():
@@ -414,14 +456,6 @@ def test_ts_count_skips_unknown_values_and_the_first_one():
 def test_every_takes_text_for_last_max_min():
     assert feed(Every(Seq(["Code", "Chrome", "Code", "Mail"]), 0.5, "last"), 4)[-1] == "Code"
     assert feed(Every(Seq(["b", "a", "c", "x"]), 0.5, "max"), 4)[-1] == "c"
-
-
-def test_every_follows_the_local_clock():
-    x = Every(Seq([1.0] * 3), 1440)
-    midnight = datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
-    for t in (midnight - 2 * Stream.cycle, midnight - Stream.cycle, midnight):
-        Stream.tick(t, [x])
-    assert x.fresh  # a day ends at local midnight (not UTC's)
 
 
 def test_a_failed_fetch_moves_no_stream_on():
@@ -441,6 +475,46 @@ def test_a_window_without_a_label_is_labeled_empty():
     primitives(lambda app, title: None)  # nothing is labeled
     run_to(10)
     assert Stream.registry["label"].current() == ""  # a window, no label: known
-    assert compile_expr('label in ("email", "chat")').current() is False
+    assert Expr('label in ("email", "chat")').value() is False
     Stream.registry["unknown"] = Constant(None)
-    assert compile_expr('unknown in ("email", "chat")').current() is None  # no window: unknown
+    assert Expr('unknown in ("email", "chat")').value() is None  # no window: unknown
+
+
+def test_a_streams_type_is_worked_out_from_what_its_made_of():
+    from proki.core.signals import Variable, Expr
+
+    primitives(kind_of)
+    typed = lambda expr: Expr(expr).type
+    assert (typed("keys_pressed"), typed("app_name"), typed("time")) == ("number", "string", "time")  # an input's, its kind's
+    assert (typed("ts_mean(keys_pressed, 5) * 2"), typed("keys_pressed > 3 and not False"), typed("app_name + '!'")) == ("number", "boolean", "string")
+    assert (typed("delay(app_name, 2)"), typed("every(app_name, 60, 'last')"), typed("every(keys_pressed, 60)")) == ("string", "string", "number")
+    assert (typed("1 if keys_pressed > 3 else 2"), typed("1 if keys_pressed > 3 else 'a'")) == ("number", "any")
+    Signal("busy", "keys_pressed > 30"), Signal("still", "not busy")
+    assert Stream.registry["still"].type == "boolean"  # a signal's, its expression's
+    Variable("left", 30), Variable("since", "time - 5"), Variable("plan", {"hours": 2})
+    assert (Stream.registry["left"].type, Stream.registry["since"].type) == ("number", "number")
+    assert Stream.registry["plan"].type == {"type": "object", "properties": {"hours": {"type": "number"}}}  # each field's too
+    assert typed("plan.hours") == "number"
+    Variable("picks", ["a", "b"]), Variable("mixed", [1, "a"])
+    assert typed("picks") == {"type": "array", "items": {"type": "string"}} and typed("mixed") == "array"  # items of one type
+    Variable("answer", None, type={"type": "object", "properties": {"hours": {"type": "number"}}})
+    assert typed("answer.hours") == "number" and typed("answer.who") == "any"  # a field's, from its value's schema
+    Variable("groups", None, type={"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "due": {"type": "number", "format": "time"}}}})
+    strings = {"type": "array", "items": {"type": "string"}}
+    assert (typed("groups[0].name"), typed("groups.name"), typed("zip(groups.name, groups.name)")) == ("string", strings, {"type": "array", "items": strings})
+    assert (typed("min(groups.due)"), typed("argmin(groups.due)"), typed("len(groups)"), typed("sort(groups.name)")) == ("time", "integer", "integer", strings)
+    Signal("half", "busy2 / 2"), Signal("busy2", "half * 2")
+    assert Stream.registry["half"].type == "number"  # reading each other: still worked out
+
+
+def test_saved_rows_are_read_back_a_row_a_cycle_until_the_next_or_for_a_while():
+    from proki.core.signals.stream import ALIVE, expanded
+
+    step = timedelta(seconds=10)
+    rows = [(at(0), 1.0), (at(1), 2.0), (at(60), None)]  # a change at 0 and 1, then quit
+    made = expanded(rows, step, at(120))
+    assert made[:6] == [(at(0) + i * step, 1.0) for i in range(6)] and made[6] == (at(1), 2.0)
+    held = [t for t, value in made if value == 2.0]
+    assert held[-1] < at(1) + ALIVE <= held[-1] + step  # unchanged 10 minutes at most: then nothing known, until the next row
+    assert [value for t, value in made if t >= at(60)] == [None] * 60  # quit: nothing known
+    assert expanded([(at(5), 3.0)], step, at(0)) == [(at(5), 3.0)]  # one later than now: as it is

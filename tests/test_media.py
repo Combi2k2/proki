@@ -96,12 +96,12 @@ def test_a_pool_is_yours_to_set(library):
 
 
 def test_picks_are_kept_by_an_id_and_the_devs_come_in_once(library):
-    assert library.get_picks("focus_session.away.been_away") == ["bugcat/what", "alarm-clock"]  # the dev's (emojis.json): the away poke's
+    assert library.get_picks("pomodoro.away.been_away") == ["bugcat/what", "alarm-clock"]  # the dev's (emojis.json): the away poke's
     library.set_picks("mine", ["bugcat/sad", "alarm-clock"])
     assert library.get_picks("mine") == ["bugcat/sad", "alarm-clock"] and library.get_picks("nobody") == []
     assert library.draw(library.get_picks("mine"), "sound").endswith("alarm-clock.mp3")
     with pytest.raises(ValueError, match="no media"):
         library.set_picks("mine", ["nothing"])
-    library.set_picks("focus_session.away.been_away", [])
+    library.set_picks("pomodoro.away.been_away", [])
     library = Library(library.db, settings.ASSETS_DIR, library.folder)  # the next start: not taken again
-    assert library.get_picks("focus_session.away.been_away") == []
+    assert library.get_picks("pomodoro.away.been_away") == []

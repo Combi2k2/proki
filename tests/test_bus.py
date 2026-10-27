@@ -4,13 +4,13 @@ import asyncio
 import pytest
 
 from proki import platforms
-from proki.services import nats
+from proki.app import NATS
 from proki.services.nats import LocalBus, NatsBus
 from proki.services.supervisor import Supervisor
 from proki.utils import find_commands
 
 HOST, PORT = "127.0.0.1", 14223
-FOUND = find_commands(nats.MODULES, platforms.current().NATS_DIRS, platforms.current().EXECUTABLE_SUFFIX)
+FOUND = find_commands(NATS, platforms.current().NATS_DIRS, platforms.current().EXECUTABLE_SUFFIX)
 
 
 async def exercise(bus):

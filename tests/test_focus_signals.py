@@ -2,11 +2,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from conftest import replay
+from conftest import built, replay
 from proki.services.activitywatch import Event, Record
-from proki.core.primitives import Depth, Primitive, Label
+from proki.core.primitives import Depth, Label
 from proki.core.signals import Stream
-from proki.compiler import compile_config
+from proki import settings
 
 T0 = datetime(2026, 10, 2, 10, tzinfo=timezone.utc)
 KINDS = {"Code": "ide", "Google Chrome": "video_streaming", "Slack": "team_chat"}
@@ -44,9 +44,9 @@ def run_to(minutes):
 
 @pytest.fixture
 def signals():
+    signals = built(settings.SHIPPED_DIR).streams  # the apps the build makes read their own labels: these, after
     Label.label_of = lambda app, title: KINDS.get(app)
     Depth.depth_of = lambda app, title: DEPTH.get(KINDS.get(app, ""))
-    signals = compile_config().streams
     out = {s.name: s for s in signals}
     Stream.now = at(0)
     return out
