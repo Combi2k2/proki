@@ -252,7 +252,7 @@ async def test_something_new_is_a_todo_for_the_planner(ui, board, tmp_path):
     assert [o[0] for o in question["options"]] == ["Thesis", "Errands", "Something new"]
     await ui.click("Something new")
     await minute(m), await minute(m + 1)
-    assert [n["content"] for n in Stream.registry["notes"].current() if n["bucket"] == "Todo"] == ["Slides for Friday's talk"]
+    assert [n["content"] for n in Stream.registry["note"].current() if n["bucket"] == "Todo"] == ["Slides for Friday's talk"]
     assert held() is None
     await minute(m + 2)
     assert len(ui.questions()) == 2  # asked once a session

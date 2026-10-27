@@ -1,6 +1,6 @@
 """What the engine answers for the app, on the message bus.
 
-    proki.app.note     {"text": ...}         a new note, into the inbox
+    proki.app.note     {"text": ...}         a new note, unsorted
     proki.app.quit     {}                    stop proki
     proki.app.session  {"op": "start" or "stop"}   a focus session: the session program takes it
     proki.app.tasks    {"op": ..., ...}      the board: groups, their tasks and the ops suggested
@@ -44,10 +44,11 @@ with it (`reload`):
                                                                                  (empty: back as it came)
     {"op": "set", "key": "official", "id": 7, "value": true}      → {}          yours, for a record
 
-The notes, by bucket ("Inbox", "Todo", "Idea", "Thought"):
+The notes, by bucket ("Unsorted", "Todo", "Idea", "Thought"):
 
-    {"op": "read"}                                                → {"Inbox": [...], "Todo": [...], ...}
-                                                                     an inbox note with its "sorts_at"
+    {"op": "read"}                                                → {"Unsorted": [...], "Todo": [...], ...}
+                                                                     an unsorted note with its "sorts_at"; a
+                                                                     note dealt with, where (its "link")
     {"op": "add", "bucket": "Idea", "text": "..."}                → {"id": 12}
     {"op": "change", "id": 12, "text": "..."}                     → {}
     {"op": "change", "id": 12, "due": "..."}                      → {}          when it's sorted (ISO)
@@ -85,7 +86,7 @@ from proki.storage import plain
 from proki.tools import records
 from proki.utils import minutes, moment
 
-BUCKETS = ["Inbox", "Todo", "Idea", "Thought"]  # where a note is, the inbox first, as the notes say
+BUCKETS = ["Unsorted", "Todo", "Idea", "Thought"]  # where a note is, the unsorted first, as the notes say
 
 READS = {  # what the app reads of the config, each of its type: checked as it's built
     "session.active":         "boolean",
@@ -99,7 +100,7 @@ READS = {  # what the app reads of the config, each of its type: checked as it's
     "shallow_24h":            "number",
     "active_24h":             "number",
     "tasks_open":             "number",
-    "notes.next_due":         "number",
+    "note.next_due":          "number",
 }
 
 
@@ -222,18 +223,18 @@ def setters(table: Records, key: str) -> list[str]:
 
 def on_notes(request: dict) -> dict:
     """The notes by bucket, or one added, changed, moved or removed."""
-    op, id, notes = request.get("op"), request.get("id"), find_variable("notes")
+    op, id, notes = request.get("op"), request.get("id"), find_variable("note")
     iso = lambda m: None if m is None else moment(m).isoformat()
     if op == "read":
         return {bucket: [{"id": n["id"], "text": n["content"], "at": iso(n.get("at")), "due": iso(n.get("due")),
-                          "guess": n.get("guess"), "conf": n.get("conf"), "sorts_at": iso(n.get("due"))}
+                          "guess": n.get("guess"), "conf": n.get("conf"), "sorts_at": iso(n.get("due")), "link": n.get("link")}
                          for n in notes.value or [] if n.get("bucket") == bucket] for bucket in BUCKETS}
     if op == "add":
         return {"id": noted(request["text"], request.get("bucket", BUCKETS[0]))}
     if op not in ("change", "move", "remove"):          raise ValueError(f"op is read, add, change, move or remove ({op!r})")
     if all(n["id"] != id for n in notes.value or []):   raise ValueError(f"no note {id!r}")
     changed = {"content": request["text"]} if "text" in request else {}
-    if "due" in request:  changed["due"] = minutes(datetime.fromisoformat(request["due"])) if request["due"] else current("notes.next_due")
+    if "due" in request:  changed["due"] = minutes(datetime.fromisoformat(request["due"])) if request["due"] else current("note.next_due")
     if op == "move":      changed["bucket"] = request["to"]
     notes.set([n | changed if n["id"] == id else n for n in notes.value if n["id"] != id or op != "remove"])
     return {}
@@ -241,9 +242,9 @@ def on_notes(request: dict) -> dict:
 
 def noted(text: str, bucket: str = BUCKETS[0]) -> int:
     """A new note, as a program notes one: its id."""
-    notes, at = find_variable("notes"), minutes(datetime.now(timezone.utc))
+    notes, at = find_variable("note"), minutes(datetime.now(timezone.utc))
     made      = {"id": max((n["id"] for n in notes.value or []), default=0) + 1, "content": text, "bucket": bucket,
-                 "at": at, "due": current("notes.next_due") or at}  # before a cycle: at once
+                 "at": at, "due": current("note.next_due") or at, "link": None}  # before a cycle: at once
     notes.set([*(notes.value or []), made])
     return made["id"]
 

@@ -60,19 +60,19 @@ async def test_notes_through_the_bus(bus):
     await notes({"op": "remove", "bucket": "Thought", "id": idea})
     assert (await notes({"op": "read"}))["Thought"] == []
 
-    unsorted = (await notes({"op": "add", "bucket": "Inbox", "text": "call mom"}))["id"]
-    [note] = (await notes({"op": "read"}))["Inbox"]
+    unsorted = (await notes({"op": "add", "bucket": "Unsorted", "text": "call mom"}))["id"]
+    [note] = (await notes({"op": "read"}))["Unsorted"]
     assert note["sorts_at"] == note["due"] > note["at"]  # the next 04:00
-    await notes({"op": "change", "bucket": "Inbox", "id": unsorted, "due": note["at"]})  # sort it now
-    assert (await notes({"op": "read"}))["Inbox"][0]["sorts_at"] == note["at"]
-    await notes({"op": "move", "id": unsorted, "from": "Inbox", "to": "Todo"})  # filed by you
+    await notes({"op": "change", "bucket": "Unsorted", "id": unsorted, "due": note["at"]})  # sort it now
+    assert (await notes({"op": "read"}))["Unsorted"][0]["sorts_at"] == note["at"]
+    await notes({"op": "move", "id": unsorted, "from": "Unsorted", "to": "Todo"})  # filed by you
     assert [n["text"] for n in (await notes({"op": "read"}))["Todo"]] == ["call mom"]
 
 
 async def test_mistakes_are_answered(bus):
     assert "no record None" in (await bus.request("proki.app.tasks", {"op": "add"}, 1))["error"]
     assert "op is read, add" in (await bus.request("proki.app.tasks", {"op": "rename", "record": "work.tasks"}, 1))["error"]
-    assert "notes is of type" in (await bus.request("proki.app.notes", {"op": "add", "bucket": "chores", "text": "x"}, 1))["error"]
+    assert "note is of type" in (await bus.request("proki.app.notes", {"op": "add", "bucket": "chores", "text": "x"}, 1))["error"]
 
 
 async def test_a_note_goes_into_the_inbox_and_quit_stops(tmp_path):
@@ -83,7 +83,7 @@ async def test_a_note_goes_into_the_inbox_and_quit_stops(tmp_path):
     await serve(bus, Work(db), quit=lambda: stopped.append(True))
     bus.stopped = stopped
     assert await bus.request("proki.app.note", {"text": "call mom"}, 1) == {}
-    assert [(n["content"], n["bucket"]) for n in Stream.registry["notes"].current()] == [("call mom", "Inbox")]  # a new note, in the inbox
+    assert [(n["content"], n["bucket"]) for n in Stream.registry["note"].current()] == [("call mom", "Unsorted")]  # a new note, in the inbox
     assert "some text" in (await bus.request("proki.app.note", {"text": "  "}, 1))["error"]
     await bus.request("proki.app.quit", {}, 1)
     import asyncio

@@ -36,7 +36,7 @@ def test_every_shipped_signal_compiles_and_runs():
     Stream.now = at(0)
     replay(at(1), Record.of(at(0), at(1), {}))  # every expression compiles on its first cycle
     shipped = Defaults(settings.SHIPPED_DIR).specs()
-    top = lambda name: "." not in name or name.split(".")[0] in ("session", "notes")  # a global one, or one in the session's or the notes' namespace
+    top = lambda name: "." not in name or name.split(".")[0] in ("session", "note")  # a global one, or one in the session's or the notes' namespace
     named = {name for name in Stream.registry if top(name)} - {"task", "track", "asking", "work"}  # not the rules' sides, nor what code made
     global_ = {name for name in signals if top(name)}
     scoped = [*shipped.variables, *shipped.rules]

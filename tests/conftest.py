@@ -82,7 +82,7 @@ def with_notes(data: dict) -> dict:
     from proki import settings
 
     main = json.loads((settings.SHIPPED_DIR / "main.json").read_text())
-    pick = lambda kind: [spec for spec in main[kind] if spec["name"].split(".")[0] == "notes"]
+    pick = lambda kind: [spec for spec in main[kind] if spec["name"].split(".")[0] == "note"]
     return data | {kind: [*data.get(kind, []), *pick(kind)] for kind in ("variables", "signals")}
 
 
