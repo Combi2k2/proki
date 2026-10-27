@@ -1,5 +1,9 @@
 # Benchmarks
 
+> The score checked here was the first app's (`legacy/focus/`), removed on 2026-10-10 with
+> it, and `benchmarks/swell_kw.py` still imports it, so it doesn't run now. Today's focus
+> score is a signal of the config (docs/components.md).
+
 ## SWELL-KW direction check (2026-09-28)
 
 **Question:** does proki's focus intensity drop when people are interrupted?

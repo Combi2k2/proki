@@ -1,5 +1,10 @@
 # Actions in proki today, and how to generalize them
 
+> Written 2026-10-01, about the first (Qt) app, removed on 2026-10-10. The action model it
+> proposes is built: `proki/core/actions/` (set, add, sub, ask, poke, alarm, lock, open), and
+> programs as state machines (`proki/core/programs.py`). Some features it lists went with the
+> first app (docs/deep-work.md: `[-]`).
+
 A survey of every prompt, alarm and side effect (2026-10-01): ~60 call sites in 15
 modules. The goal: one action model that the `.proki` definition file can describe.
 

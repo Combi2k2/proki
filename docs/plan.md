@@ -1,5 +1,10 @@
 # Plan: Deep Work philosophy in proki
 
+> A log of decisions, 2026-09-28 to 2026-10-01, kept as written. The files it names
+> (`legacy/...`, `core/...` of the time) were the first (Qt) app, removed on 2026-10-10: what
+> runs now is in README.md and docs/components.md, what's left to port in docs/deep-work.md
+> (`[-]`).
+
 > 2026-09-28: proki is used through the tray app; `proki` alone starts it. The CLI
 > subcommands remain as developer tools. A GUI comes only after all features.
 
@@ -472,3 +477,17 @@ Build order: morning start → routine questions → offline tasks → consisten
   good content > social media (0). Thresholds to check once there's a day of input data.
 - **Adapters for external tools**: see the conversation of 2026-10-01 (MCP client,
   Composio / Nango, plain libraries).
+
+## Noted for later (2026-10-19): task fields and asks
+- `llm` fields: their `output` a full JSON Schema, checked with `jsonschema` (already in via
+  mcp; make it a direct dependency): `check_schema` as a field's defined, and each answer
+  validated against it (a wrong one: no answer, its default).
+- Split the config's `ask` action by channel: `ask_usr`, `ask_jev`, `ask_llm`, each with its
+  own parameters, the same ones a field's `jev` / `llm` take (one spec, one editor form).
+  Touches core/actions/ask.py, the builder's specs, editor's ACTION_HELP, the shipped
+  configs, and a migration of the programs kept in proki.db (`{"ask": {"channel": ...}}`).
+- A field's type: guessed from its expr's text (`inferred`), or `typeof` of its values.
+  Decide.
+- `Extra.asked` holds when and how each value was worked out, not what's asked: a better name.
+- A score question for jev (a number for a question), if jev's service gets one.
+- Polled asks (asked again each cycle) have no test yet.

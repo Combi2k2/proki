@@ -9,7 +9,7 @@ or a reduction of it.
   seconds, 10 by default); a `Stream` has one value per cycle (None = unknown). Windows
   are time, never a number of cycles, so changing the cycle changes how often values are
   taken, not what they mean. A `Signal` is a name and an `expr` (both required), e.g.
-  `Signal("keys_5m", "ts_mean(keys, 5)")`. Signals and primitives are kept in
+  `Signal("keys_5m", "ts_mean(keys_pressed, 5)")`. Signals and primitives are kept in
   `Stream.registry`; expression names are looked up there on the first cycle. Each cycle,
   `advance(t)` moves a stream on to the cycle at t (a window pushes and drops; the cached
   value goes) and `current()` gives its value, worked out when first asked.
@@ -28,33 +28,37 @@ or a reduction of it.
   `ts_count`. Queues hold (time, value): a window over w minutes holds what came in the
   last w minutes, whatever the input's period; when a window starts, it fills its queue
   from its input's table, if the input keeps one. Time is always in minutes.
-  `ts_rank` gives where the current value stands in its window (0 to 1). Slow streams:
+  `ts_rank` gives where the current value stands in its window (0 to 1), `ts_corr(x, y, w)`
+  how closely two move together (-1 to 1). Slow streams:
   `every(x, p, how)` resamples x to one value per p minutes over clock-aligned spans (its
   `period`; `fresh` when a span closes), and windows and `delay` take only fresh values, so
   a long window over a slow stream stays small: `ts_rank(every(focus, 60), 30 * 1440)`
-  keeps 720 values.
-- `core/primitives/` (one file per primitive, a folder per source: `aw/` what ActivityWatch recorded, `sys/` the clock, `proki/` what proki works out from the window in focus (sector, depth); each folder's `base.py` what its primitives share, the top `base.py` `Primitive` and the cycles' `run`): the only code that reads ActivityWatch (`legacy/core/collector.py`
-  still does for the rest of proki, for now), and the one that drives the cycles:
+  keeps 720 values. Lists: `xs[i]` an item (-1: the last), `xs.name` a column (every
+  item's field), and `min` / `max` / `argmin` / `argmax` / `sort` / `len` / `zip` over their
+  known items: `tasks[argmin(tasks.deadline)]`, `zip(groups.name, groups.desc)`.
+- `core/primitives/` (one file per primitive, a folder per source: `aw/` what ActivityWatch recorded, `sys/` the clock, `proki/` what proki works out from the window in focus (label, depth), each folder's `base.py` what its primitives share, the top `base.py` `Primitive` and the cycles' `run`): the only code that reads ActivityWatch, and the one that drives the cycles:
   `Primitive.run(now)` fetches what was recorded since the last cycle and ticks through the
   cycles up to now. The first run replays as far back as the longest table (a day with the shipped config:
-  8,640 cycles of 10 s, in about 5 s), after which
+  8,640 cycles of 10 s; only the streams that keep the past run them, windows and tables, the
+  rest is worked out at the present cycle: a few seconds), after which
   ActivityWatch's events are let go and each primitive keeps its own day as a table. After
   a pause the cycles in between are run. Each bucket is read from where its newest event starts, so an event still
   running (a window, a tab you stay on) is never missed. A primitive's value in a cycle comes from the
   event holding at that moment; a value holds until the next event, at most 15 s past its
-  event's end. Primitives: recorded (false where ActivityWatch had nothing: it or proki was
-  off), app, title, url, label, depth (the label's category as a level,
-  legacy/core/labels.py `DEPTH`); keys, mouse_move, mouse_click, mouse_scroll (per minute).
-- The focus score is a signal like any other, in config.json: `focus = deep_share * steady *
+  event's end. Primitives: running (false where ActivityWatch had nothing: it or proki was
+  off), app_name, app_title, tab_url, label, depth (the label's category as a level),
+  keys_pressed, mouse_move, mouse_click, mouse_scroll (per minute), daytime, time, weekday,
+  dd, mm, yy (from the cycle's time). Each says what it is (`desc`), shown as you hover it.
+- The focus score is a signal like any other, in main.json: `focus = deep_share * steady *
   engaged` (each of those an expression over the primitives), then `focus_2m`, `focus_5m`,
   `focus_rise = focus - delay(focus, 2)`, `on_deep = depth == 1`, and `focus_history =
-  every(focus, 5)`, kept a week (saved). The older score built on the prepared timeline
-  (`legacy/focus/moment.py`) still feeds the scoreboard, but no signal.
+  every(focus, 5)`, kept a week (saved). Persisted signals are the metrics (the Metrics
+  window), and `proki-backfill` replays their past from what ActivityWatch recorded.
 - Sampling: a switch shorter than a cycle can be missed (a 5 s visit falls between two
   cycles).
-- Not yet: presence from input (away is still the AFK watcher's, in the timeline); state as a
-  signal over time (in_session is only known now); task primitives; history beyond the lookback
-  (reductions per day / week still live in legacy/metrics/).
+- Presence is from input: `active` (any key or mouse input the last 3 minutes), not the
+  AFK watcher. App state is variables (`in_session`, ...), streams like the others.
+- `work` is an object: `work.tasks` and `work.groups` the records proki keeps, `work.task` and `work.group` the ones at hand; `work.plan` is the one plan at hand (a group as it'd be, its changes a table).
 
 ## Series types
 
@@ -84,10 +88,10 @@ for reductions, like any other history.
 
 - **lookups** (per interval): URL → domain → category, kind; tracked / masked; lock screen →
   away; watching fills away; tools take the category of the work before
-- **window operators** (numeric, over t, at τ = 2 / 5 / 30 min): depth, fit, hit rate,
-  continuity, intensity (`legacy/focus/`); input rate (`timeline.py`, to be split into key and
-  mouse intensity); rise = intensity(t) − intensity(t − lag) (`legacy/rules/focus.py`)
-- **resampling**: intensity and category per minute → the ledger (the one stored series)
+- **window operators** (numeric, over t, at τ = 2 / 5 min): depth, steadiness, engagement,
+  focus, key and mouse intensity, rise = focus(t) − focus(t − lag)
+- **resampling**: `every(x, p)`, one value per span (hourly, daily). Persisted, these are the
+  stored series (the metrics)
 
 ## 3. Reductions (series → fewer values)
 
@@ -102,128 +106,77 @@ map (lookup) · window(τ, f) · lag · resample · group by day / week + aggreg
 ratio, run length, streak) · distribution (density, CDF, median, quantile, lift) · and on
 top, the rule: soft threshold → chance → sample, levels voting by majority.
 
-## The config (config.json)
+## The programs (main.json and the program files)
 
-The inputs, every signal that isn't a primitive (the focus score too) and the rules are
-defined in JSON, not Python, and compiled by `proki/compiler.py`: `proki/assets/config.json` ships
-the defaults, and the app copies it next to the config the first time (`config.json`,
-yours to edit; restart proki to apply). Flows will join it later.
+The inputs, the signals (the focus score too), the variables, the rules and the programs
+are specs, one per node (`proki/model/specs.py`), kept in proki.db. `proki/programs/config/`
+(main.json and a file per program, read by `proki/model/defaults.py`) ships the defaults.
+You change yours through the tools (`proki/tools/`, over MCP): node by node (`add_rule`,
+`update_state`, `remove_program`, ...) or a whole file of JSON at once, from the Programs
+window or from an AI agent. Each change is checked by building it aside, and kept only if
+it runs. A default you never changed follows proki's, and any of yours can go back to
+its default. The JSON below is a file's shape.
 
     {
-      "inputs": [
-        {"name": "app", "backfill": 1440},
-        {"name": "keys", "backfill": 1440}
-      ],
-      "signals": [
-        {"name": "engaged", "expr": "ts_mean(active, 2)"},
-        {"name": "focus_history", "expr": "every(focus, 5)", "backfill": 10080, "persist": true}
-      ]
+      "cycle":     10,
+      "inputs":    [{"name": "app_name", "backfill": "1d"}, {"name": "keys_pressed", "backfill": "1d"}],
+      "variables": [{"name": "in_session", "value": false}],
+      "signals":   [{"name": "engaged", "expr": "ts_mean(active, 2)"},
+                    {"name": "focus_history", "expr": "every(focus, 5)", "backfill": 10080, "persist": true}],
+      "rules":     [{"name": "focus_high", "lhs": "focus_5m", "cmp": "gt", "rhs": 0.5, "softness": 0.1}]
     }
 
-Rules go in `"rules"` (`core/rules.py`). A rule isn't a signal: it keeps no history and
-gives the chance of firing now, from a comparison of two expressions: `lhs`, `cmp` (gt,
-ge, lt, le, eq, ne) and `rhs`. `softness` is like an LLM's
-temperature: σ((lhs − rhs) / s) for gt / ge (mirrored for lt / le), a bell curve
-exp(−z²/2) for eq (1 − that for ne), and 0 the comparison itself. Rules trigger
-together by `level`, the highest first: each level votes by majority, and one that
-doesn't approve stops the vote.
+- **inputs** pick the primitives, by name, and how many minutes of itself each keeps as
+  a table (`backfill`). The first run goes back as far as the longest table.
+- **signals** are a name and an expression. `backfill` keeps a table, `persist` saves it
+  (a metric).
+- **variables** are app state, set by actions (`set`, `add`, `sub`), kept across restarts
+  (proki.db's `variables`). A starting `value` is a constant or an expression worked out on
+  the first cycle.
+- **rules** are soft comparisons (`core/rules.py`): `lhs`, `cmp` (gt, ge, lt, le, eq, ne),
+  `rhs`. `softness` is like an LLM's temperature: σ((lhs − rhs) / s) for gt / ge (mirrored
+  for lt / le), a bell curve for eq. Rules fire together by `level`, the highest first:
+  each level votes by majority, and one that doesn't approve stops the vote.
 
-    {"name": "focus_high", "lhs": "focus_5m", "cmp": "gt", "rhs": 0.5, "softness": 0.1}
+**Programs** (`core/programs.py`) are state machines running side by side. Each has a file,
+`<name>.json` beside main.json, with the variables, signals and rules it brings:
 
-Variables go in `"variables"` (`core/signals/variable.py`): app state, a value that
-actions and flows set, not read from the world. A variable is a stream (rules and
-expressions read it like any other: `time - last_suggested`) and changes only by the
-`set`, `add` or `sub` actions (`core/actions/var/`), each of one variable by an
-expression's value at the moment: `{"set": {"name": "deadline_eod", "expr": "deadline_eod + 1440"}}`.
-An action is effective at once: its expression is worked out on the spot, from names and
-arithmetic (no window: nothing moves one on every cycle for an action, so a window is a
-signal, used by its name); several changes are several actions, in order, and a `goto`
-can only be the last one. Its starting
-`value` is a constant or an expression worked out once, on its first cycle. Every
-variable keeps its latest value (a row in proki.db's `variables` table: name, JSON value,
-when it changed), written when it changes and restored at startup; the starting value
-counts only while nothing is saved. Resetting (at the end of the day, ...) is a flow's
-job, not the variable's.
+    {"variables": [...], "signals": [...], "rules": [...],
+     "program": {"initial": "idle", "variables": [...], "states": {
+       "idle":   {"every": 0.1, "next": [{"goto": "asking", "when": ["focus_high", "not in_session"]}]},
+       "asking": {"do": [{"ask_usr": {"context": "Start a session?", "title": "Ready?", "options": ["Start", "Not now"],
+                                      "result": "answer", "default": 1}}],
+                  "next": [{"goto": "starting", "when": "answer == 0"}, {"goto": "idle"}]},
+       ...}}}
 
-    {"name": "last_suggested", "value": null}
-    {"name": "deadline_eod", "value": "time - clock + 1440"}
+A state takes its actions as it's entered (`do`), waits `every` minutes (1 by default),
+then tries its `next`: a state's name, or branches tried in order like if / elif / else,
+each `when` a list of rules (voted together) and conditions (expressions, all true). No
+branch passes: it waits `every` more and tries again. No `next`: back to `initial`.
+Entering a state, even the one it's in, runs its `do` again.
 
-Programs go in `"programs"` (`core/programs.py`): state machines running side by side,
-each in one state at a time. A program starts in its `initial` state. Each state can take
-actions as it's entered (`do`), waits `every` minutes (1 by default), and then tries its
-`next`:
+Everything named can say what it's for in a line, `desc`: a program (with its `tags`), a
+state, a branch, a variable, a signal, a rule. The Programs window shows them. An input's
+is written in code, as its module's first line (`core/primitives/`).
 
-- a state's name: go there.
-- branches tried in order, like if / elif / else:
-  `[{"goto": "x", "if": ["rule_a", "rule_b"]}, {"goto": "y", "if": "answer == 1"}, {"goto": "z"}]`.
-  `if` is a list of rules voted together, or an expression that's true or false. The first
-  branch that passes is taken, and one without `if` always passes. If none passes, the
-  program stays and tries again after `every`.
-- no `next`: back to the program's `idle` state.
+Variables live in scopes: global (a file's `variables`), the program's, or a state's (an
+ask's `result`, `answer`). A name is found from the inside out. A variable lives as long
+as what owns it: a state's goes back to its starting value when the state is left, a
+program's when the program starts over (each start, or switched on again), and a global
+one is kept across restarts. Signals and rules are
+global. Full names read the others' (`suggest.asking.answer`).
 
-Going to a state, even the same one, enters it again and runs its `do` again. That's how
-a state loops: `{"do": [{"add": {"name": "active_today", "expr": "active"}}], "next":
-"idle"}` counts once a minute. A dot in a state's name (`session.focusing`) is only for
-reading. States aren't streams: their names appear only in the program. Variables are
-global (a name declared again anywhere is the same variable, and a declaration with a
-value gives its starting value). Programs always run: every start begins each at its
-`initial` state, and only the variables carry over.
+**Actions** (`core/actions/`): `set` / `add` / `sub` a variable, `ask` you (`usr`), jev or
+an LLM (its answer later in a variable of the state, while it waits only this program
+waits), `poke` a message, `lock` the screen, `open` a page by its path. A poke with `"alarm": true`
+rings while it's on the screen, and stops as it's closed (a question never rings: you're
+there to answer it). A context
+fills in values as it's said: `{"format": "{h:.1f} h so far", "values": {"h": "shallow_today / 60"}}`.
 
-    {"name": "day", "initial": "idle", "states": {
-      "idle":    {"variables": [{"name": "deadline_eod", "value": "time - clock + 1440"}],
-                  "next": [{"goto": "new_day", "if": ["eod"]}]},
-      "new_day": {"do": [{"set": {"name": "deadline_eod", "expr": "deadline_eod + 1440"}}]}}}
+Shipped programs: `focus_session`, `suggest`, `budget`, `hub`, `day`, `morning`, `evening`,
+`bedtime`. What's in code (`proki/programs/code/`) is the records: the config reads and
+writes them as variables (`work.task`, `work.group`, `note`, ...).
 
-A question is an action, `ask`, the same for you, jev and an LLM (core/ask.py: one queue
-each on the message bus, NATS). It doesn't hold the program: the answer comes back later, as the chosen option's index, in the variable
-`result`, and the state's `next` branches on it. While the question waits, that variable
-is unknown, so no branch on it passes yet.
-
-    {"ask": {"channel": "usr",                     (or "jev", "llm")
-             "context": "{h:.1f} h shallow so far. Start a session?",
-             "values": {"h": "shallow_today / 60"}, (worked out when asked, filled into the context)
-             "options": [{"option": "Start", "criteria": "focus is building"}, {"option": "Not now"}],
-             "result": "suggest_answer",           (0, 1, ... the chosen option)
-             "default": 1,                         (the index on no answer, -1: nothing chosen)
-             "timeout": 120}}                      (seconds: 2 min for you, 10 s for jev or an LLM by default)
-
-    "next": [{"goto": "starting", "if": "suggest_answer == 0"}, {"goto": "idle", "if": "suggest_answer == 1"}]
-
-No answer means dismissed, a failed call, no one to ask, or past `timeout`. `criteria` says
-what an option means, for jev or an LLM.
-
-Actions (`do`, `core/actions/`, one file each) are things done, never jumps: `set` / `add`
-/ `sub` a variable (`{"set": {"name": "x", "expr": "x + 1"}}`, true / false add as 1 / 0),
-`ask` a question (above), `poke` you with a one-way message (`{"poke": {"text": "...", "values": {...}}}`), ring or
-stop an alarm (`{"alarm": {"name": "bedtime", "on": true}}`), lock the screen (`{"lock":
-{}}`) or open a view (`{"open": {"view": "task_form"}}`).
-
-Each program can have a file of its own, `programs/<name>.json` next to the config, with
-the variables, signals and rules it brings: `{"variables": [...], "signals": [...],
-"rules": [...], "program": {"initial": "idle", "states": {...}}}`. The program takes the
-file's name, and it's one namespace with the config (a name is defined once). Shipped:
-`day`, `suggest`, `budget` (shallow minutes counted per day, a question over 30%), `hub`
-(email and chat during a session), `bedtime` (pokes from 22:00, the alarm from 00:00),
-`morning` (the greeting, the routine timer, the alarm at its end), `evening` ("anything
-new?" at 21:30). `today` (config.json) is the day's start in `time`'s minutes, the day
-starting at 04:00. Your copy gets the ones you don't have, and an entry that moved out of
-config.json into a file leaves your config.json if you hadn't changed it.
-
-Some programs are written in code (`proki/programs/`: plan, session, shutdown, routines,
-reminders, rhythm, capture, meditation, grand, sprint, experiment, craftsman). The config
-reads their variables (`in_session`, `shutdown_done`, `tasks_open`, `task`), asks the
-session program for a session or its end through `session_requested` /
-`session_stop_requested`, and can't name a program the same. `proki/engine/` runs it all:
-each cycle the inputs move on, the answers that came are acted on, then every program
-takes its turn.
-
-`clock` (minutes since local midnight), `weekday` (0 Monday) and `time` (minutes since
-1970, for "minutes since") are inputs too, from the cycle's time, not from ActivityWatch.
-
-`inputs` picks the primitives (by name; an expression can only read the ones listed) and
-how many minutes of itself each keeps as a table (`backfill`; none if left out). The first
-run goes back as far as the longest table. Plain JSON (no comments). Each entry needs a
-`name` (and a signal an `expr`); `window` is in minutes. Unknown sections or fields, an
-unknown input, a missing name or expr, a name used twice, or an expression reading a
-name nobody defines stop proki with a message naming it.
-
+Plain JSON (no comments). A mistake (an unknown section or field, input, name, a name used
+twice, an expression reading a name nobody defines) stops the compile with a message
+naming where it is.

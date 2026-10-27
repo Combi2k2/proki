@@ -6,16 +6,17 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "platformdirs>=4",
-    "python-dotenv>=1",
     "requests>=2.31",
-    "PySide6>=6.6",
     "numpy>=2.4.6",
     "nats-py>=2.16.0",
-    "qasync>=0.28.0",
+    "mcp>=1.20",
+    "tiktoken>=0.14.0",
+    "jsonschema>=4.26",
 ]
 
 [project.scripts]
-proki = "proki.legacy.cli:main"
+proki = "proki.app:main"
+proki-backfill = "proki.backfill:main"
 
 [dependency-groups]
 dev = [
@@ -33,32 +34,26 @@ packages = [
     "proki",
     "proki.core",
     "proki.core.actions",
-    "proki.core.actions.ask",
-    "proki.core.actions.ui",
-    "proki.core.actions.var",
     "proki.core.ops",
     "proki.core.signals",
+    "proki.core.records",
     "proki.core.primitives",
     "proki.core.primitives.aw",
     "proki.core.primitives.proki",
     "proki.core.primitives.sys",
+    "proki.channels",
     "proki.engine",
+    "proki.model",
     "proki.errors",
     "proki.platforms",
     "proki.programs",
+    "proki.programs.code",
     "proki.services",
-    "proki.legacy",
-    "proki.legacy.commands",
-    "proki.legacy.core",
-    "proki.legacy.flows",
-    "proki.legacy.focus",
-    "proki.legacy.metrics",
-    "proki.legacy.rules",
-    "proki.legacy.ui",
+    "proki.tools",
 ]
 
 [tool.setuptools.package-data]
-proki = ["assets/sounds/*", "assets/*.json", "assets/programs/*.json"]
+proki = ["assets/*.json", "assets/sounds/*", "assets/media/*/*", "programs/config/*.json", "programs/code/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -4,7 +4,8 @@ Every idea from Cal Newport's *Deep Work*, with a first idea for how proki could
 support it. We design and build these one at a time; each `→` line is a
 starting point to refine, not a decision.
 
-Status: `[ ]` not started · `[~]` designing/building · `[x]` done
+Status: `[ ]` not started · `[~]` designing/building · `[x]` done · `[-]` built in the first
+(Qt) app, gone with it on 2026-10-10, to port onto the engine
 
 ## Foundations (needed by many items below)
 
@@ -30,31 +31,34 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
 
 - [ ] **Depth philosophies as configuration, not labels** (decided 2026-09-29): people
   aren't put into one type; each philosophy is a way to calibrate blocks and strictness.
-  - [x] **Rhythmic**: same time every day + a chain of kept days
+  - [-] **Rhythmic**: same time every day + a chain of kept days
   - [ ] **Bimodal**: whole deep days vs. open days
   - [ ] **Monastic**: most of the day deep, shallow only in set windows
   - [ ] **Journalistic**: deep work whenever time appears (current ad-hoc sessions)
 - [~] **Ritualize**: where, how long, how you work, what supports you
   → focus-session template: duration, allowed apps, pre-session checklist
-- [x] **Grand gesture**
+- [-] **Grand gesture**
   → optional "big session" mode: long block, strict allowlist, all nudges but blockers off
   *(built 2026-09-29: tray → Grand gesture…; one long session (4 h / 8 h), wrap-up only at the end, breaks allowed (alarm 20 min, end 45 min); outcome kept as a note)*
 - [x] **Hub-and-spoke collaboration**
   → separate "collaboration" and "solo" blocks; don't nudge about Slack during collaboration
   *(built 2026-09-29: in a session, 15 s on email / chat / a call → "can wait until the session is over", once per visit)*
-- [x] **4DX 1: Focus on the wildly important**
+- [~] **4DX 1: Focus on the wildly important**
   → user sets 1–2 goals; sessions are tagged with the goal they serve
-  *(covered: goal groups with priorities; each session works on one group)*
-- [x] **4DX 2: Act on lead measures**
+  *(goal groups with priorities, the next task by urgency × priority. Gone with the first
+  app: each session working on one group)*
+- [~] **4DX 2: Act on lead measures**
   → track deep hours per goal (a lead measure), not outcomes
-  *(covered: deep hours per day (quota) and per goal group (weekly review))*
+  *(deep minutes per day, a metric. Gone with the first app: the quota, per goal group)*
 - [x] **4DX 3: Keep a compelling scoreboard**
   → tray shows today's deep hours; simple daily/weekly chart
-- [x] **4DX 4: Cadence of accountability**
+  *(the tray's focus line, Today, and Metrics: any persisted signal's history)*
+- [~] **4DX 4: Cadence of accountability**
   → weekly review popup: deep hours vs. goal, what helped, what got in the way
   *(built 2026-09-29: in the last workday's shutdown ritual; deep work per day vs. the
   daily goal, per goal group with its priority, chain, consistency, last week's answer;
-  "what will you change next week?")*
+  "what will you change next week?". Still there: that question. Gone with the first
+  app: the rest of the review)*
 - [~] **Be lazy (real downtime)**
   → after the workday ends, stop work nudges; flag work apps opened late in the evening
   *(partly: no capture questions after the shutdown; evening wind-down. Not built: flagging work apps late in the evening)*
@@ -70,10 +74,10 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
   → user schedules internet/distraction blocks; nudge when distraction apps are used outside them
 - [ ] **Don't fill every lull**
   → detect "short idle → distraction app" pattern; gentle check-in, not a block
-- [x] **Work like Roosevelt** (short, intense deadlines)
+- [-] **Work like Roosevelt** (short, intense deadlines)
   → "sprint" session: user picks a task and a tight deadline; countdown in tray
   *(built 2026-09-29: tray → Sprint…; the deadline is the task's own estimate, countdown in the tray, "time's up" rings: done / 5 more / stop)*
-- [x] **Productive meditation**
+- [-] **Productive meditation**
   → after a long session, suggest a walk with one problem to think about; ask for the result afterwards
   *(built 2026-09-29: thinking walk after good sessions or from the tray; counts as offline deep work; the outcome is kept as a note)*
 - [ ] **Memory training**
@@ -83,10 +87,10 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
 
 - [ ] **Craftsman approach to tools**
   → weekly report per app/site: time spent vs. whether the user marked it as serving a goal
-- [x] **Law of the vital few**
+- [-] **Law of the vital few**
   → show which few activities produce most of the deep hours
   *(built 2026-09-29: "Most deep hours" in the weekly review: top 3 deep sites/apps)*
-- [x] **30-day test**
+- [-] **30-day test**
   → user picks a service to quit for 30 days; proki tracks slips and asks the two questions at the end
   *(built 2026-09-29: tray → 30-day test…; slips = 10 s on it per visit, reminder with Close it; Newport's two questions on day 30; two noes → quit for good)*
 - [ ] **Don't use the internet to entertain yourself**
@@ -100,7 +104,7 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
   → ask the user to rate unknown activities once ("how long to train a graduate to do this?")
 - [x] **Shallow-work budget**
   → user sets a percentage; tray warns when shallow time exceeds it
-  *(built 2026-09-29: soft limit 30%, sampled prompts; tray and weekly review)*
+  *(built 2026-09-29: soft limit 30%, sampled prompts: the config's `budget`)*
 - [x] **Fixed-schedule productivity**
   → user sets a workday end; shutdown ritual triggers then
   *(covered: the shutdown ritual at the workday end)*
@@ -120,9 +124,10 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
   replaced by "What needs to be done tomorrow?" feeding the to-do list (done)
 - [x] **Task backlog** (replaces the day-plan to-do list and the small-task inbox): incoming
   tasks with deadline, own estimate, goal group; broken down until atomic
-- [x] **Goal groups + session group choice** (urgency × priority), one group per session
-- [x] **Daily deep-work quota** 4–10 h, rising past 80%
-- [x] **Tasks at session start**, handed over one at a time
+- [~] **Goal groups + session group choice** (urgency × priority), one group per session
+  *(the groups and the choice; not tied to sessions any more)*
+- [-] **Daily deep-work quota** 4–10 h, rising past 80%
+- [-] **Tasks at session start**, handed over one at a time
 - [~] **AI integration**: conversation, planning, task breakdown, encouragement
 - [x] **Sleep anchor**: wind-down pokes in the evening, escalating late at night; be
   understanding, not judgmental, when people resist it
@@ -130,8 +135,7 @@ Status: `[ ]` not started · `[~]` designing/building · `[x]` done
   news) as an on-ramp, time-boxed. (No separate warm-up reminder: decided 2026-09-29)
 - [ ] **Calendar / task-tracker integration** (calendar, Jira, Trello): place deep work
   inside events that look like deep work, without clashing with the rest
-- [~] **Daily routines** (meals, shower, sport, morning routine): learned from the user's
-  own data (typical times, not fixed numbers), then gently prompted. Collecting answers: done;
-  reminders from typical times: next
+- [x] **Daily routines** (meals, shower, sport, morning routine): learned from the user's
+  own data (typical times, not fixed numbers), then gently prompted (`routines`, `reminders`)
 - [ ] **Shallow and distraction periods** scheduled in the open time; deep work capacity
   is limited, so planned downtime is part of the design

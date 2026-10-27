@@ -1,159 +1,126 @@
 # proki: procrastination killer
 
 proki runs quietly in the background, watches how you work (only in the apps you
-choose), and nudges you at good moments: when your focus is fragmenting, when
-small tasks are piling up, or when it's time to clear them in one batch.
+choose), and nudges you at good moments: when your focus slips, when a session has run
+long, when it's time to wind down.
 
-Everything stays on your machine.
+Everything stays on your machine, except what you let jev or an LLM see (an app's name
+and a window title).
 
 ## Requirements
 
-- [ActivityWatch](https://activitywatch.net) installed (it records window activity;
-  proki reads it through its local API). proki starts ActivityWatch's background
-  programs itself, so ActivityWatch's own app and menu-bar icon aren't needed
-  (set `[activitywatch] manage = false` to run it yourself instead). Add the
-  ActivityWatch browser extension for website titles/URLs.
-- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
-
-## Windows (not yet tested)
-
-Download [`scripts/windows/proki.bat`](https://github.com/Combi2k2/proki/raw/main/scripts/windows/proki.bat)
-and double-click it. It installs everything proki needs (uv, Python, ActivityWatch, proki
-itself, into your user folder, no admin rights needed), asks once for the optional API
-keys, puts an "proki" shortcut on the desktop and starts proki (its icon is next to the
-clock). Run the file again to update. Windows may warn about an unknown file the first
-time: "More info" → "Run anyway".
+- [ActivityWatch](https://activitywatch.net): it records window activity, and proki reads
+  it through its local API. With `[activitywatch] manage = true`, proki starts its
+  background programs itself. Add its browser extension for websites, and
+  aw-watcher-input for key and mouse activity.
+- [NATS server](https://nats.io) (`brew install nats-server`): the message bus between the
+  engine and the UI. proki starts it.
+- Python 3.11+ with [uv](https://docs.astral.sh/uv/), and Node.js for the UI.
 
 ## Usage
 
 ```bash
-uv sync          # create .venv and install dependencies
-uv run proki      # start the tray app (settings file is created on first run)
-uv run pytest    # run tests
+uv sync                                  # the engine's dependencies
+(cd ui && npm install && npm run build)  # the UI
+uv run proki                             # start proki: NATS, ActivityWatch, the engine, the UI
+uv run proki-backfill --days 14          # the metrics' past, from what ActivityWatch recorded
+uv run pytest                            # the tests
 ```
 
-The menu-bar icon is a scope whose ring fills toward today's deep-work goal
-(a dot in the middle once reached). The tray menu shows today's scoreboard:
-deep minutes, streaks, goal progress and time per activity.
+On Windows, [`scripts/windows/proki.bat`](scripts/windows/proki.bat) installs and starts
+proki, but it was written for the app before the UI was rewritten: it doesn't install
+NATS or build the UI yet.
 
-**Focus sessions** (tray → Start focus session) run until you stop them. proki
-pokes you when your focus slips (with an alarm that rings until you're focused again), asks whether you're done if focus drops later
-on, reminds you to wrap up after 50 minutes, and sounds an alarm if you're away
-for 5 minutes (it keeps ringing until you're back; choose your own sound with
-`alarm_sound` in the settings). Details in `docs/plan.md`.
+## What you see
 
-**A daily deep-work block** (Deep Work's "rhythmic" style) at the same time every
-day (weekdays 09:00 by default, `[rhythm]`), with a **chain** of days you kept it.
+- **The tray**: your focus over the last 5 minutes, a running session's minutes next to
+  the icon, and the menu: open proki, a new note, start or stop a focus session, Tasks,
+  Ideas, Metrics, Programs, quit.
+- **The popup**: proki's questions and messages, one at a time. A message with an alarm
+  rings while it's on the screen, and stops as you close it.
+- **The main window**:
+  - **Today**: your focus now, the last 24 hours (deep, shallow, active minutes) and your
+    next task
+  - **Tasks** and **Ideas**: your tasks in goal groups, and the thoughts you kept
+  - **Metrics**: the history of any persisted signal, switched on and off
+  - **Programs**: the config's programs, edited and run without restarting, with what
+    they can use (inputs, signals, variables, rules, actions) and their values now
 
-**Your task backlog** (tray → Tasks… / New task…): tasks come in over time, each with a
-deadline, your own estimate and a goal group. openjev checks each one; anything vague
-or longer than one 50-minute session is broken down (by you, with suggested steps from
-Gemini when it's available). Each focus session works on one goal group, the most
-urgent one (work left vs. deadlines, weighted by the group's priority), and hands over
-its tasks one at a time. In the evening proki asks whether anything new came up.
+## What it does
 
-The goal is a **daily deep-work quota** (4 h to start, up to 10 h): the scope's ring
-fills toward it, and proki shows what you did, never what's left.
+Programs run side by side, each a state machine. Most are written in the config (JSON,
+`proki/programs/config/`), the rest in code (`proki/programs/code/`).
 
-**A morning start**: when you first pick up the laptop, proki shows today's work and asks
-how long your morning routine takes. Back early? It asks whether you're finished ("not yet"
-sends you back with a minute more). When the routine time (plus a small buffer) is over without a
-session, the alarm rings until you start one. "Heading out today" skips it.
+| Program | What it does |
+|---|---|
+| `focus_session` | a session you start (tray, or a suggestion) and stop: a poke when focus slips, "is this session done?" after 25 minutes, time to wrap up after 50, a ringing poke when you're away 5 minutes, the end after 10 |
+| `suggest` | focus building up outside a session: start one? |
+| `budget` | shallow work over 30% of the day: a session? |
+| `hub` | email and chat during a session: a reminder |
+| `morning` | the first activity: today's work, the routine timer, a question at its end |
+| `evening`, `bedtime` | "anything new?" at 21:30, and pokes from 22:00, a ringing poke and a question to lock the screen from 00:00 |
+| `day` | the day's deadline, moved on at its end |
+| `classify` (code) | an app proki hasn't seen: track it? A window without a label: jev's or the LLM's guess to confirm, or yours |
+| `task_planner` | a todo talked through into a group's tasks: changes suggested on its card |
+| `task_reminder` | a task due soon, or stuck, now and then outside a session: and what's in the way, once put off again and again |
+| `task_picker` | a session without a task: what you're on, jev's group and task for it for you to confirm, or a todo for the planner |
+| `capture` | "anything worth noting?" on shallow work or a distraction stretch, handed to the planner |
+| `shutdown` | the end of the workday: what's still open (tasks, through the planner), the week, then tomorrow |
 
-**An evening wind-down**, every night: from 22:00 a reminder every 5 minutes while you're
-still at the computer ("10 more minutes" once per night, or lock the screen), and from
-00:00 the alarm rings until you lock the screen or step away. The tray shows when you
-stopped last night and started this morning. Settings under `[bedtime]`.
+Only tracked apps are recorded by name. When you use an untracked app, proki asks whether
+to track it, and how it counts (deep, shallow, distraction, neutral). "Don't track"
+keeps only a hash of its name. Browsers are tracked per website.
 
-**Routines**: after you've been away (or the laptop slept), proki sometimes asks what it
-was: a meal, a shower, sport… More often for longer absences, never for short ones;
-overnight is logged as sleep. This builds up your typical times for later reminders.
+## Settings
 
-Everything else is in the tray menu: rate your focus,
-snoozing nudges, **Open settings…** (the config file) and **Start at login**.
+`config.toml` in proki's config folder (`~/Library/Application Support/proki/` on
+macOS):
 
-Developer tools for inspecting the data processing: `uv run proki --help`
-(`check`, `focus`, `calibrate`, `track`, `categorize`, ...).
+    [activitywatch]  host, port, manage
+    [nats]           host, port
+    [tools]          port: your programs' tools over MCP (4791)
+    [jev]            enabled, url, key, model, min_confidence   (or JEV_URL, JEV_KEY, JEV_MODEL)
+    [llm]            model: "family/model" from proki/services/llms.json (its key from the family's variable)
+    [classification] suggest_after_seconds, ask_after_seconds, ask_track_after_seconds, ignore_apps
+    [[track]]        apps (and titles, pages) recorded by name
 
-Only tracked apps are recorded by name. Other windows are seen only as
-`(untracked)`: switches still count, but no names or titles are kept.
-
-When you use an untracked app for 5 seconds, proki asks whether to track it,
-and as what (Deep / Shallow / Distraction / Neutral / Don't track / Ask later).
-The name is only shown in that popup; it is never sent anywhere, and
-"Don't track" stores just a hash of it. Apps can
-also be listed in `[[track]]` in the config.
-
-## Categories
-
-Every activity counts as **deep**, **shallow**, **distraction** or **neutral**
-(from *Deep Work*). `[[category]]` rules in the config are checked first. For
-any other tracked app or website, proki asks once in a popup and remembers
-the answer. Browsers are classified per website domain, never as a whole.
-
-With `[jev] enabled = true` and `JEV_URL` / `JEV_KEY` (and `JEV_MODEL=openjev` for
-openjev) set (environment, or a `.env` next to the config), each new tracked window is
-labeled after 2 s on it: by similarity to windows you've labeled, else by jev (openjev, a
-local jev, or any service like it), else by Gemini. A label from jev or Gemini is shown
-for you to confirm or change; with none, you're asked after 10 s. Only the app name and
-window title are sent.
-
-## Focus intensity
-
-Deep work still involves switching, but between a few related things (editor,
-docs, terminal), not endlessly to new ones, and not every few seconds. Over a
-sliding window, proki scores
-
-    intensity = depth × working-set fit × hit rate × continuity    (0 to 1)
-
-at several window sizes (default 2, 10, 30 min), and summarizes periods as
-deep minutes, longest deep streak and distraction switches per hour. Every
-component and parameter is described in `docs/components.md`.
+Keys can also go in a `.env` next to it. Your signals, rules and programs are kept in
+proki.db, made from the defaults the first time, changed in the Programs window or by an
+AI agent through the same tools (MCP, on 127.0.0.1, port `[tools] port`, with the token in
+`tools-token` next to config.toml). Each can go back to its default.
 
 ## Layout
 
-The code lives in `proki/` (e.g. `from proki.rules.base import Rule`).
-Three kinds of building blocks each have a folder, with `base.py` defining the class and how it
-is evaluated, and one module per concrete one:
-
 ```
 proki/
+  app.py          the entry point: starts the services, the engine and the UI
+  settings.py     where proki's files are, and config.toml
+  storage.py      proki.db: the app's state, variables, persisted signals
+  serve.py        what the UI asks the engine for (proki.app.*): tasks, ideas, today, metrics
+  editor.py       the Programs window: your programs as files of JSON, checked, kept and run
+  backfill.py     proki-backfill: the metrics' past
   core/
-    signals/      the signal language: Stream and the cycles (stream.py),
-                  expressions (expr.py), signals (signal.py), variables, the app's state (variable.py)
-    primitives/   the streams the others are built from, a folder per source, one file each:
-                  aw/ what ActivityWatch recorded, sys/ the clock, proki/ what proki works
-                  out from the window in focus (label, depth); each folder's base.py: what
-                  its primitives share; base.py: Primitive and the cycles' run
-    ops/          time-series operators, one file each (TsMean → ts_mean.py, `ts_mean(...)`)
-    rules.py      Rule: a soft comparison of two expressions, the chance of firing now
-    actions/      what a state does as it's entered, one file each, a folder by what it acts on:
-                  var/ (set, add, sub), ask/ (ask), ui/ (poke, alarm, lock, open)
-    programs.py   Program: state machines side by side, each state with actions and a next
-    ask.py        ask_usr / ask_jev / ask_llm: a question over the bus (NATS), its answer back
-    ui.py         what programs in code say to you: questions, pokes, alarms, the session line
-    later.py      slow calls in the background, their results at the engine's next turn
-  compiler.py     compiles config.json and its program files (assets/programs/*.json)
-  engine/         Engine: runs it all cycle by cycle; the workers answering jev's and the
-                  LLM's questions (workers.py)
-  programs/       programs written in code, one file each: plan, session, shutdown, routines,
-                  reminders, rhythm, capture, meditation, grand, sprint, experiment, craftsman
-                  (the legacy flows, moved over; base.py: Ritual)
-  errors/         what proki raises on purpose: ProkiError (with where it happened), config
-                  mistakes (ConfigError: ExprError, RuleError, ProgramError, ...), services
-                  (ServiceError: LlmError), the platform (PlatformError)
-  utils.py        small helpers that know nothing about proki (snake, slugify, grams, ...)
-  services/       ActivityWatch (`aw`: run it, read it), jev (structured decisions), LLMs
-                  (llm.py: any OpenAI-compatible service; assets/llms.json: each family's
-                  URL, key variable and models)
+    signals/      Stream and the cycles, expressions, signals, variables
+    primitives/   the inputs, a folder per source: aw/ ActivityWatch, sys/ the clock, proki/ labels
+    ops/          time-series operators, one file each (ts_mean, every, delay, ...)
+    rules.py      Rule: a soft comparison, the chance of firing now
+    actions/      what a state does as it's entered: var.py, ask.py, ui.py
+    programs.py   Program: state machines, each woken by the engine's cycles
+  model/          your programs as specs (one per node: program, state, branch, action, variable,
+                  signal, rule, input), the operations that change them, built into what runs
+  engine/         Engine: the programs run cycle by cycle, each change checked aside, then kept
+  channels/       asking you (popup.py), jev and an LLM, on the message bus
+  programs/       every program, as shipped:
+    config/       the config's files: main.json (the global scope: inputs, variables, signals,
+                  rules) and one JSON file per program
+    code/         the programs written in code: classify, notes, tasks/
+    shipped.py    the defaults coming into your programs (kept in proki.db), and back to one
+  services/       ActivityWatch, NATS, jev, LLMs, the supervisor that runs them
   platforms/      the only OS-specific code
-  assets/         config.json, programs/ (the config's programs: day, suggest, budget, hub,
-                  bedtime, morning, evening),
-                  llms.json, labels.json, sounds
-  legacy/         everything else, still running the tray app until it moves onto signals:
-                  app.py (hosts the engine, the tray, the popup and task windows), cli.py,
-                  config.py, commands/, core/, focus/, metrics/, rules/, ui/, flows/ (no
-                  longer run: replaced by programs/; see legacy/__init__.py)
+  errors/         what proki raises on purpose
+  assets/         media: the alarm's sound
+ui/               the app: the tray, the popup, the main window (app/: `npm run app`), and
+                  its pages (src/, React)
 ```
 
 ## Platform status
@@ -162,4 +129,3 @@ proki/
 |---|---|---|---|---|
 | Tested | yes | not yet | not yet | not yet |
 | Window tracking | ✅ | ✅ | ✅ | needs `awatcher` |
-| Popups | ✅ | ✅ | ✅ | position not controllable |
