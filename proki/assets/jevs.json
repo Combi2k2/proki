@@ -1,0 +1,5 @@
+{
+  "openrouter": {"name": "OpenRouter", "url": "https://openrouter.ai/api/alpha/decisions", "models_url": "https://openrouter.ai/api/v1/models?output_modalities=decisions"},
+  "openjev"   : {"name": "openjev",    "url": "https://api.openjev.sh/v1/systemone", "models": ["openjev"]},
+  "custom"    : {"name": "Custom",     "url": "", "models": []}
+}

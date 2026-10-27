@@ -6,24 +6,37 @@ import os
 import subprocess
 from pathlib import Path
 
-ACTIVITYWATCH_DIRS = [
+AW_DIRS   = [
     Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "ActivityWatch",
     Path(os.environ.get("PROGRAMFILES", "C:/Program Files")) / "ActivityWatch",
 ]
-EXECUTABLE_SUFFIX = ".exe"
 NATS_DIRS = [
     Path(os.environ.get("PROGRAMFILES", "C:/Program Files")) / "nats-server",
     Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "nats-server",
     Path.home() / "go" / "bin",
 ]
+EXE  = ".exe"
 
 # the browsers, as ActivityWatch names them (the program's file name)
-BROWSER_APPS = {"chrome.exe", "msedge.exe", "brave.exe", "firefox.exe", "vivaldi.exe", "opera.exe"}
+BROWSER_APPS = {
+    "chrome.exe",
+    "msedge.exe",
+    "brave.exe",
+    "firefox.exe",
+    "vivaldi.exe",
+    "opera.exe"
+}
 
 # system windows that come and go on their own. Never worth a question
 SYSTEM_APPS = {
-    "LockApp.exe", "SearchHost.exe", "SearchApp.exe", "ShellExperienceHost.exe",
-    "StartMenuExperienceHost.exe", "ApplicationFrameHost.exe", "explorer.exe", "Taskmgr.exe",
+    "LockApp.exe",
+    "SearchHost.exe",
+    "SearchApp.exe",
+    "ShellExperienceHost.exe",
+    "StartMenuExperienceHost.exe",
+    "ApplicationFrameHost.exe",
+    "explorer.exe",
+    "Taskmgr.exe",
 }
 
 

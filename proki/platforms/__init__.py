@@ -3,8 +3,9 @@
     install_autostart(command: list[str]) -> None
     uninstall_autostart() -> None
     autostart_installed() -> bool
-    ACTIVITYWATCH_DIRS: list[Path]   where ActivityWatch's programs usually are
-    EXECUTABLE_SUFFIX: str           "" or ".exe"
+    AW_DIRS: list[Path]              where ActivityWatch's programs usually are
+    NATS_DIRS: list[Path]            where nats-server usually is
+    EXE: str                         a program's suffix: "" or ".exe"
     BROWSER_APPS: set[str]           the browsers, as ActivityWatch names them
     LOCK_APPS: set[str]              the lock screen / screen saver (time on it counts as away)
     SYSTEM_APPS: set[str]            system windows never worth a question (plus the `ignore_apps` setting)
