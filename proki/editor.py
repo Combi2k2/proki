@@ -71,7 +71,8 @@ def reference(engine: Engine) -> dict:
         programs    every program: on or off, its state now, whether it's in the config or in
                     code (`kind`), and its tags
 
-    Each input, signal, variable, rule and program says what it's for ("desc")."""
+    Each input, signal, variable, rule and program says what it's for ("desc"); a signal or a
+    variable the app reads says so ("app"), since it can't be removed or retyped."""
     compiled = engine.compiled
     used     = {i.name for i in compiled.inputs}
     declared = {v.name for v in compiled.variables}
@@ -83,8 +84,8 @@ def reference(engine: Engine) -> dict:
         "actions"  : [{"name": name, "about": kind.ABOUT, "example": kind.EXAMPLE,
                        "params": [n + ("" if p.default is inspect.Parameter.empty else "?") for n, p in inspect.signature(kind.__init__).parameters.items() if n != "self"]}
                       for name, kind in ACTIONS.items()],
-        "signals"  : [{**signal_row(s), "scope": scope(s.name)} for s in compiled.signals],
-        "variables": [*({**variable_row(v), "scope": scope(v.name), "from": "config" if v.name in declared else "code", **columns(v)}
+        "signals"  : [{**signal_row(s), "scope": scope(s.name), "app": s.name in engine.reads} for s in compiled.signals],
+        "variables": [*({**variable_row(v), "scope": scope(v.name), "from": "config" if v.name in declared else "code", "app": v.name in engine.reads, **columns(v)}
                         for v in Stream.registry.values() if isinstance(v, Variable) and v.name not in known
                         and under(v.name, known) is None and not v.name.startswith("_")),
                       *({"name": prefix, "desc": said, "value": None, "persist": False, "scope": "special", "from": "code",

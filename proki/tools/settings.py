@@ -99,7 +99,7 @@ def test(service: str, provider: str, url: str, key: str | None, model: str | No
     """{"ok": true} if `service` answers at `url` with `key`. ValueError, saying why, if not."""
     if service == "llm":
         return {"ok": True, "models": len(models(service, provider, url, key))}
-    model = model or next(iter(settings.PROVIDERS["jev"][provider].get("models", [])), None)
+    model = model or next(iter(models(service, provider, url, key)), None)  # its provider's, else the ones it lists
     if not model:
         raise ValueError("pick a model first (step 3): this provider asks one by name")
     try:

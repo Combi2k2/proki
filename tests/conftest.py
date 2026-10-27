@@ -4,6 +4,7 @@ import asyncio
 from collections import Counter
 from datetime import timedelta
 
+import keyring
 import pytest
 
 from proki.channels import Channels, Popup
@@ -44,6 +45,16 @@ def fresh_signals():
     Stream.registry.update(saved)
     Rule.registry.clear()
     Rule.registry.update(saved_rules)
+
+
+@pytest.fixture(autouse=True)
+def keychain(monkeypatch) -> dict:
+    """A keychain of the test's own: no test reads or changes yours. The keys kept, by name."""
+    kept: dict[tuple[str, str], str] = {}
+    monkeypatch.setattr(keyring, "get_password", lambda service, name: kept.get((service, name)))
+    monkeypatch.setattr(keyring, "set_password", lambda service, name, key: kept.__setitem__((service, name), key))
+    monkeypatch.setattr(keyring, "delete_password", lambda service, name: kept.pop((service, name)))
+    return kept
 
 
 def programs_folder(path, data: dict, files: dict | None = None):

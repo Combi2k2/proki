@@ -118,12 +118,23 @@ async def test_the_reference_says_what_a_program_can_use(setup):
     assert actions["ask_usr"]["params"][:2] == ["context", "result"] and "options?" in actions["ask_usr"]["params"]
     assert actions["ask_jev"]["params"] == ["context", "questions", "timeout?"] and actions["ask_llm"]["params"] == ["context", "result", "timeout?"]
     assert ref["signals"] == [{"name": "hours", "desc": "", "expr": "daytime / 60", "type": "number", "value": pytest.approx(ref["signals"][0]["value"]),
-                               "backfill": None, "persist": False, "scope": "global"}]
-    assert {"name": "count", "desc": "", "type": "number", "value": 1, "persist": True, "scope": "global", "from": "config"} in ref["variables"]
+                               "backfill": None, "persist": False, "scope": "global", "app": False}]
+    assert {"name": "count", "desc": "", "type": "number", "value": 1, "persist": True, "scope": "global", "from": "config", "app": False} in ref["variables"]
     assert ref["rules"][0]["name"] == "late"
     programs = {p["name"]: p for p in ref["programs"]}
     assert programs["counter"]["kind"] == "config" and programs["counter"]["state"] == "on"
     assert programs["@plan"]["kind"] == "code" and programs["@plan"]["desc"]
+
+
+async def test_what_the_app_reads_is_kept(tmp_path):
+    e = Engine(programs_folder(tmp_path, CONFIG, {}), reads={"count": "number", "hours": "number"})
+    await cycle(e, 0)
+    ref = ask(e, op="reference")
+    assert [v["app"] for v in ref["variables"] if v["name"] == "count"] == [True] and ref["signals"][0]["app"]
+    count = {"name": "count", "scope": "global", "program": None, "state": None}
+    assert "the app reads count" in ask(e, op="apply_changes", changes=[{"op": "remove", "kind": "variable", "data": count}])["error"]
+    assert "the app reads count" in ask(e, op="apply_changes", changes=[{"op": "update", "kind": "variable", "data": {**count, "changes": {"type": "string", "value": "'a'"}}}])["error"]
+    assert "count" in Stream.registry
 
 
 def test_a_check_compiles_aside(setup):

@@ -92,6 +92,8 @@ READS = {  # what the app reads of the config, each of its type: checked as it's
     "session.requested":      "boolean",
     "session.stop_requested": "boolean",
     "session.minutes":        "number",
+    "focus":                  "number",
+    "focus_lines":            {"type": "array", "items": {"type": "number"}},
     "focus_5m":               "number",
     "deep_24h":               "number",
     "shallow_24h":            "number",

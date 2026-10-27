@@ -351,6 +351,20 @@ async def test_classify_asks_a_label_from_them_all_when_jev_gives_none(tmp_path,
     assert len(ui.questions()) == 1  # yours: never asked again
 
 
+@pytest.mark.parametrize("conf, says", [
+    (0.5, "“Krita” looks like Design to me. Is that right?"),
+    (0.2, "“Krita” might be Design, but I'm not so sure. What is it?"),
+])
+async def test_classify_asks_a_label_as_sure_as_jev_is_of_it(tmp_path, ui, conf, says):
+    known = apps()
+    known.keep("Krita", datetime.now(timezone.utc), track=True, label=known.named("Design"), source="jev", conf=conf)
+    run = runner(classifying(tmp_path, known))
+    await run(local(5, 10, 0))
+    await run(local(5, 10, 1, 30))
+    question = await asked(ui, 1)
+    assert question["context"] == says and ui.labels(question)[question["show"]["selected"]] == "Design"
+
+
 # --- the planner's task reminder -----------------------------------------------------------
 
 def reminding(tmp_path, store, session=False):
@@ -605,6 +619,24 @@ async def test_a_note_to_deal_with_now_is_sorted_then_one_for_later_waits(tmp_pa
     await run(local(5, 10, 1, 20))
     assert len(ui.questions()) == 3 and [n["content"] for n in read("Inbox")] == ["renew the visa, it expires Friday", "try a standing desk"]
     assert due(read("Inbox")[1]) == local(6, 4, 0)
+
+
+@pytest.mark.parametrize("ps, says", [
+    ({0: 0.25, 1: 0.5,  2: 0.25}, "This looks like it goes under Idea. Is that right?"),
+    ({0: 0.3,  1: 0.38, 2: 0.32}, "I'd put this under Idea, but I'm not sure. Where does it go?"),
+])
+async def test_a_note_is_asked_as_sure_as_jev_is_of_its_bucket(tmp_path, ui, ps, says):
+    from proki.channels import Channels, jev
+
+    await jev.serve(Channels.bus, SayingJev({"right away": [0.9]}, choice={"desk": ps}))
+    run = runner(sorting(tmp_path))
+    await run(local(5, 10, 0))
+    add("Inbox", "a standing desk")
+    await run(local(5, 10, 0, 10))
+    await asked(ui, 1)
+    await ui.click("OK")  # now: its bucket, at once
+    question = await asked(ui, 2)
+    assert question["context"] == f"“a standing desk”\n\n{says}" and question["show"]["selected"] == 1
 
 
 def planning(tmp_path, store):
