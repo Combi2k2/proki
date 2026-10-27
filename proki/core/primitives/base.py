@@ -55,7 +55,7 @@ class Primitive(Stream):
 
     @classmethod
     def run(cls, now: datetime) -> None:
-        """Run every stream, cycle by cycle, up to `now`.
+        """Run every stream, cycle by cycle, up to `now`: nothing until a cycle is due.
 
         It continues from the last cycle run. The first time, it starts as far back as the
         longest table (a persisted one doesn't count: it loads its past from disk), so every
@@ -63,6 +63,8 @@ class Primitive(Stream):
         (`sources`): if that fails, no stream has moved, and the next run retries. Of the
         cycles before the present, only the streams that keep their past are run."""
         t = Stream.now
+        if t is not None and t <= now < t + Stream.cycle:
+            return
         if t is None or t > now:
             longest = max([timedelta(0), *(s.window for s in Stream.registry.values() if s.backfill and s.window and not s.persist)])
             start   = now - longest
