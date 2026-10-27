@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {"key": "spent", "desc": "minutes worked on it", "srcs": [{"from": "auto", "initial": 0}], "type": "number"},
+    {"key": "last_worked", "desc": "when it was last worked on", "srcs": [{"from": "auto"}], "type": "time"},
+    {"key": "put_offs", "desc": "the reminders of it put off in a row", "srcs": [{"from": "auto", "initial": 0}], "type": "number"},
+    {"key": "last_put_off", "desc": "when the last one was", "srcs": [{"from": "auto"}], "type": "time"},
+    {"key": "left", "desc": "the minutes of it left", "srcs": [{"from": "expr", "expr": "max(me.estimate - me.spent, 5)"}], "type": "number"},
+    {"key": "pressing", "desc": "how pressing its deadline is, with the work left: 240 minutes of it a day", "srcs": [{"from": "expr", "expr": "0 if me.deadline is None else 1 if me.deadline <= time else min(1, max(1440 / (1440 + me.deadline - time), me.left / 240 * 1440 / (me.deadline - time)))"}], "type": "number"},
+    {"key": "untouched", "desc": "how long since it was last worked on: a week is 1", "srcs": [{"from": "expr", "expr": "min(1, (time - (me.created_at if me.last_worked is None else me.last_worked)) / 10080)"}], "type": "number"},
+    {"key": "progress", "desc": "how far into its estimate: past it, 0", "srcs": [{"from": "expr", "expr": "me.spent / me.estimate if me.spent < me.estimate else 0"}], "type": "number"},
+    {"key": "quick", "desc": "how small what's left is", "srcs": [{"from": "expr", "expr": "max(0, 1 - me.left / 50)"}], "type": "number"},
+    {"key": "put_off", "desc": "put off lately: three in a row is 1", "srcs": [{"from": "expr", "expr": "0 if me.last_put_off is None or time - me.last_put_off >= 1440 else min(1, me.put_offs / 3)"}], "type": "number"},
+    {"key": "score", "desc": "how much a task weighs: the weightiest first", "srcs": [{"from": "expr", "expr": "2 * me.pressing + me.untouched + me.progress + me.quick / 2 - me.put_off"}], "type": "number"},
+    {"key": "away", "desc": "done away from the computer: never the one to start now", "srcs": [{"from": "user"}, {"from": "expr", "expr": "False"}], "type": "boolean"},
+    {"key": "rests_until", "desc": "until when it isn't reminded of", "srcs": [{"from": "auto"}], "type": "time"},
+    {"key": "start", "desc": "its score, if it's one to start now: not away", "srcs": [{"from": "expr", "expr": "None if me.away or not me.ready else me.score"}], "type": "number"},
+    {"key": "remind", "desc": "its score, if it's one to remind of: due soon, or stuck, and not resting", "srcs": [{"from": "expr", "expr": "None if not me.ready or me.rests_until is not None and me.rests_until > time else me.score if me.spent >= 2 * me.estimate or me.deadline is not None and (me.deadline - time + daytime) // 1440 <= 2 else None"}], "type": "number"},
+    {"key": "group_name", "desc": "its group's name", "srcs": [{"from": "expr", "expr": "work.groups[index(work.groups.id, me.group)].name"}], "type": "string"},
+    {"key": "group_desc", "desc": "what its group is for", "srcs": [{"from": "expr", "expr": "work.groups[index(work.groups.id, me.group)].desc"}], "type": "string"},
+    {"key": "done_at", "desc": "when it was done or dropped, as of its last change (minutes since 1970; none: open)", "srcs": [{"from": "expr", "expr": "None if me.status == 'open' else me.updated_at"}], "type": "time"}
+  ],
+  "groups": [
+    {"key": "startable", "desc": "whether any of its tasks can be started now", "srcs": [{"from": "expr", "expr": "max(where(work.tasks.start, work.tasks.group, me.id)) is not None"}], "type": "boolean"},
+    {"key": "done_at", "desc": "when it was done or dropped, as of its last change (minutes since 1970; none: open)", "srcs": [{"from": "expr", "expr": "None if me.status == 'open' else me.updated_at"}], "type": "time"}
+  ]
+}
