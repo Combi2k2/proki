@@ -9,3 +9,5 @@ build/
 .env
 .agents/
 .claude/
+.codex/
+skills-lock.json

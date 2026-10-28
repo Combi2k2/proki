@@ -14,7 +14,7 @@ and a window title).
   background programs itself. Add its browser extension for websites, and
   aw-watcher-input for key and mouse activity.
 - [NATS server](https://nats.io) (`brew install nats-server`): the message bus between the
-  engine and the UI. proki starts it.
+  engine and the UI. The launcher starts it.
 - Python 3.11+ with [uv](https://docs.astral.sh/uv/), and Node.js for the UI.
 
 ## Usage
@@ -22,10 +22,14 @@ and a window title).
 ```bash
 uv sync                                  # the engine's dependencies
 (cd ui && npm install && npm run build)  # the UI
-uv run proki                             # start proki: NATS, ActivityWatch, the engine, the UI
+uv run launch.py                         # start it all: NATS, ActivityWatch, the engine, the UI, kept running
+uv run proki                             # the engine alone, for what's already running
 uv run proki-backfill --days 14          # the metrics' past, from what ActivityWatch recorded
 uv run pytest                            # the tests
 ```
+
+The app can be opened by itself too (`ui/app/target/release/bundle/macos/proki.app`): it finds
+the engine where the engine is, on its own.
 
 On Windows, [`scripts/windows/proki.bat`](scripts/windows/proki.bat) installs and starts
 proki, but it was written for the app before the UI was rewritten: it doesn't install
@@ -73,28 +77,27 @@ keeps only a hash of its name. Browsers are tracked per website.
 
 ## Settings
 
-`config.toml` in proki's config folder (`~/Library/Application Support/proki/` on
-macOS):
+Set in the app, under Settings → Services: the LLM a program's asks go to, and jev. Each is a
+provider (OpenAI, Anthropic, Google, OpenRouter, or a custom one at your URL), its key and a
+model: try the connection, fetch the models there, pick one and save. It's asked from then on.
+The key is kept in your computer's keychain, the rest in `config.toml` in proki's config folder
+(`~/Library/Application Support/proki/` on macOS).
 
-    [activitywatch]  host, port, manage
-    [nats]           host, port
-    [tools]          port: your programs' tools over MCP (4791)
-    [jev]            enabled, url, key, model, min_confidence   (or JEV_URL, JEV_KEY, JEV_MODEL)
-    [llm]            model: "family/model" from proki/services/llms.json (its key from the family's variable)
-    [classification] suggest_after_seconds, ask_after_seconds, ask_track_after_seconds, ignore_apps
-    [[track]]        apps (and titles, pages) recorded by name
+Everything else runs on this machine as the launcher starts it: ActivityWatch on port 5600, the
+message bus on 4222, and the tools on 9144.
 
-Keys can also go in a `.env` next to it. Your signals, rules and programs are kept in
+Your signals, rules and programs are kept in
 proki.db, made from the defaults the first time, changed in the Programs window or by an
-AI agent through the same tools (MCP, on 127.0.0.1, port `[tools] port`, with the token in
+AI agent through the same tools (MCP, on 127.0.0.1, port 9144, with the token in
 `tools-token` next to config.toml). Each can go back to its default.
 
 ## Layout
 
 ```
+launch.py         starts NATS, ActivityWatch, the engine and the UI, and keeps them running
 proki/
-  app.py          the entry point: starts the services, the engine and the UI
-  settings.py     where proki's files are, and config.toml
+  __main__.py     the engine (`proki`, `python -m proki`): your programs, served on the bus and as tools
+  settings.py     where proki's files are, and the services it asks
   storage.py      proki.db: the app's state, variables, persisted signals
   serve.py        what the UI asks the engine for (proki.app.*): tasks, ideas, today, metrics
   editor.py       the Programs window: your programs as files of JSON, checked, kept and run
@@ -115,7 +118,7 @@ proki/
                   rules) and one JSON file per program
     code/         the programs written in code: classify, notes, tasks/
     shipped.py    the defaults coming into your programs (kept in proki.db), and back to one
-  services/       ActivityWatch, NATS, jev, LLMs, the supervisor that runs them
+  services/       ActivityWatch, NATS, jev, LLMs, the supervisor the launcher runs them with
   platforms/      the only OS-specific code
   errors/         what proki raises on purpose
   assets/         media: the alarm's sound
