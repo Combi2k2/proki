@@ -318,7 +318,7 @@ PLAN   = {"type": "object", "properties": {
 
 
 class Plan(Linked):
-    """work.plan, and a name for each of its fields: what's planned for the group at hand."""
+    """work.plan, a field of work: what's planned for the group at hand."""
 
     NAME = "work.plan"
     KEY  = "work_plan"                                               # where its own fields are kept
@@ -327,9 +327,6 @@ class Plan(Linked):
     def __init__(self, work: Work):
         self.work, self.kv = work, StateDB(work.db)
         super().__init__(self.NAME, self.read, self.write, "the plan: what's planned for a group, and its changes", PLAN)
-        for key, made in PLAN["properties"].items():
-            Linked(f"{self.NAME}.{key}", lambda key=key: (self.read() or {}).get(key),
-                   lambda value, key=key: self.change(key, value), made.get("description", ""), made)
 
     def read(self) -> dict[str, Any] | None:
         """The plan, as it is now (None: none)."""
@@ -342,13 +339,6 @@ class Plan(Linked):
         """The plan from now on (None: no plan, its changes taken away)."""
         self.kv.set(self.KEY, None if plan is None else {key: plan.get(key) for key in self.KEPT})
         self.changes((plan or {}).get("changes") or [])
-
-    def change(self, key: str, value: Any) -> None:
-        """A field of the plan set (no plan: one made of it)."""
-        plan = self.kv.get(self.KEY) or dict.fromkeys(self.KEPT)
-        self.kv.set(self.KEY, plan if key == "changes" else plan | {key: value})
-        if key == "changes":
-            self.changes(value or [])
 
     def changes(self, given: list[dict]) -> None:
         """Its changes from now on, on the group at hand's card, in place of the ones it had:

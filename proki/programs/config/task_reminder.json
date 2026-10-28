@@ -1,0 +1,67 @@
+{
+  "title": "Task reminders",
+  "desc": "A word about tasks that are due soon or stuck, at the right moment",
+  "icon": "bell",
+  "tags": ["tasks"],
+  "variables": [
+    {"name": "tasks_open", "value": 0, "desc": "how many tasks can be worked on now"}
+  ],
+  "program": {
+    "initial": "waiting",
+    "variables": [
+      {"name": "first", "value": null, "desc": "the task to start with: the weightiest not away"},
+      {"name": "item", "value": null, "desc": "the task to remind of, if any: the weightiest due soon, or stuck, not resting"},
+      {"name": "days", "value": null, "desc": "the days to its deadline (none: no deadline)"},
+      {"name": "stuck", "value": false, "desc": "whether twice its estimate is spent on it"}
+    ],
+    "states": {
+      "waiting": {"desc": "every minute: what it keeps for the others, and the task to remind of, if any", "every": "1min", "do": [
+          {"name": "open", "desc": "the tasks that can be worked on now", "set": {"name": "tasks_open", "expr": "len(where(work.tasks, work.tasks.ready))"}},
+          {"name": "first", "desc": "the task to start with", "set": {"name": "first", "expr": "work.tasks[argmax(work.tasks.start)]"}},
+          {"name": "next", "desc": "the task to start with, as it's said", "set": {"name": "next_task",
+              "expr": "'a clean slate: no tasks yet' if first is None else '“' + first.name + '” (about ' + str(first.estimate) + ' min)'"}},
+          {"name": "item", "desc": "the task to remind of: none in a session, nor while a question waits", "set": {"name": "item",
+              "expr": "None if session.active or asking else work.tasks[argmax(work.tasks.remind)]"}},
+          {"name": "days", "desc": "the days to its deadline", "set": {"name": "days", "expr": "None if item is None or item.deadline is None else (item.deadline - time + daytime) // 1440"}},
+          {"name": "stuck", "desc": "whether it's stuck", "set": {"name": "stuck", "expr": "item is not None and item.spent >= 2 * item.estimate"}}],
+        "next": [{"goto": "reconsidering", "when": ["item is not None", "stuck or item.put_offs >= 3"], "desc": "put off again and again, or stuck"},
+                 {"goto": "reminding", "when": ["item is not None"], "desc": "due soon, and you're free"},
+                 {"goto": "waiting"}]},
+      "reminding": {"desc": "the reminder, then at most one this often", "every": "2h", "do": [
+          {"name": "remind", "desc": "asks about it", "ask_usr": {"context": {"format": "“{name}” (about {estimate} min) is {due}{waits}. {ask}", "values": {
+                "name": "item.name", "estimate": "str(item.estimate)",
+                "due": "'overdue' if days < 0 else 'due today' if days == 0 else 'due tomorrow' if days == 1 else 'due in ' + str(days) + ' days'",
+                "waits": "'' if item.waiting == 0 else ', and 1 task waits on it' if item.waiting == 1 else ', and ' + str(item.waiting) + ' tasks wait on it'",
+                "ask": "'It\\'s done away from the computer: set an alarm, or block time for it?' if item.away else 'Work on it now?'"}},
+              "options": "(['I\\'ve planned it'] if item.away else ['Start session']) + ['Later', 'Done']", "result": "answer", "timeout": 86400, "title": "Reminder"}},
+          {"name": "start", "desc": "Start session: the task at hand, a session asked for (the task_tracker counts its time)", "set": {"name": "work.task",
+              "expr": "item if answer == 0 and not item.away else work.task"}},
+          {"name": "session", "desc": "a session asked for", "set": {"name": "session.requested", "expr": "answer == 0 and not item.away or session.requested"}},
+          {"name": "planned", "desc": "planned for: it rests a day", "set": {"name": "item.rests_until", "expr": "time + 1440", "when": "answer == 0 and item.away"}},
+          {"name": "put_off", "desc": "Later, or no answer: put off once more", "add": {"name": "item.put_offs", "expr": "1", "when": "answer == 1 or answer is None"}},
+          {"name": "not_put_off", "desc": "else: not put off", "set": {"name": "item.put_offs", "expr": "0", "when": "answer in (0, 2)"}},
+          {"name": "when", "desc": "when it was last reminded of", "set": {"name": "item.last_put_off", "expr": "time"}},
+          {"name": "done", "desc": "Done: it's done", "set": {"name": "item.status", "expr": "'done'", "when": "answer == 2"}}],
+        "next": "waiting"},
+      "reconsidering": {"desc": "what's in the way, then a while", "every": "2h", "do": [
+          {"name": "way", "desc": "asks what's in the way", "ask_usr": {"context": {"format": "{says} What's in the way?", "values": {
+                "says": "'You\\'ve spent ' + str(item.spent // 1) + ' min on “' + item.name + '” (about ' + str(item.estimate) + ' min).' if stuck else 'You\\'ve put off “' + item.name + '” (about ' + str(item.estimate) + ' min) ' + str(item.put_offs) + ' times, and it\\'s ' + ('overdue' if days < 0 else 'due today' if days == 0 else 'due tomorrow' if days == 1 else 'due in ' + str(days) + ' days') + '.'"}},
+              "options": "(['It just needs more time'] if stuck else []) + ['It\\'s unclear', 'It\\'s too big', 'Something else comes first', 'It\\'s not worth it anymore']",
+              "result": "answer", "timeout": 86400, "title": "What's in the way?"}},
+          {"name": "more_time", "desc": "it needs more time: the estimate is what's spent, and half of it more", "set": {"name": "item.estimate",
+              "expr": "item.spent // 1 + item.estimate // 2", "when": "stuck and answer == 0"}},
+          {"name": "unclear", "desc": "it's unclear: back to the planner", "append": {"name": "note", "expr": {"due": "today + 1680", "bucket": "'Todo'",
+              "content": "'Work out what to do first for “' + item.name + '”, in “' + item.group_name + '”: it\\'s unclear'"},
+              "when": "answer == (1 if stuck else 0)"}},
+          {"name": "too_big", "desc": "it's too big: back to the planner, to split", "append": {"name": "note", "expr": {"due": "today + 1680", "bucket": "'Todo'",
+              "content": "'Split “' + item.name + '”, in “' + item.group_name + '”, into smaller tasks: it\\'s more than one sitting'"},
+              "when": "answer == (2 if stuck else 1)"}},
+          {"name": "rests", "desc": "unclear, too big, or something else first: it rests a day", "set": {"name": "item.rests_until", "expr": "time + 1440",
+              "when": "0 <= answer - (1 if stuck else 0) <= 2"}},
+          {"name": "not_put_off", "desc": "asked: not put off", "set": {"name": "item.put_offs", "expr": "0"}},
+          {"name": "when", "desc": "when it was last reminded of", "set": {"name": "item.last_put_off", "expr": "time"}},
+          {"name": "dropped", "desc": "not worth it: dropped", "set": {"name": "item.status", "expr": "'dropped'", "when": "answer == (4 if stuck else 3)"}}],
+        "next": "waiting"}
+    }
+  }
+}

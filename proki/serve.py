@@ -96,11 +96,15 @@ READS = {  # what the app reads of the config, each of its type: checked as it's
     "focus":                  "number",
     "focus_lines":            {"type": "array", "items": {"type": "number"}},
     "focus_5m":               "number",
+    "focus_goal":             "number",
+    "focused_today":          "number",
+    "focused_week":           "number",
+    "goal_streak":            "number",
     "deep_24h":               "number",
     "shallow_24h":            "number",
     "active_24h":             "number",
     "tasks_open":             "number",
-    "note.next_due":          "number",
+    "today":                  "number",
 }
 
 
@@ -226,27 +230,30 @@ def on_notes(request: dict) -> dict:
     op, id, notes = request.get("op"), request.get("id"), find_variable("note")
     iso = lambda m: None if m is None else moment(m).isoformat()
     if op == "read":
-        return {bucket: [{"id": n["id"], "text": n["content"], "at": iso(n.get("at")), "due": iso(n.get("due")),
+        return {bucket: [{"id": n["id"], "text": n["content"], "at": iso(n["created_at"]), "due": iso(n.get("due")),
                           "guess": n.get("guess"), "conf": n.get("conf"), "sorts_at": iso(n.get("due")), "link": n.get("link")}
-                         for n in notes.value or [] if n.get("bucket") == bucket] for bucket in BUCKETS}
+                         for n in notes.current() if n.get("bucket") == bucket] for bucket in BUCKETS}
     if op == "add":
         return {"id": noted(request["text"], request.get("bucket", BUCKETS[0]))}
     if op not in ("change", "move", "remove"):          raise ValueError(f"op is read, add, change, move or remove ({op!r})")
-    if all(n["id"] != id for n in notes.value or []):   raise ValueError(f"no note {id!r}")
+    if (note := notes.get_row(id)) is None:             raise ValueError(f"no note {id!r}")
     changed = {"content": request["text"]} if "text" in request else {}
-    if "due" in request:  changed["due"] = minutes(datetime.fromisoformat(request["due"])) if request["due"] else current("note.next_due")
+    if "due" in request:  changed["due"] = minutes(datetime.fromisoformat(request["due"])) if request["due"] else sorts_at()
     if op == "move":      changed["bucket"] = request["to"]
-    notes.set([n | changed if n["id"] == id else n for n in notes.value if n["id"] != id or op != "remove"])
+    if op == "remove":    notes.set([n for n in notes.current() if n["id"] != id])
+    else:                 notes.add_row(dict(note) | changed)
     return {}
 
 
 def noted(text: str, bucket: str = BUCKETS[0]) -> int:
     """A new note, as a program notes one: its id."""
-    notes, at = find_variable("note"), minutes(datetime.now(timezone.utc))
-    made      = {"id": max((n["id"] for n in notes.value or []), default=0) + 1, "content": text, "bucket": bucket,
-                 "at": at, "due": current("note.next_due") or at, "link": None}  # before a cycle: at once
-    notes.set([*(notes.value or []), made])
-    return made["id"]
+    due = sorts_at() or minutes(datetime.now(timezone.utc))  # before a cycle: at once
+    return find_variable("note").add_row({"content": text, "bucket": bucket, "due": due})
+
+
+def sorts_at() -> float | None:
+    """When a note is sorted, unless it says: the next 04:00, as today ends (None: before a cycle)."""
+    return None if (day := current("today")) is None else day + 1680
 
 
 def on_apps(request: dict, apps: Apps | None) -> dict:

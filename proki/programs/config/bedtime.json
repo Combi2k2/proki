@@ -1,0 +1,39 @@
+{
+  "title": "Bedtime",
+  "desc": "Reminds you to wind down at night, and to step away later on",
+  "icon": "bed-double",
+  "tags": ["sleep", "evening"],
+  "variables": [
+    {"name": "bedtime_snooze_night", "value": 0, "desc": "the day the snooze was used (one a night)"},
+    {"name": "bedtime_snoozed_until", "value": 0, "desc": "no pokes until then"},
+    {"name": "bedtime_poked", "value": 0, "desc": "when it last poked"}
+  ],
+  "signals": [
+    {"name": "wind_down", "expr": "daytime >= 1320", "desc": "it's 22:00 or later"},
+    {"name": "hard_stop", "expr": "daytime < 240", "desc": "it's past midnight (before 04:00)"},
+    {"name": "night", "expr": "daytime >= 1320 or daytime < 240", "desc": "between 22:00 and 04:00"}
+  ],
+  "rules": [
+    {"name": "bed_wind_down", "lhs": "wind_down", "cmp": "eq", "rhs": 1, "level": 4, "desc": "it's time to wind down"},
+    {"name": "bed_active", "lhs": "active", "cmp": "eq", "rhs": 1, "level": 3, "desc": "you're at the computer"},
+    {"name": "bed_not_snoozed", "lhs": "time", "cmp": "ge", "rhs": "bedtime_snoozed_until", "level": 2, "desc": "not snoozed"},
+    {"name": "bed_snooze_left", "lhs": "bedtime_snooze_night", "cmp": "lt", "rhs": "today", "level": 1, "desc": "tonight's snooze isn't used yet"},
+    {"name": "bed_snooze_used", "lhs": "bedtime_snooze_night", "cmp": "ge", "rhs": "today", "level": 1, "desc": "tonight's snooze is used"},
+    {"name": "bed_hard_stop", "lhs": "hard_stop", "cmp": "eq", "rhs": 1, "level": 2, "desc": "it's past midnight"},
+    {"name": "bed_away", "lhs": "active", "cmp": "eq", "rhs": 0, "desc": "you stepped away"},
+    {"name": "bed_day", "lhs": "night", "cmp": "eq", "rhs": 0, "desc": "the night is over"},
+    {"name": "bed_poke_due", "lhs": "time - bedtime_poked", "cmp": "ge", "rhs": 5, "level": 5, "desc": "5 minutes since the last poke"}
+  ],
+  "program": {
+    "initial": "idle",
+    "states": {
+      "idle": {"desc": "waiting for the evening", "every": "6s", "next": [{"goto": "past_midnight", "when": ["bed_hard_stop", "bed_active"], "desc": "past midnight and still here"}, {"goto": "poking", "when": ["bed_wind_down", "bed_active", "bed_not_snoozed", "bed_poke_due", "bed_snooze_left"], "desc": "wind down time, snooze left"}, {"goto": "poking_again", "when": ["bed_wind_down", "bed_active", "bed_not_snoozed", "bed_poke_due", "bed_snooze_used"], "desc": "wind down time, snooze used"}]},
+      "poking": {"desc": "time to wind down: snooze, wind down or lock?", "do": [{"name": "bedtime_poked", "desc": "sets bedtime_poked to time", "set": {"name": "bedtime_poked", "expr": "time"}}, {"name": "bedtime", "desc": "asks “Bedtime”", "ask_usr": {"context": {"format": "It's {h:02.0f}:{m:02.0f}. Time to wrap up and get ready for bed.\nEnding the day on time is how you take back control of tomorrow.", "values": {"h": "daytime // 60", "m": "daytime % 60"}}, "options": ["Later", "OK", "Lock screen"], "result": "answer", "default": 1, "title": "Bedtime"}}], "every": "6s", "next": [{"goto": "snoozing", "when": "answer == 0", "desc": "10 more minutes"}, {"goto": "locking", "when": "answer == 2", "desc": "lock screen"}, {"goto": "idle", "desc": "winding down"}]},
+      "poking_again": {"desc": "time to wind down, the snooze already used", "do": [{"name": "bedtime_poked", "desc": "sets bedtime_poked to time", "set": {"name": "bedtime_poked", "expr": "time"}}, {"name": "bedtime", "desc": "asks “Bedtime”", "ask_usr": {"context": {"format": "It's {h:02.0f}:{m:02.0f}. Time to wrap up and get ready for bed.\nEnding the day on time is how you take back control of tomorrow.", "values": {"h": "daytime // 60", "m": "daytime % 60"}}, "options": ["OK", "Lock screen"], "result": "answer", "default": 0, "title": "Bedtime"}}], "every": "6s", "next": [{"goto": "locking", "when": "answer == 1", "desc": "lock screen"}, {"goto": "idle", "desc": "winding down"}]},
+      "snoozing": {"desc": "snoozed for 10 minutes", "do": [{"name": "bedtime_snoozed_until", "desc": "sets bedtime_snoozed_until to time + 10", "set": {"name": "bedtime_snoozed_until", "expr": "time + 10"}}, {"name": "bedtime_snooze_night", "desc": "sets bedtime_snooze_night to today", "set": {"name": "bedtime_snooze_night", "expr": "today"}}], "every": "6s"},
+      "locking": {"desc": "locks the screen", "do": [{"name": "lock_screen", "desc": "locks the screen", "lock": {}}], "every": "6s"},
+      "past_midnight": {"desc": "past midnight: a ringing poke, then lock the screen? until you do or leave", "do": [{"name": "past_stop_time", "desc": "pokes “Past your stop time”", "poke": {"context": {"format": "It's {h:02.0f}:{m:02.0f}, past your stop time. Time to sleep.", "values": {"h": "daytime // 60", "m": "daytime % 60"}}, "title": "Past your stop time"}}, {"name": "lock_now", "desc": "asks “Lock the screen?”", "ask_usr": {"context": "Lock the screen and go to sleep?", "options": ["Lock screen"], "result": "answer", "title": "Lock the screen?"}}], "every": "6s", "next": [{"goto": "locking_late", "when": "answer == 0", "desc": "lock screen"}, {"goto": "idle", "when": ["bed_away"], "desc": "you left"}, {"goto": "idle", "when": ["bed_day"], "desc": "morning came"}, {"goto": "past_midnight", "desc": "no answer: it rings and asks again"}]},
+      "locking_late": {"desc": "locks the screen", "do": [{"name": "lock_screen", "desc": "locks the screen", "lock": {}}], "every": "6s", "next": [{"goto": "idle", "when": ["bed_away"], "desc": "you left"}, {"goto": "idle", "when": ["bed_day"], "desc": "morning came"}]}
+    }
+  }
+}

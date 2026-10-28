@@ -1,0 +1,28 @@
+{
+  "title": "Session suggestions",
+  "desc": "Notices when you're in the flow and offers to start a session",
+  "icon": "waves",
+  "tags": ["focus", "session"],
+  "variables": [
+    {"name": "last_suggested", "value": "time - 10000", "desc": "when it last suggested a session"}
+  ],
+  "signals": [
+    {"name": "since_suggested", "expr": "time - last_suggested", "desc": "minutes since it last suggested a session"}
+  ],
+  "rules": [
+    {"name": "suggest_not_in_session", "lhs": "session.active", "cmp": "eq", "rhs": 0, "level": 5, "desc": "no session running"},
+    {"name": "suggest_not_shut_down", "lhs": "shutdown_done", "cmp": "eq", "rhs": 0, "level": 4, "desc": "the day isn't shut down"},
+    {"name": "suggest_not_lately", "lhs": "since_suggested", "cmp": "gt", "rhs": 45, "softness": 10, "level": 2, "desc": "it hasn't suggested one in about 45 minutes"},
+    {"name": "focus_rising", "lhs": "focus_rise", "cmp": "gt", "rhs": 0.15, "softness": 0.05, "level": 1, "desc": "focus is going up"},
+    {"name": "focus_high", "lhs": "focus_5m", "cmp": "gt", "rhs": "focused_above", "softness": 0.1, "level": 1, "desc": "focus over the last 5 minutes is high"},
+    {"name": "deep_now", "lhs": "depth", "cmp": "eq", "rhs": 1, "level": 1, "desc": "the work in focus is deep"}
+  ],
+  "program": {
+    "initial": "idle",
+    "states": {
+      "idle": {"next": [{"goto": "asking", "when": ["suggest_not_in_session", "suggest_not_shut_down", "suggest_not_lately", "focus_rising", "focus_high", "deep_now"]}]},
+      "asking": {"do": [{"name": "last_suggested", "desc": "sets last_suggested to time", "set": {"name": "last_suggested", "expr": "time"}}, {"name": "getting_into_it", "desc": "asks “You're getting into it”", "ask_usr": {"context": "You're getting into it. Start a focus session to protect this?", "options": ["Start session"], "result": "answer", "title": "You're getting into it"}}], "every": "6s", "next": [{"goto": "starting", "when": "answer == 0"}, {"goto": "idle"}]},
+      "starting": {"do": [{"name": "session_requested", "desc": "sets session.requested to True", "set": {"name": "session.requested", "expr": true}}], "every": "6s"}
+    }
+  }
+}

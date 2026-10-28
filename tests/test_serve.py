@@ -72,7 +72,7 @@ async def test_notes_through_the_bus(bus):
 async def test_mistakes_are_answered(bus):
     assert "no record None" in (await bus.request("proki.app.tasks", {"op": "add"}, 1))["error"]
     assert "op is read, add" in (await bus.request("proki.app.tasks", {"op": "rename", "record": "work.tasks"}, 1))["error"]
-    assert "note is of type" in (await bus.request("proki.app.notes", {"op": "add", "bucket": "chores", "text": "x"}, 1))["error"]
+    assert "note.bucket is of type" in (await bus.request("proki.app.notes", {"op": "add", "bucket": "chores", "text": "x"}, 1))["error"]
 
 
 async def test_a_note_goes_into_the_inbox_and_quit_stops(tmp_path):

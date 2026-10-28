@@ -25,6 +25,7 @@ program in code isn't built here: its name starts with "@", which a spec's never
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -34,6 +35,7 @@ from typing import Any, ClassVar, Union, get_args, get_origin, get_type_hints, i
 from proki.core.actions import Action, Context, LValue
 from proki.core.primitives import Primitive
 from proki.core.programs import Branch, Program, State
+from proki.core.records import Field, Records
 from proki.core.rules import Rule
 from proki.core.signals import Expr, Signal, Stream, Variable
 from proki.core.signals.stream import settle
@@ -198,12 +200,14 @@ class Builder:
             self.inputs.append(Primitive.kinds[spec.name](backfill=window is not None, window=window))
 
     def claim_variable(self, spec: VariableSpec, scope: Scope, owner: Program | State | None = None) -> None:
-        """The variable in `scope`, `owner`'s (None: global, kept across restarts). Its
-        starting expression is compiled at the `check`, like a signal's."""
+        """The variable in `scope`, `owner`'s (None: global, kept across restarts; a list of objects,
+        a table). Its starting expression is compiled at the `check`, like a signal's."""
         with spec.inside():
             scope.claim(spec.name)
-            variable = Variable(scope.prefix + spec.name, scope.spell(spec.value), desc=spec.desc, persist=owner is None,
-                                type=typed(spec.type))
+            items    = typed(spec.type).get("items") if isinstance(spec.type, dict) else None   # a list's
+            table    = owner is None and isinstance(items, dict) and items.get("type") == "object"
+            variable = tabled(spec) if table else Variable(scope.prefix + spec.name, scope.spell(spec.value), desc=spec.desc,
+                                                           persist=owner is None, type=typed(spec.type))
         self.variables.append(variable)
         if owner:
             owner.vars.append(variable)
@@ -341,6 +345,22 @@ class Builder:
         if window <= timedelta(0):
             raise ConfigError(f"backfill is minutes, more than 0, or a time: 1d, 12h ({backfill!r})")
         return window
+
+
+def tabled(spec: VariableSpec) -> Records:
+    """A global list of objects, as a table: each property a field of yours, its id and at the record's stamps.
+    ConfigError for a starting value, or a field that can't be one."""
+    from proki.storage import record_tables  # the storage reads the specs: here, not at the top
+
+    if spec.value is not None:  raise ConfigError("a list of objects starts empty: it's a table, its records added")
+    props = spec.type["items"].get("properties") or {}
+    db    = getattr(Variable.store, "db", None) or sqlite3.connect(":memory:")     # none: kept only while it runs
+    kind  = spec.name.replace(".", "_")
+    try:
+        fields = [Field(key, type=t, srcs=[{"from": "user"}]) for key, t in props.items() if key not in ("id", "at")]
+    except ValueError as e:
+        raise ConfigError(str(e)) from None
+    return Records(spec.name, db, kind, fields, record_tables(db, kind), desc=spec.desc)
 
 
 def typed(type: Any) -> Any:

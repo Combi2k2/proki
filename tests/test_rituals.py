@@ -46,10 +46,9 @@ def add(bucket, text, at=None, due=None):
     """A note in `bucket`, noted `at` (None: now), sorted at `due` (None: the next 04:00)."""
     at, notes = (at or Program.now or datetime.now(timezone.utc)).astimezone(), Stream.registry["note"]
     four = at.replace(hour=4, minute=0, second=0, microsecond=0)
-    made = {"id": max((n["id"] for n in notes.current() or []), default=0) + 1, "content": text, "bucket": bucket,
-            "at": minutes(at), "due": minutes(due or (four if four > at else four + timedelta(days=1)))}
-    notes.set([*(notes.current() or []), made])
-    return made
+    made = {"content": text, "bucket": bucket, "due": minutes(due or (four if four > at else four + timedelta(days=1)))}
+    with notes.writing():
+        return made | {"id": notes.put_row(made, at=at), "created_at": minutes(at)}
 
 
 def due(note):
@@ -246,7 +245,7 @@ async def test_the_shutdown_from_the_config(tmp_path, ui):
     await ui.click("OK")
     await run(clock[0] + timedelta(seconds=10)), await run(clock[0] + timedelta(seconds=20))
     assert shutdown.current == "idle" and Stream.registry["shutdown_done"].current() is True
-    assert [due(n) for n in read("Unsorted")] == [local(6, 8, 0)] * 2  # tomorrow at 8:00, each set by the sorter
+    assert [due(n) for n in read("Unsorted")] == [local(6, 8, 0)] * 2  # tomorrow at 8:00, each set by shutdown
     await run(local(6, 9, 0), jump=True)
     assert Stream.registry["shutdown_done"].current() is False  # a new day
 
@@ -535,8 +534,9 @@ async def cycles(start, n, seconds=10):
 
 
 async def sort_inbox_at(t):
-    """Every note in the inbox so far sorted at `t`, as shutdown picks it."""
-    Stream.registry["note.sort_at"].set(t.timestamp() / 60)
+    """Every note in the inbox so far sorted at `t`, as shutdown sets it."""
+    notes = Stream.registry["note"]
+    notes.set([n | {"due": minutes(t)} if n["bucket"] == "Unsorted" else n for n in notes.current()])
 
 
 def sorting(tmp_path, active=True):
@@ -560,8 +560,6 @@ async def test_the_inbox_is_sorted_at_the_time_shutdown_chose(tmp_path, ui):
     await run(local(5, 21, 0, 30))
     assert [(n["guess"], n["conf"], n["urgency"]) for n in read("Unsorted")] == [("Idea", 0.75, 0.5)] * 2  # guessed as they were noted
     await sort_inbox_at(local(5, 22, 0))  # shutdown's
-    for i in (4, 5, 6):  # set on each, one a cycle
-        await run(local(5, 21, 0) + timedelta(seconds=10 * i))
     await run(local(5, 21, 59, 50), jump=True)
     assert len(ui.questions()) == 2  # not their time yet
 
@@ -582,17 +580,13 @@ async def test_the_inbox_is_sorted_at_the_time_shutdown_chose(tmp_path, ui):
 
 
 async def test_a_note_is_sorted_at_four_unless_shutdown_says_when(tmp_path, ui):
+    from proki.core.signals import Expr
+
     run = runner(sorting(tmp_path, active=False))
     await run(local(5, 21, 0))
-    assert moment(Stream.registry["note.next_due"].current()) == local(6, 4, 0)  # a new note's: the next 04:00
-    add("Unsorted", "call mom"), add("Unsorted", "buy a gift"), add("Idea", "a desk")
-    await sort_inbox_at(local(6, 8, 0))  # shutdown's
-    for i in range(1, 5):
-        await run(local(5, 21, 0, 10 * i))
-    assert [due(n) for n in read("Unsorted")] == [local(6, 8, 0)] * 2 and Stream.registry["note.sort_at"].current() is None
-    assert due(read("Idea")[0]) == local(6, 4, 0)  # not in the inbox: its own
+    assert moment(Expr("today + 1680").value()) == local(6, 4, 0)  # a new note's, as a program notes one: the next 04:00
     await run(local(6, 2, 0), jump=True)
-    assert moment(Stream.registry["note.next_due"].current()) == local(6, 4, 0)  # past midnight: that night's
+    assert moment(Expr("today + 1680").value()) == local(6, 4, 0)  # past midnight: that night's
 
 
 async def test_the_inbox_waits_while_youre_away(tmp_path, ui):
@@ -701,7 +695,7 @@ async def test_a_todo_is_talked_through_and_planned_into_a_new_group(tmp_path, u
     await go(lambda: ui.sent and ui.sent[-1].get("type") == "open")
     assert ui.sent[-1] == {"type": "open", "path": f"tasks/{group['id']}"}  # its card, to edit
     [todo] = read("Todo")  # kept, with where it went: no longer the planner's
-    assert todo["link"] == f"tasks/{group['id']}" and Stream.registry["note.todo"].current() == []
+    assert todo["link"] == f"tasks/{group['id']}" and Stream.registry["task_planner.todos"].current() == []
     add("Todo", "Book the flights", datetime.now(timezone.utc))
     await go(cycles=5)
     assert len(ui.questions()) == 2  # its card open for you: not asked to review it again
@@ -755,7 +749,7 @@ async def test_a_todo_its_group_covers_already_is_said_so_and_taken(tmp_path, ui
     await go(lambda: any(sent.get("type") == "poke" for sent in ui.sent))
     assert next(sent for sent in ui.sent if sent.get("type") == "poke")["text"] == "Nothing to add: “Groceries” already covers “milk”."
     [todo] = read("Todo")  # kept, with the group that covers it: no longer the planner's
-    assert todo["link"] == f"tasks/{groceries}" and Stream.registry["note.todo"].current() == [] and store.board.ops.read() == []
+    assert todo["link"] == f"tasks/{groceries}" and Stream.registry["task_planner.todos"].current() == [] and store.board.ops.read() == []
     Program.stop()
 
 
@@ -801,6 +795,21 @@ async def test_the_reminder_counts_whats_open_and_suggests_a_task(tmp_path, ui, 
     Program.stop()
 
 
+async def test_a_list_of_objects_is_a_table_its_records_added_with_their_basic_fields(tmp_path):
+    from proki.core.actions import Append
+    from proki.core.records import Field, Records
+    from proki.core.signals import Expr
+
+    built(shipped(tmp_path / "programs", "note_sorter", variables=[("active", True)]))
+    notes = Stream.registry["note"]
+    assert isinstance(notes, Records) and notes.fields["bucket"].srcs == [{"from": "user"}]
+    notes.define(Field("todo", srcs=[{"from": "expr", "expr": "me.bucket == 'Todo'"}], type="boolean"))  # worked out, not kept
+    await Append(name="note", expr={"content": "'plan the trip'", "bucket": "'Todo'"}).apply()
+    [note] = notes.current()
+    assert note["id"] == 1 and note["created_at"] and note["todo"] is True
+    assert Expr("where(note, note.todo, True)[0].content").value() == "plan the trip"
+
+
 async def test_notes_are_a_list_a_program_appends_to_and_removes_from(tmp_path):
     from proki.core.actions import Append, Remove
     from proki.core.signals import Expr
@@ -808,7 +817,7 @@ async def test_notes_are_a_list_a_program_appends_to_and_removes_from(tmp_path):
     built(shipped(tmp_path / "programs", "note_sorter", variables=[("active", True)]))
     value = lambda expr: Expr(expr).value()
     add("Unsorted", "buy milk"), add("Idea", "a desk")
-    await Append(name="note", expr={"id": "note.next_id", "content": "'plan the trip'", "bucket": "'Todo'"}).apply()
-    assert value("note.todo.content") == ["plan the trip"] and value("note.todo[0].id") == 3  # where it says, its id the next
-    await Remove(name="note", id="note.todo[0].id").apply()
+    await Append(name="note", expr={"content": "'plan the trip'", "bucket": "'Todo'"}).apply()
+    assert value("where(note, note.bucket, 'Todo')[0].id") == 3  # where it says, its id given
+    await Remove(name="note", id="where(note, note.bucket, 'Todo')[0].id").apply()
     assert [n["content"] for n in Stream.registry["note"].current()] == ["buy milk", "a desk"]  # that one gone, the rest kept

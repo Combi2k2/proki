@@ -1,0 +1,25 @@
+{
+  "title": "Time on tasks",
+  "desc": "Counts the time you spend on a task and checks you're still on it",
+  "icon": "list-checks",
+  "tags": ["tasks", "session"],
+  "program": {
+    "initial": "idle",
+    "variables": [
+      {"name": "counted", "value": null, "desc": "the task counted (task's id)"},
+      {"name": "since", "value": 0, "desc": "counted up to then (minutes since 1970)"},
+      {"name": "checked", "value": 0, "desc": "when you were last asked if you're still on it"},
+      {"name": "checked_over", "value": false, "desc": "whether you were asked once past the task's estimate"}
+    ],
+    "states": {
+      "idle": {"desc": "no task, or no session", "every": 0, "next": [{"goto": "starting", "when": ["work.task is not None", "session.active or session.requested"], "desc": "a task, in a session (or one asked for)"}]},
+      "starting": {"desc": "counted from now", "do": [{"name": "counted", "desc": "sets counted to work.task.id", "set": {"name": "counted", "expr": "work.task.id"}}, {"name": "since", "desc": "sets since to time", "set": {"name": "since", "expr": "time"}}, {"name": "checked_over", "desc": "sets checked_over to False", "set": {"name": "checked_over", "expr": false}}], "every": 0, "next": "counting"},
+      "counting": {"desc": "every minute: the minutes since, if you're at the computer", "do": [{"name": "spent", "desc": "adds the minutes since to work.task.spent, if active", "add": {"name": "work.task.spent", "expr": "time - since if active else 0"}}, {"name": "last_worked", "desc": "sets work.task.last_worked to time, if active", "set": {"name": "work.task.last_worked", "expr": "time if active else work.task.last_worked"}}, {"name": "since", "desc": "sets since to time", "set": {"name": "since", "expr": "time"}}], "every": "1min", "next": [{"goto": "letting_go", "when": "not session.active and not session.requested", "desc": "the session's over"}, {"goto": "letting_go", "when": "work.task is None or work.task.status != \"open\"", "desc": "no task now, or it's done"}, {"goto": "starting", "when": "work.task.id != counted", "desc": "another task: counted from now"}, {"goto": "over", "when": ["work.task.spent >= work.task.estimate", "not checked_over"], "desc": "past its estimate, not asked yet"}, {"goto": "back", "when": ["active", "not delay(active, 1)", "time - checked >= 20"], "desc": "back from a break, not asked lately"}, {"goto": "counting", "desc": "a minute on"}]},
+      "over": {"desc": "past its estimate: still on it?", "do": [{"name": "checked_over", "desc": "sets checked_over to True", "set": {"name": "checked_over", "expr": true}}, {"name": "checked", "desc": "sets checked to time", "set": {"name": "checked", "expr": "time"}}, {"name": "still_on_it", "desc": "asks “Still on it?”", "ask_usr": {"context": {"format": "Still on “{name}”? That's {spent:.0f} min so far, past its estimate.", "values": {"name": "work.task.name", "spent": "work.task.spent"}}, "options": ["Still on it", "Done", "Something else"], "result": "answer", "timeout": 600, "title": "Still on it?"}}], "every": 0, "next": [{"goto": "counting", "when": "answer == 0", "desc": "still on it: the wait counted too"}, {"goto": "finishing", "when": "answer == 1", "desc": "done"}, {"goto": "letting_go", "when": "answer == 2", "desc": "on something else: what is asked"}, {"goto": "giving_up", "desc": "no answer: counted up to the break"}]},
+      "back": {"desc": "back from a break: still on it?", "do": [{"name": "checked", "desc": "sets checked to time", "set": {"name": "checked", "expr": "time"}}, {"name": "still_on_it", "desc": "asks “Still on it?”", "ask_usr": {"context": {"format": "Still on “{name}”?", "values": {"name": "work.task.name"}}, "options": ["Still on it", "Done", "Something else"], "result": "answer", "timeout": 600, "title": "Still on it?"}}], "every": 0, "next": [{"goto": "counting", "when": "answer == 0", "desc": "still on it: the wait counted too"}, {"goto": "finishing", "when": "answer == 1", "desc": "done"}, {"goto": "letting_go", "when": "answer == 2", "desc": "on something else: what is asked"}, {"goto": "giving_up", "desc": "no answer: counted up to the break"}]},
+      "finishing": {"desc": "done: what's next is asked", "do": [{"name": "done", "desc": "sets work.task.status to done", "set": {"name": "work.task.status", "expr": "\"done\""}}, {"name": "task_done", "desc": "sets task_done to True", "set": {"name": "task_done", "expr": true}}, {"name": "task", "desc": "sets task to None", "set": {"name": "work.task", "expr": "None"}}], "every": 0, "next": "idle"},
+      "letting_go": {"desc": "no task now", "do": [{"name": "task", "desc": "sets task to None", "set": {"name": "work.task", "expr": "None"}}], "every": 0, "next": "idle"},
+      "giving_up": {"desc": "no answer: no task, and not asked what you're on this session", "do": [{"name": "task_asked", "desc": "sets task_asked to True", "set": {"name": "task_asked", "expr": true}}, {"name": "task", "desc": "sets task to None", "set": {"name": "work.task", "expr": "None"}}], "every": 0, "next": "idle"}
+    }
+  }
+}

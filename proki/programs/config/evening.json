@@ -1,0 +1,25 @@
+{
+  "title": "Evening check-in",
+  "desc": "Asks if anything new came up for tomorrow",
+  "icon": "coffee",
+  "tags": ["evening", "tasks"],
+  "variables": [
+    {"name": "evening_asked_day", "value": 0, "desc": "the day it last asked"}
+  ],
+  "signals": [
+    {"name": "planning_time", "expr": "daytime >= 1290 or daytime < 240", "desc": "from 21:30 to 04:00"}
+  ],
+  "rules": [
+    {"name": "eve_time", "lhs": "planning_time", "cmp": "eq", "rhs": 1, "level": 4, "desc": "it's time to plan tomorrow"},
+    {"name": "eve_not_asked", "lhs": "evening_asked_day", "cmp": "lt", "rhs": "today", "level": 3, "desc": "it hasn't asked today"},
+    {"name": "eve_not_shut_down", "lhs": "shutdown_done", "cmp": "eq", "rhs": 0, "level": 2, "desc": "the day isn't shut down"}
+  ],
+  "program": {
+    "initial": "idle",
+    "states": {
+      "idle": {"next": [{"goto": "asking", "when": ["eve_time", "eve_not_asked", "eve_not_shut_down"]}]},
+      "asking": {"do": [{"name": "evening_asked_day", "desc": "sets evening_asked_day to today", "set": {"name": "evening_asked_day", "expr": "today"}}, {"name": "anything_new", "desc": "asks “Anything new?”", "ask_usr": {"context": "Anything new to take care of?", "options": ["Add task", "No"], "result": "answer", "default": 1, "title": "Anything new?"}}], "every": "6s", "next": [{"goto": "adding", "when": "answer == 0"}, {"goto": "idle"}]},
+      "adding": {"do": [{"name": "open_tasks", "desc": "opens your tasks", "open": {"path": "'tasks'"}}], "every": "6s"}
+    }
+  }
+}

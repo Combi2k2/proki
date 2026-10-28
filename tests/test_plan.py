@@ -6,6 +6,7 @@ import pytest
 
 from proki.core.actions import Append, Set
 from proki.core.signals import Stream
+from proki.core.signals.expr import Expr
 from proki.errors import VariableError
 from proki.programs.code.base import find_variable, make_variable
 from proki.programs.code.work import Work
@@ -35,7 +36,7 @@ async def test_the_plan_is_one_object_its_changes_a_table_on_the_card(board):
     assert (op.op, op.group, op.fields) == ("add", 1, {"name": "Book the venue", "estimate": 30, "key": "book_the_venue"})  # the group at hand's
     assert find_variable("work.plan").current() == plan | {"changes": [
         {"op": "add", "task": None, "name": "Book the venue", "desc": None, "done_when": None, "checkpoint": None, "estimate": 30, "after": None}]}
-    assert find_variable("work.plan.name").current() == "Thesis"
+    assert Expr("work.plan.name").value() == "Thesis" and "work.plan.name" not in Stream.registry  # a field of it
     find_variable("work.plan").set(None)
     assert find_variable("work.plan").current() is None and ops(board) == []
 
@@ -51,7 +52,7 @@ async def test_the_changes_set_are_the_plans_from_now_on_the_group_at_hands(boar
     await Set(name="work.plan", expr="work.plan").apply()
     assert [op.group for op in ops(board)] == [2]  # the new group's
     with pytest.raises(VariableError, match="of type"):
-        find_variable("work.plan.changes").set([{"op": "nope"}])  # add, change or remove
+        find_variable("work.plan").set({"changes": [{"op": "nope"}]})  # add, change or remove
 
 
 async def test_a_slice_is_a_part_of_a_list_and_pops_one(board):

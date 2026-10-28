@@ -1,0 +1,51 @@
+{
+  "title": "Day clock",
+  "desc": "Keeps track of your day and week: how long you've focused, and starts each one afresh",
+  "icon": "calendar-clock",
+  "tags": ["time"],
+  "variables": [
+    {"name": "deadline_eod", "value": "time - daytime + 1440", "desc": "the end of today (minutes since 1970)"},
+    {"name": "active_today", "value": 0, "desc": "minutes at the computer today"},
+    {"name": "focused_today", "value": 0, "desc": "minutes of focused work today"},
+    {"name": "shallow_today", "value": 0, "desc": "minutes of shallow work today"},
+    {"name": "focused_week", "value": 0, "desc": "minutes of focused work this week, from Monday"},
+    {"name": "goal_streak", "value": 0, "desc": "days in a row you reached your focus goal, before today"}
+  ],
+  "signals": [],
+  "rules": [
+    {"name": "eod", "lhs": "time", "cmp": "gt", "rhs": "deadline_eod", "desc": "the day is over"}
+  ],
+  "program": {
+    "initial": "idle",
+    "states": {
+      "idle": {
+        "desc": "counts each minute: at the computer, and how focused",
+        "do": [
+          {"name": "active_today", "desc": "adds active to active_today", "add": {"name": "active_today", "expr": "active"}},
+          {"name": "focused_today", "desc": "adds a focused minute", "add": {"name": "focused_today", "expr": "active and focus >= focused_above"}},
+          {"name": "shallow_today", "desc": "adds a shallow minute", "add": {"name": "shallow_today", "expr": "active and focus >= distracted_below and focus < focused_above"}},
+          {"name": "focused_week", "desc": "adds a focused minute to the week", "add": {"name": "focused_week", "expr": "active and focus >= focused_above"}}
+        ],
+        "next": [{"goto": "new_day", "when": ["eod"]}, {"goto": "idle"}]
+      },
+      "new_day": {
+        "desc": "a new day: the streak goes on or ends, and today's counts start at 0",
+        "do": [
+          {"name": "goal_streak", "desc": "one more day if the goal was reached, else back to 0", "set": {"name": "goal_streak", "expr": "goal_streak + 1 if focused_today >= focus_goal else 0"}},
+          {"name": "active_today", "desc": "sets active_today to 0", "set": {"name": "active_today", "expr": 0}},
+          {"name": "focused_today", "desc": "sets focused_today to 0", "set": {"name": "focused_today", "expr": 0}},
+          {"name": "shallow_today", "desc": "sets shallow_today to 0", "set": {"name": "shallow_today", "expr": 0}},
+          {"name": "deadline_eod", "desc": "sets deadline_eod to deadline_eod + 1440", "set": {"name": "deadline_eod", "expr": "deadline_eod + 1440"}}
+        ],
+        "every": "6s",
+        "next": [{"goto": "new_week", "when": "weekday == 0"}, {"goto": "idle"}]
+      },
+      "new_week": {
+        "desc": "a Monday: the week's count starts at 0",
+        "do": [{"name": "focused_week", "desc": "sets focused_week to 0", "set": {"name": "focused_week", "expr": 0}}],
+        "every": "6s",
+        "next": "idle"
+      }
+    }
+  }
+}

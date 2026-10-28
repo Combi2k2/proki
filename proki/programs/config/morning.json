@@ -1,0 +1,49 @@
+{
+  "title": "Morning start",
+  "desc": "Greets you, helps plan today's work and starts your routine",
+  "icon": "sunrise",
+  "tags": ["morning", "habits"],
+  "variables": [
+    {"name": "todays_work", "desc": "a line about today's work, from the planner"},
+    {"name": "morning_day", "value": 0, "desc": "the day it last greeted you"},
+    {"name": "morning_deadline", "value": 0, "desc": "when the morning routine should be over"},
+    {"name": "morning_done", "value": false, "desc": "whether today's morning is over"}
+  ],
+  "signals": [
+    {"name": "quiet_before", "expr": "delay(ts_max(active, 180), 2) == 0", "desc": "no activity for 3 hours before the last 2 minutes"},
+    {"name": "stepped_away", "expr": "ts_max(active, 3) == 0", "desc": "no activity in the last 3 minutes"}
+  ],
+  "rules": [
+    {"name": "morn_new_day", "lhs": "morning_day", "cmp": "lt", "rhs": "today", "level": 3, "desc": "it hasn't greeted you today"},
+    {"name": "morn_active", "lhs": "active", "cmp": "eq", "rhs": 1, "level": 2, "desc": "you're at the computer"},
+    {"name": "morn_quiet_before", "lhs": "quiet_before", "cmp": "eq", "rhs": 1, "level": 1, "desc": "after a long quiet time (the night)"},
+    {"name": "morn_greeted_today", "lhs": "morning_day", "cmp": "ge", "rhs": "today", "level": 3, "desc": "it greeted you today"},
+    {"name": "morn_deadline_ahead", "lhs": "morning_deadline", "cmp": "gt", "rhs": "time", "level": 2, "desc": "the routine still has time"},
+    {"name": "morn_not_done", "lhs": "morning_done", "cmp": "eq", "rhs": 0, "level": 1, "desc": "the morning isn't over"},
+    {"name": "morn_in_session", "lhs": "session.active", "cmp": "eq", "rhs": 1, "desc": "a session started"},
+    {"name": "morn_deadline_passed", "lhs": "time", "cmp": "ge", "rhs": "morning_deadline", "desc": "the routine's time is over"},
+    {"name": "morn_stepped_away", "lhs": "stepped_away", "cmp": "eq", "rhs": 1, "level": 2, "desc": "you stepped away"},
+    {"name": "morn_back", "lhs": "active", "cmp": "eq", "rhs": 1, "level": 1, "desc": "you're back"}
+  ],
+  "program": {
+    "initial": "idle",
+    "states": {
+      "idle": {"every": "6s", "next": [{"goto": "greeting", "when": ["morn_new_day", "morn_active", "morn_quiet_before"]}, {"goto": "routine", "when": ["morn_greeted_today", "morn_deadline_ahead", "morn_not_done"]}]},
+      "greeting": {"do": [{"name": "morning_day", "desc": "sets morning_day to today", "set": {"name": "morning_day", "expr": "today"}}, {"name": "morning_done", "desc": "sets morning_done to False", "set": {"name": "morning_done", "expr": false}}, {"name": "good_morning", "desc": "asks “Good morning”", "ask_usr": {"context": {"format": "Good morning. {work}\n\nFirst, your morning routine: how long do you need?", "values": {"work": "todays_work"}}, "options": ["15 min", "30 min", "45 min", "60 min", "Start now", "Skip today"], "result": "answer", "default": 5, "timeout": 1800, "title": "Good morning"}}], "every": "6s", "next": [{"goto": "routine_15", "when": "answer == 0"}, {"goto": "routine_30", "when": "answer == 1"}, {"goto": "routine_45", "when": "answer == 2"}, {"goto": "routine_60", "when": "answer == 3"}, {"goto": "starting", "when": "answer == 4"}, {"goto": "done", "when": "answer == 5"}, {"goto": "done"}]},
+      "routine_15": {"do": [{"name": "morning_deadline", "desc": "sets morning_deadline to time + 15 + 5", "set": {"name": "morning_deadline", "expr": "time + 15 + 5"}}], "every": "6s", "next": "routine"},
+      "routine_30": {"do": [{"name": "morning_deadline", "desc": "sets morning_deadline to time + 30 + 6", "set": {"name": "morning_deadline", "expr": "time + 30 + 6"}}], "every": "6s", "next": "routine"},
+      "routine_45": {"do": [{"name": "morning_deadline", "desc": "sets morning_deadline to time + 45 + 9", "set": {"name": "morning_deadline", "expr": "time + 45 + 9"}}], "every": "6s", "next": "routine"},
+      "routine_60": {"do": [{"name": "morning_deadline", "desc": "sets morning_deadline to time + 60 + 12", "set": {"name": "morning_deadline", "expr": "time + 60 + 12"}}], "every": "6s", "next": "routine"},
+      "routine": {"every": "6s", "next": [{"goto": "done", "when": ["morn_in_session"]}, {"goto": "overdue", "when": ["morn_deadline_passed"]}, {"goto": "away", "when": ["morn_stepped_away"]}]},
+      "away": {"every": "6s", "next": [{"goto": "done", "when": ["morn_in_session"]}, {"goto": "overdue", "when": ["morn_deadline_passed"]}, {"goto": "back", "when": ["morn_back"]}]},
+      "back": {"do": [{"name": "welcome_back", "desc": "asks “Welcome back”", "ask_usr": {"context": "Finished your morning routine?", "options": ["OK", "Later"], "result": "answer", "default": 1, "title": "Welcome back"}}], "every": "6s", "next": [{"goto": "done", "when": ["morn_in_session"]}, {"goto": "ready", "when": "answer == 0"}, {"goto": "extending", "when": "answer == 1"}, {"goto": "extending"}]},
+      "extending": {"do": [{"name": "morning_deadline", "desc": "sets morning_deadline to morning_deadline + 1", "set": {"name": "morning_deadline", "expr": "morning_deadline + 1"}}], "every": "6s", "next": "routine"},
+      "ready": {"do": [{"name": "ready", "desc": "asks “Ready?”", "ask_usr": {"context": "Ready to start working?", "options": ["Start session", "Later"], "result": "answer", "default": 1, "title": "Ready?"}}], "every": "6s", "next": [{"goto": "done", "when": ["morn_in_session"]}, {"goto": "starting", "when": "answer == 0"}, {"goto": "finishing", "when": "answer == 1"}, {"goto": "finishing"}]},
+      "finishing": {"every": "6s", "next": [{"goto": "done", "when": ["morn_in_session"]}, {"goto": "overdue", "when": ["morn_deadline_passed"]}]},
+      "starting": {"do": [{"name": "session_requested", "desc": "sets session.requested to True", "set": {"name": "session.requested", "expr": true}}], "every": "6s", "next": "done"},
+      "overdue": {"do": [{"name": "routine_over", "desc": "asks “Routine's over”", "ask_usr": {"context": "Morning routine time is over. Time to start your deep work.", "options": ["Start session", "Skip today"], "result": "answer", "timeout": 600, "title": "Routine's over"}}], "every": "6s", "next": [{"goto": "done", "when": ["morn_in_session"]}, {"goto": "overdue_starting", "when": "answer == 0"}, {"goto": "done", "when": "answer == 1"}, {"goto": "overdue", "when": "answer is None"}]},
+      "overdue_starting": {"do": [{"name": "session_requested", "desc": "sets session.requested to True", "set": {"name": "session.requested", "expr": true}}], "every": "6s", "next": "done"},
+      "done": {"do": [{"name": "morning_done", "desc": "sets morning_done to True", "set": {"name": "morning_done", "expr": true}}], "next": [{"goto": "idle", "when": ["morn_new_day"]}]}
+    }
+  }
+}

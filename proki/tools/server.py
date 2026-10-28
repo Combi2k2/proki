@@ -21,7 +21,7 @@ from proki.programs.code.work import Work
 from proki.programs.shipped import Shipped
 from proki.services.media import Library
 from proki.settings import Settings
-from proki.tools import media, programs, records, settings
+from proki.tools import media, programs, records, settings, suggestions
 from proki.tools.base import Tool
 
 ANY   = {"anyOf": [{"type": kind} for kind in ("string", "number", "boolean", "object", "array", "null")]}  # any value at all
@@ -37,7 +37,7 @@ class Tools:
     def __init__(self, engine: Engine, shipped: Shipped, library: Library | None = None, stores: Iterable[Work] = (),
                  config: Settings | None = None):
         made = [*programs.tools(engine, shipped), *(media.tools(library, engine) if library else []),
-                *settings.tools(config or Settings()), *records.tools(), *(tool for store in stores for tool in store.tools())]
+                *settings.tools(config or Settings()), *records.tools(), *suggestions.tools(), *(tool for store in stores for tool in store.tools())]
         self.tools: dict[str, tuple[types.Tool, Callable[[dict], Any]]] = {t.name: (served(t), t.run) for t in made}
         self.server = Server("proki", version="0.1", instructions=proki.tools.__doc__,
                              on_list_tools=self.list_tools, on_call_tool=self.call_tool)

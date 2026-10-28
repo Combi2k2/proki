@@ -1,0 +1,623 @@
+{
+  "title": "Planner",
+  "desc": "Suggests next steps for your task groups",
+  "icon": "bot",
+  "tags": [
+    "tasks",
+    "notes"
+  ],
+  "program": {
+    "initial": "idle",
+    "variables": [
+      {
+        "name": "todo",
+        "value": null,
+        "desc": "the todo at hand, from todos"
+      },
+      {
+        "name": "said",
+        "value": null,
+        "desc": "the todo, and what you said of it"
+      },
+      {
+        "name": "asked",
+        "value": 0,
+        "desc": "the questions asked of it so far"
+      },
+      {
+        "name": "later",
+        "value": 0,
+        "desc": "not before then: a todo put off (minutes since 1970)"
+      },
+      {
+        "name": "groups",
+        "value": null,
+        "desc": "the open groups, for the todo to go with"
+      }
+    ],
+    "signals": [
+      {
+        "name": "open",
+        "expr": "where(note, note.link, None)",
+        "desc": "the notes not dealt with yet: no link"
+      },
+      {
+        "name": "todos",
+        "expr": "where(open, open.bucket, 'Todo')",
+        "desc": "the todos not made tasks yet"
+      }
+    ],
+    "states": {
+      "idle": {
+        "desc": "a todo, no question open",
+        "every": 0,
+        "do": [
+          {
+            "name": "take",
+            "desc": "takes the first todo",
+            "set": {
+              "name": "todo",
+              "expr": "todos[0]"
+            }
+          },
+          {
+            "name": "said",
+            "desc": "what it says, so far",
+            "set": {
+              "name": "said",
+              "expr": "todo.content"
+            }
+          },
+          {
+            "name": "fresh",
+            "desc": "nothing asked of it yet",
+            "set": {
+              "name": "asked",
+              "expr": "0"
+            }
+          },
+          {
+            "name": "none",
+            "desc": "no group yet",
+            "set": {
+              "name": "work.group",
+              "expr": "None"
+            }
+          },
+          {
+            "name": "stale",
+            "desc": "a plan whose changes are on no group's card is dropped",
+            "set": {
+              "name": "work.plan",
+              "expr": "None",
+              "when": "work.plan is not None and (max(work.groups.suggested) is None or max(work.groups.suggested) == 0)"
+            }
+          }
+        ],
+        "next": [
+          {
+            "goto": "reviewing",
+            "when": [
+              "todo is not None",
+              "not asking",
+              "time >= later",
+              "work.plan is not None and len(work.plan.changes) > 0"
+            ],
+            "desc": "the plan still has changes to review"
+          },
+          {
+            "goto": "clarifying",
+            "when": [
+              "todo is not None",
+              "not asking",
+              "time >= later",
+              "len(where(work.groups, work.groups.status, 'open')) == 0"
+            ],
+            "desc": "no groups yet: a new one"
+          },
+          {
+            "goto": "matching",
+            "when": [
+              "todo is not None",
+              "not asking",
+              "time >= later"
+            ],
+            "desc": "a todo"
+          },
+          {
+            "goto": "idle"
+          }
+        ]
+      },
+      "matching": {
+        "desc": "which group it goes with",
+        "every": 0,
+        "do": [
+          {
+            "name": "groups",
+            "desc": "the open groups",
+            "set": {
+              "name": "groups",
+              "expr": "where(work.groups, work.groups.status, 'open')"
+            }
+          },
+          {
+            "name": "guess",
+            "desc": "asks jev which group",
+            "ask_jev": {
+              "context": {
+                "format": "A todo someone wrote: {text}",
+                "values": {
+                  "text": "todo.content"
+                }
+              },
+              "questions": [
+                {
+                  "type": "choice",
+                  "question": "Which of their groups of tasks does this todo go with?",
+                  "criteria": "[['A new group', 'Tasks that go with none of the groups here yet']] + zip(groups.name, groups.desc)",
+                  "result": "guess"
+                }
+              ]
+            }
+          },
+          {
+            "name": "group",
+            "desc": "asks which group, jev's picked already",
+            "ask_usr": {"title": "Which group?", 
+              "context": {
+                "format": "“{quote}”\n\nDoes this go with tasks you already have?",
+                "values": {
+                  "quote": "todo.content"
+                }
+              },
+              "options": "[['A new group', 'Tasks that go with none of the groups here yet']] + zip(groups.name, groups.desc)",
+              "default": "guess.index",
+              "result": "answer",
+              "timeout": 86400
+            }
+          },
+          {
+            "name": "pick",
+            "desc": "the group picked",
+            "set": {
+              "name": "work.group",
+              "expr": "groups[answer - 1]",
+              "when": "answer > 0"
+            }
+          },
+          {
+            "name": "later",
+            "desc": "later: two hours on",
+            "set": {
+              "name": "later",
+              "expr": "time + 120",
+              "when": "answer is None"
+            }
+          }
+        ],
+        "next": [
+          {
+            "goto": "idle",
+            "when": [
+              "answer is None"
+            ],
+            "desc": "later"
+          },
+          {
+            "goto": "clarifying",
+            "desc": "a group, or a new one"
+          }
+        ]
+      },
+      "reviewing": {
+        "desc": "the plan's changes, reviewed first?",
+        "every": 0,
+        "do": [
+          {
+            "name": "theirs",
+            "desc": "the plan's group, the one at hand",
+            "set": {
+              "name": "work.group",
+              "expr": "work.groups[argmax(work.groups.suggested)]"
+            }
+          },
+          {
+            "name": "review",
+            "desc": "asks to review them first",
+            "ask_usr": {"title": "Review first?", 
+              "context": {
+                "format": "“{quote}”\n\n“{name}” still has {n} planned change{s}. Review {them} first? It won't take long.",
+                "values": {
+                  "quote": "todo.content",
+                  "name": "work.plan.name",
+                  "n": "len(work.plan.changes)",
+                  "s": "'s' if len(work.plan.changes) > 1 else ''",
+                  "them": "'them' if len(work.plan.changes) > 1 else 'it'"
+                }
+              },
+              "options": [
+                "OK"
+              ],
+              "result": "answer",
+              "timeout": 86400
+            }
+          },
+          {
+            "name": "later",
+            "desc": "a while at most",
+            "set": {
+              "name": "later",
+              "expr": "time + 120"
+            }
+          }
+        ],
+        "next": [
+          {
+            "goto": "showing",
+            "when": [
+              "answer == 0"
+            ],
+            "desc": "you review them"
+          },
+          {
+            "goto": "idle",
+            "desc": "later"
+          }
+        ]
+      },
+      "showing": {
+        "desc": "the plan's card opened, to review",
+        "every": 0,
+        "do": [
+          {
+            "name": "open",
+            "desc": "opens its card",
+            "open": {
+              "path": "'tasks/' + str(work.group.id)"
+            }
+          }
+        ],
+        "next": "waiting"
+      },
+      "waiting": {
+        "desc": "until they're reviewed",
+        "every": 0,
+        "do": [
+          {
+            "name": "reviewed",
+            "desc": "reviewed: the todo's taken on at once",
+            "set": {
+              "name": "later",
+              "expr": "time",
+              "when": "work.plan is None or len(work.plan.changes) == 0"
+            }
+          }
+        ],
+        "next": [
+          {
+            "goto": "idle",
+            "when": [
+              "work.plan is None or len(work.plan.changes) == 0"
+            ],
+            "desc": "reviewed"
+          },
+          {
+            "goto": "idle",
+            "when": [
+              "time >= later"
+            ],
+            "desc": "a while"
+          },
+          {
+            "goto": "waiting"
+          }
+        ]
+      },
+      "clarifying": {
+        "desc": "what exactly: jev reads it",
+        "every": 0,
+        "do": [
+          {
+            "name": "clear",
+            "desc": "asks jev if it's clear what to do",
+            "ask_jev": {
+              "context": {
+                "format": "A todo someone wrote for themselves: {about}{said}",
+                "values": {
+                  "about": "'It goes with their group of tasks “' + work.group.name + '”: ' + work.group.desc + '\\n' if work.group is not None else ''",
+                  "said": "said"
+                }
+              },
+              "questions": [
+                {
+                  "type": "noul",
+                  "question": "Is it clear what they need to do, enough to start on it? Short notes are fine: they know their own work.",
+                  "result": "clear"
+                }
+              ]
+            }
+          }
+        ],
+        "next": [
+          {
+            "goto": "refining",
+            "when": [
+              "asked >= 3 or clear is None or clear >= 0.3"
+            ],
+            "desc": "clear enough, or asked three times"
+          },
+          {
+            "goto": "asking",
+            "desc": "jev's fairly sure it isn't clear"
+          }
+        ]
+      },
+      "asking": {
+        "desc": "what exactly: asked",
+        "every": 0,
+        "do": [
+          {
+            "name": "ask",
+            "desc": "asks the next question",
+            "ask_usr": {"title": "Planning", 
+              "context": {
+                "format": "“{quote}”\n\n{question}",
+                "values": {
+                  "quote": "todo.content",
+                  "question": "['What do you need to do, exactly?', 'What would “done” look like?', \"What's the very first thing you'd do?\"][asked]"
+                }
+              },
+              "result": "reply",
+              "timeout": 86400
+            }
+          },
+          {
+            "name": "keep",
+            "desc": "keeps what you said",
+            "set": {
+              "name": "said",
+              "expr": "said + '\\n' + reply",
+              "when": "reply"
+            }
+          },
+          {
+            "name": "count",
+            "desc": "one more asked",
+            "add": {
+              "name": "asked",
+              "expr": "1"
+            }
+          }
+        ],
+        "next": [
+          {
+            "goto": "clarifying",
+            "when": [
+              "reply"
+            ],
+            "desc": "answered: jev reads it again"
+          },
+          {
+            "goto": "refining",
+            "desc": "no answer: on with what there is"
+          }
+        ]
+      },
+      "refining": {
+        "desc": "the next tasks, from the LLM",
+        "every": 0,
+        "do": [
+          {
+            "name": "refine",
+            "desc": "asks the LLM for the group's next tasks",
+            "ask_llm": {
+              "context": {
+                "format": "You help someone turn what they need to do into its next tasks: an errand, a chore,\nor a piece of work.\n\n{group}\n\nWhat they need to do now, in their words:\n{note}\n\nFirst, hold what they wrote up against each of the group's tasks, done or not, by what it\ndoes, not by its words: two tasks overlap when doing one does much of the other.\n- a task covers it already: no change, or a \"change\" to that task if what they wrote adds to it\n  (a detail, a check, a deadline). Not a new task\n- their tasks cover it all already: no changes at all. That's a fine answer\n\nThen plan the next tasks, as changes to the group's tasks:\n- \"add\" a task, only for what no task of theirs does, nor any other task you add. As few as it takes: an errand or a chore is often one or two. A piece of work\n  is planned a few tasks at a time, 5 at most. If they laid out steps, plan every one of\n  them, in their order\n- \"change\" an open task, by its key: only the fields that change\n- \"remove\" an open task, by its key, only if what they wrote now makes it unneeded\nEach task:\n- its name a few words (6 at most), starting with a verb, specific enough to start right\n  away. Keep their words where you can. Anything more goes in its desc\n- its key is its name in lowercase, words joined by \"_\": \"Buy milk and eggs\" is \"buy_milk_and_eggs\"\n- one sitting: 50 minutes or less, with your estimate in minutes. If it would take longer, it's two tasks\n- once it's done, something is done, works or exists that wasn't before, not just one layer of it\n- with what \"done\" looks like: at most 3 checks anyone could make\n- \"after\": the keys of the tasks it needs done first, theirs or yours. The riskiest and\n  most unknown ones early, so a wrong assumption shows soon\n- in work of more than 3 tasks, after every 2 or 3 tasks, a checkpoint: a short task to check it all works together and decide\n  what's next. Don't plan past what's known: if the work goes on, the last task is a checkpoint to plan the next tasks\nThen the group itself, with what they wrote now taken in:\n- its name, a few words (\"Groceries\", \"Thesis\"). A group they have keeps its own, unless it no\n  longer fits what the group has become\n- its description, a sentence or two: what it's for and where it stands. Not their words as\n  they are: what anyone would read on its card\n- up to three tags for what part of their life it's for, the most likely first\n- the open questions only they can answer, if any",
+                "values": {
+                  "group": "work.group.outline if work.group is not None else 'It goes with none of their groups of tasks: a new group.'",
+                  "note": "said"
+                }
+              },
+              "result": "work.plan",
+              "timeout": 60
+            }
+          },
+          {
+            "name": "later",
+            "desc": "no answer: two hours on",
+            "set": {
+              "name": "later",
+              "expr": "time + 120",
+              "when": "work.plan is None"
+            }
+          }
+        ],
+        "next": [
+          {
+            "goto": "idle",
+            "when": [
+              "work.plan is None"
+            ],
+            "desc": "no answer: later"
+          },
+          {
+            "goto": "idle",
+            "when": [
+              "work.group is None",
+              "not work.plan.name or len(work.plan.changes) == 0"
+            ],
+            "desc": "nothing to plan"
+          },
+          {
+            "goto": "covered",
+            "when": [
+              "len(work.plan.changes) == 0"
+            ],
+            "desc": "its group covers it"
+          },
+          {
+            "goto": "grouping"
+          }
+        ]
+      },
+      "covered": {
+        "desc": "its group covers it already",
+        "every": 0,
+        "do": [
+          {
+            "name": "said_so",
+            "desc": "says so",
+            "poke": {
+              "context": {
+                "format": "Nothing to add: “{name}” already covers “{quote}”.",
+                "values": {
+                  "name": "work.group.name",
+                  "quote": "todo.content"
+                }
+              }
+            }
+          },
+          {
+            "name": "taken",
+            "desc": "the todo's taken: kept, with where it went",
+            "set": {
+              "name": "note[index(note.id, todo.id)].link",
+              "expr": "'tasks/' + str(work.group.id)"
+            }
+          },
+          {
+            "name": "dropped",
+            "desc": "no plan",
+            "set": {
+              "name": "work.plan",
+              "expr": "None"
+            }
+          }
+        ],
+        "next": "idle"
+      },
+      "grouping": {
+        "desc": "the group refined, or made",
+        "every": 0,
+        "do": [
+          {
+            "name": "tags",
+            "desc": "asks jev its tags",
+            "ask_jev": {
+              "context": {
+                "format": "Something someone has to do: {text}",
+                "values": {
+                  "text": "work.plan.desc if work.plan.desc else said"
+                }
+              },
+              "questions": [
+                {
+                  "type": "choice",
+                  "question": "What part of their life is it for?",
+                  "criteria": "choices(work.group.tags)",
+                  "result": "tagged"
+                }
+              ]
+            }
+          },
+          {
+            "name": "new",
+            "desc": "a new group, if it has none",
+            "append": {
+              "name": "work.groups",
+              "when": "work.group is None and work.plan.name",
+              "expr": {
+                "name": "work.plan.name"
+              }
+            }
+          },
+          {
+            "name": "made",
+            "desc": "the new group, the one at hand",
+            "set": {
+              "name": "work.group",
+              "expr": "work.groups[-1]",
+              "when": "work.group is None and work.plan.name"
+            }
+          },
+          {
+            "name": "name",
+            "desc": "its name",
+            "set": {
+              "name": "work.group.name",
+              "expr": "work.plan.name if work.plan.name else work.group.name",
+              "when": "work.group is not None"
+            }
+          },
+          {
+            "name": "desc",
+            "desc": "its description",
+            "set": {
+              "name": "work.group.desc",
+              "expr": "work.plan.desc if work.plan.desc else work.group.desc",
+              "when": "work.group is not None"
+            }
+          },
+          {
+            "name": "tag",
+            "desc": "its tags",
+            "set": {
+              "name": "work.group.tags",
+              "expr": "(([choices(work.group.tags)[tagged.index]] + ((work.plan.tags[:index(work.plan.tags, choices(work.group.tags)[tagged.index])] + work.plan.tags[index(work.plan.tags, choices(work.group.tags)[tagged.index]) + 1:]) if choices(work.group.tags)[tagged.index] in work.plan.tags else work.plan.tags)) if tagged is not None and tagged.conf >= 0.1 else work.plan.tags)[:3]",
+              "when": "work.group is not None and len((([choices(work.group.tags)[tagged.index]] + ((work.plan.tags[:index(work.plan.tags, choices(work.group.tags)[tagged.index])] + work.plan.tags[index(work.plan.tags, choices(work.group.tags)[tagged.index]) + 1:]) if choices(work.group.tags)[tagged.index] in work.plan.tags else work.plan.tags)) if tagged is not None and tagged.conf >= 0.1 else work.plan.tags)[:3]) > 0"
+            }
+          },
+          {
+            "name": "questions",
+            "desc": "its open questions, the new ones too",
+            "set": {
+              "name": "work.group.questions",
+              "expr": "work.group.questions + work.plan.questions",
+              "when": "work.group is not None"
+            }
+          },
+          {
+            "name": "owned",
+            "desc": "the plan is the group's, a new one's too",
+            "set": {
+              "name": "work.plan",
+              "expr": "work.plan"
+            }
+          }
+        ],
+        "next": "confirming"
+      },
+      "confirming": {
+        "desc": "its card opened, for you to accept the plan, then waits until it's reviewed",
+        "every": 0,
+        "do": [
+          {
+            "name": "taken",
+            "desc": "the todo's taken: kept, with where it went",
+            "set": {
+              "name": "note[index(note.id, todo.id)].link",
+              "expr": "'tasks/' + str(work.group.id)"
+            }
+          },
+          {
+            "name": "open",
+            "desc": "opens its card",
+            "open": {
+              "path": "'tasks/' + str(work.group.id)"
+            }
+          },
+          {
+            "name": "later",
+            "desc": "a while at most",
+            "set": {
+              "name": "later",
+              "expr": "time + 120"
+            }
+          }
+        ],
+        "next": "waiting"
+      }
+    }
+  }
+}

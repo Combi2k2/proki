@@ -3,7 +3,7 @@ A spec is found by its fields, and a branch or an action by its place among its 
 
 from __future__ import annotations
 
-from proki import editor
+from proki import editor, playground
 from proki.engine import Engine
 from proki.model import Spec
 from proki.model.model import Model
@@ -35,6 +35,12 @@ def tools(engine: Engine, shipped: Shipped) -> list[Tool]:
         Tool("evaluate", "An expression's value now, and its type, as an action would work it out (error: why it "
                          "can't be).", {"expr": {"type": "string"}},
              lambda args: editor.evaluate(args["expr"]), ("expr",), readonly=True),
+        Tool("playground", "The playground's own made-up signals (a value a minute) and variables, to try on: with "
+                           "`expr`, its value each minute and its type; with `action` (set, add, sub, append, remove), "
+                           "taken at the last minute, the variables after it. `variables`: their values to start from "
+                           "(else as shipped). Yours aren't seen there, and nothing of yours is set.",
+             {"expr": {"type": "string"}, "action": {"type": "object"}, "variables": {"type": "object"}},
+             lambda args: playground.play(args.get("expr"), args.get("action"), args.get("variables")), readonly=True),
         Tool("get_program", "One program, state by state as it's met from its initial one, and what it "
                             "depends on (`uses`).", {"name": {"type": "string"}},
              lambda args: editor.detail(engine, args["name"]), ("name",), readonly=True),
@@ -47,6 +53,12 @@ def tools(engine: Engine, shipped: Shipped) -> list[Tool]:
                  "op": {"type": "string", "enum": ["add", "update", "remove"]}, "kind": {"type": "string", "enum": list(Spec.kinds)},
                  "data": {"type": "object"}}, "required": ["op", "kind", "data"]}}},
              lambda args: model.apply([(c["op"], c["kind"], c["data"]) for c in args["changes"]]), ("changes",)),
+        Tool("unused", "What nothing depends on: each variable, signal and rule no program's way out depends on, "
+                       "nor the app, nor a metric, down any chain, and each action that only sets them; as the "
+                       "changes that take them out, as apply_changes takes them.", {},
+             lambda args: {"changes": [{"op": op, "kind": kind, "data": data} for op, kind, data in editor.unused(engine)]}, readonly=True),
+        Tool("remove_unused", "Takes out what nothing depends on (as `unused` lists it), checked once: all of it, or none.", {},
+             lambda args: model.apply(editor.unused(engine))),
         Tool("program_specs", "One program's specs, each kind a list in order (a branch's or an action's place "
                               "among its state's, `at`, is its order there), or with name null the global scope's "
                               "(inputs, and the variables, signals and rules no program brings). `default`: proki "

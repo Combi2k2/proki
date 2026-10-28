@@ -25,8 +25,9 @@ def tools(library: Library, engine: Engine) -> list[Tool]:
              lambda args: dict(zip(("media", "total"), library.get(args.get("kind"), args.get("keys"), args.get("offset", 0), args.get("limit")))),
              readonly=True),
         Tool("add_media", "A picture (gif, png, jpg, webp) or a sound (mp3, wav, ogg) of yours in the library: "
-                          "a copy of the file at `path`. Its key.", {"path": {"type": "string"}},
-             lambda args: {"key": library.add(Path(args["path"]).expanduser())}, ("path",)),
+                          "a copy of the file at `path`, its `key`. Or a folder: each picture and sound in it, "
+                          "its subfolders' too, named after the folder (\"stickers/happy\"), their `keys`.",
+             {"path": {"type": "string"}}, lambda args: add(library, Path(args["path"]).expanduser()), ("path",)),
         Tool("rename_media", "A picture's or a sound's name, what you see: its key, what picks and pools "
                              "know it by, stays.", {"key": ID, "name": {"type": "string"}},
              lambda args: library.rename(args["key"], args["name"]), ("key", "name")),
@@ -45,6 +46,19 @@ def tools(library: Library, engine: Engine) -> list[Tool]:
                           "sounds together.", {"id": ID, "keys": KEYS},
              lambda args: pick(library, engine, args["id"], args["keys"]), ("id", "keys")),
     ]
+
+
+def add(library: Library, path: Path) -> dict:
+    if not path.is_dir():
+        return {"key": library.add(path)}
+    found = sorted(p for p in path.rglob("*") if p.suffix.lower() in library.KINDS and p.is_file() and not p.name.startswith("."))
+    if not found:
+        raise ValueError(f"{path.name}: no picture or sound in it")
+    keys = []
+    for p in found:
+        keys.append(library.add(p))
+        library.rename(keys[-1], f"{path.name}/{p.relative_to(path).with_suffix('').as_posix()}")
+    return {"keys": keys}
 
 
 def pick(library: Library, engine: Engine, id: str, keys: list[str]) -> None:

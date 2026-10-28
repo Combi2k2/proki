@@ -1,5 +1,5 @@
-"""The day clock: each minute at the computer counted by how focused, and each new day, week,
-month and year starting its counts afresh (programs/config/day.json)."""
+"""The day clock: each minute at the computer counted by how focused, and each new day and week
+starting its counts afresh (programs/config/day.json)."""
 
 import shutil
 from datetime import datetime, timedelta
@@ -37,10 +37,10 @@ async def test_each_minute_counts_by_how_focused_you_were(tmp_path):
     await run(at(2026, 10, 21, 10, 8), focus=0.4)
     await run(at(2026, 10, 21, 10, 10), focus=0.1)
     await run(at(2026, 10, 21, 10, 13), active=False)
-    counts = {n: value(f"{n}_today") for n in ("focused", "shallow", "distracted", "active")}
-    assert 4 <= counts["focused"] <= 6 and 2 <= counts["shallow"] <= 4 and 1 <= counts["distracted"] <= 3
-    assert counts["active"] == counts["focused"] + counts["shallow"] + counts["distracted"]  # away: none of them
-    assert value("focused_week") == value("focused_month") == value("focused_year") == counts["focused"]
+    counts = {n: value(f"{n}_today") for n in ("focused", "shallow", "active")}
+    assert 4 <= counts["focused"] <= 6 and 2 <= counts["shallow"] <= 4
+    assert 1 <= counts["active"] - counts["focused"] - counts["shallow"] <= 3  # distracted; away: none of them
+    assert value("focused_week") == counts["focused"]
 
 
 async def test_a_monday_starts_the_week_afresh_and_the_streak_goes_on(tmp_path):
@@ -50,15 +50,6 @@ async def test_a_monday_starts_the_week_afresh_and_the_streak_goes_on(tmp_path):
     assert value("focused_week") >= 2
     await run(at(2026, 10, 26, 0, 1), step=timedelta(minutes=1))
     await run(at(2026, 10, 26, 0, 2))
-    assert value("goal_streak") == 1 and value("focused_week") <= 1 and value("focused_month") >= 2
+    assert value("goal_streak") == 1 and value("focused_week") <= 1
     assert day.current == "idle" and value("deadline_eod") > value("time")
 
-
-async def test_a_new_year_starts_the_month_and_the_year_afresh_not_the_week(tmp_path):
-    _, run = clock(tmp_path)
-    await run(at(2026, 12, 31, 23, 50))  # a Thursday
-    await run(at(2026, 12, 31, 23, 55))
-    await run(at(2027, 1, 1, 0, 1), step=timedelta(minutes=1), focus=0.1)
-    await run(at(2027, 1, 1, 0, 2))
-    assert value("goal_streak") == 1 and value("focused_month") == value("focused_year") == 0
-    assert value("focused_week") >= 2 and value("distracted_today") <= 2

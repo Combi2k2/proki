@@ -116,6 +116,11 @@ def test_the_media_tools(tmp_path):
     mine = tmp_path / "mine.png"
     mine.write_bytes((settings.ASSETS_DIR / "media/bugcat/stare_luffy.png").read_bytes())
     key = call(tools, "add_media", path=str(mine))[1]["key"]
+    (tmp_path / "stickers/cats").mkdir(parents=True)
+    for name in ("happy.png", "cats/sleepy.gif", "notes.txt"):
+        (tmp_path / "stickers" / name).write_bytes(mine.read_bytes() + name.encode())
+    added = call(tools, "add_media", path=str(tmp_path / "stickers"))[1]["keys"]
+    assert sorted(m["name"] for m in call(tools, "get_media", keys=added)[1]["media"]) == ["stickers/cats/sleepy", "stickers/happy"]
     call(tools, "rename_media", key=key, name="luffy")
     assert call(tools, "get_media", keys=[key])[1]["media"][0]["name"] == "luffy"
     call(tools, "set_pool", name="questions", keys=[key])
@@ -153,3 +158,43 @@ def test_the_board_is_tools_too_its_mistakes_their_errors():
     assert call(tools, "add_record", name="work.tasks", fields={"name": "no group"}) == (True, "work.tasks needs its group")
     assert call(tools, "add_record", name="work.tasks", fields={"group": group["id"], "name": "x", "colour": "red"}) == (True, "work.tasks has no field colour")
     assert call(tools, "add_record", name="work.nope", fields={})[0]
+
+
+def test_a_suggestion_waits_until_the_vault_has_it(tmp_path, monkeypatch):
+    import requests
+
+    from proki.tools import suggestions
+
+    got, up = [], [False]
+    def post(url, json, timeout):
+        if not up[0]:
+            raise requests.ConnectionError("offline")
+        got.append(json)
+        return type("Said", (), {"ok": True, "json": lambda self: {"ok": True}})()
+    monkeypatch.setattr(requests, "post", post)
+    made = {t.name: t.run for t in suggestions.tools(tmp_path / "outbox.json", "https://vault")}
+    assert made["suggest"]({"text": " the graph is slow ", "contact": "me@here"}) == {"waiting": 1}
+    assert made["suggest"]({"text": "more colours"}) == {"waiting": 2}
+    with pytest.raises(ValueError):
+        made["suggest"]({"text": "  "})
+    up[0] = True
+    assert made["send_suggestions"]({}) == {"waiting": 0}
+    assert [s["text"] for s in got] == ["the graph is slow", "more colours"] and got[0]["contact"] == "me@here"
+    assert suggestions.tools(tmp_path / "none.json", "")[1].run({}) == {"waiting": 0}
+
+
+def test_the_playground_works_on_its_own_names_and_leaves_yours_alone(tools):
+    from proki.core.signals import Stream
+
+    live, now = Stream.registry, Stream.now
+    shown = call(tools, "playground")[1]
+    assert set(shown["signals"]) == {"a", "b"} and set(shown["variables"]) == {"goal", "streak", "xs", "mood", "task", "tasks"}
+    a = shown["signals"]["a"]["values"]
+    means = call(tools, "playground", expr="ts_mean(a, 2)")[1]["values"]
+    assert means[0] == a[0] and abs(means[5] - (a[4] + a[5]) / 2) < 1e-9
+    assert call(tools, "playground", expr="len(tasks) + len(xs)")[1]["values"][-1] == 9
+    done = call(tools, "playground", action={"set": {"name": "tasks[1].done", "expr": "True"}}, variables={"streak": 7})[1]["variables"]
+    assert done["tasks"]["value"][1]["done"] is True and done["streak"]["value"] == 7
+    assert call(tools, "playground", action={"poke": {"text": "'hi'"}})[0]  # only a variable's
+    assert "unknown name" in call(tools, "playground", expr="focus")[1]  # yours aren't there
+    assert Stream.registry is live and Stream.now == now

@@ -3,6 +3,7 @@
     specs(model, shipped, program)  one part of your programs, as its specs, as the app edits them
     reference(engine)               what a program can use, and what runs now, with its values
     detail(engine, name)            one program, state by state, and what it depends on
+    unused(engine)                  what no program's way out depends on, nor the app, nor a metric
     evaluate(expr)                  an expression's value now, and its type
     set_value(name, value)          a variable's value, set now
 
@@ -16,6 +17,7 @@ import inspect
 from typing import Any
 
 from proki.core.actions import ACTIONS
+from proki.core.actions.var import Update
 from proki.core.ops import FUNCTIONS
 from proki.core.primitives import Primitive
 from proki.core.programs import Program
@@ -76,7 +78,7 @@ def reference(engine: Engine) -> dict:
     compiled = engine.compiled
     used     = {i.name for i in compiled.inputs}
     declared = {v.name for v in compiled.variables}
-    known    = {name: v.desc for name, v in Stream.registry.items()  # each object whose fields are variables of their own (track, work.plan)
+    known    = {name: v.desc for name, v in Stream.registry.items()  # each object whose fields are variables of their own (track, work)
                 if isinstance(v, Linked) and any(other.startswith(f"{name}.") for other in Stream.registry)}
     return {
         "inputs"   : [{**input_row(name, kind), "used": name in used} for name, kind in Primitive.kinds.items()],
@@ -178,6 +180,53 @@ def uses(program: Program, signals: list[Signal]) -> dict:
                       if isinstance(v, Variable) and (v.name in named or v.name.startswith(own))],
         "inputs"   : [input_row(name, kind) for name, kind in Primitive.kinds.items() if name in named],
     }
+
+
+def unused(engine: Engine) -> list[tuple[str, str, dict]]:
+    """What nothing depends on, as the changes that take it out (`Model.apply`'s): each variable,
+    signal and rule of your programs no way out depends on, nor the app, nor a metric, down any
+    chain (a variable set from one that's depended on is); and each action that only sets them.
+
+    Depended on: what a way out's conditions and rules read, what an action that isn't a set
+    reads (a question asks it), what the app reads, the signals kept as metrics; then what each
+    of those reads, and what sets each variable among them reads, and so on."""
+    states  = [state for program in Program.registry.values() for state in program.states.values()]
+    sets    = [a for s in states for a in s.do if isinstance(a, Update)]
+    setting = {}  # each variable: the sets that change it
+    for action in sets:
+        for variable in action.write():
+            setting.setdefault(id(variable), []).append(action)
+    todo: list[Stream] = [
+        *(c for s in states for b in s.next for c in b.conds if isinstance(c, Stream)),
+        *(side for s in states for b in s.next for r in b.rules for side in (r.lhs, r.rhs)),
+        *(expr.stream() for s in states for a in s.do if not isinstance(a, Update) for expr in a.read()),
+        *(Stream.registry[name] for name in engine.reads if name in Stream.registry),
+        *(s for s in engine.compiled.signals if s.persist),
+    ]
+    found: dict[int, Stream] = {}
+    while todo:
+        stream = todo.pop()
+        if id(stream) in found:
+            continue
+        found[id(stream)] = stream
+        todo += stream.inputs
+        todo += [expr.stream() for action in setting.get(id(stream), []) for expr in action.read()]
+        if isinstance(stream, Variable) and isinstance(stream.initial, str):  # what it starts as
+            todo.append(Expr(stream.initial).stream())
+    named = {s.name for s in found.values() if Stream.registry.get(s.name) is s}
+    voted = {r.name for s in states for b in s.next for r in b.rules}
+    full  = lambda s: ".".join(filter(None, (s.program if s.scope != "global" else None, s.state if s.scope == "state" else None, s.name)))
+    ident = lambda s: {"name": s.name, "scope": s.scope, "program": s.program, "state": s.state}
+    gone  = {a.id for a in sets if all(v.name not in named for v in a.write())}
+    specs = engine.model.specs
+    place = {}  # each action's: its program, its state, its place there
+    for a in specs.actions:
+        place[a.id] = (a.program, a.state, sum(p[:2] == (a.program, a.state) for p in place.values()))
+    taken = sorted((place[i] for i in gone if i in place), key=lambda p: -p[2])  # the last first: the places before stay
+    return [*(("remove", "action", {"program": p, "state": st, "at": i}) for p, st, i in taken),
+            *(("remove", "variable", ident(v)) for v in specs.variables if full(v) not in named),
+            *(("remove", "signal", ident(s)) for s in specs.signals if full(s) not in named),
+            *(("remove", "rule", ident(r)) for r in specs.rules if full(r) not in voted)]
 
 
 def evaluate(expr: str) -> dict:

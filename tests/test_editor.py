@@ -126,6 +126,7 @@ async def test_the_reference_says_what_a_program_can_use(setup):
     assert programs["@plan"]["kind"] == "code" and programs["@plan"]["desc"]
 
 
+
 async def test_what_the_app_reads_is_kept(tmp_path):
     e = Engine(programs_folder(tmp_path, CONFIG, {}), reads={"count": "number", "hours": "number"})
     await cycle(e, 0)
@@ -292,4 +293,16 @@ def test_a_table_is_global_with_its_fields_and_an_object_of_variables_is_special
     assert {"work.tasks.id", "work.tasks.name", "work.tasks.ready"} <= {f["name"] for f in work["work.tasks"]["fields"]}
     assert "work.task.score" in {f["name"] for f in work["work.task"]["fields"]}  # one record
     assert track["scope"] == "special" and "track.now" in {f["name"] for f in track["fields"]} and "track.now" not in rows  # its fields: under it
-    assert rows["work.plan"]["scope"] == "special"  # a variable with fields of its own
+    assert "work.plan" in work and "work.plan" not in rows  # a field of work's, an object
+
+
+async def test_what_no_way_out_depends_on_is_taken_out_and_the_rest_stays(tmp_path):
+    waiter = {"variables": [{"name": "left", "value": 0}], "program": {"initial": "on", "states": {
+        "on": {"do": [{"set": {"name": "left", "expr": "hours"}}],  # set from one depended on: kept, and what it reads
+               "next": [{"goto": "on", "when": ["left > 1", "late"]}, {"goto": "on"}]}}}}
+    e = Engine(programs_folder(tmp_path, CONFIG, {"counter": COUNTER, "waiter": waiter}))
+    said = ask(e, op="unused")["changes"]
+    assert said == [{"op": "remove", "kind": "action", "data": {"program": "counter", "state": "on", "at": 0}},  # sets only count
+                    {"op": "remove", "kind": "variable", "data": {"name": "count", "scope": "global", "program": None, "state": None}}]
+    assert "error" not in ask(e, op="remove_unused")
+    assert ask(e, op="unused")["changes"] == [] and "count" not in Stream.registry and "hours" in Stream.registry
