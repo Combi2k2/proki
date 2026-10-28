@@ -11,3 +11,5 @@ build/
 .claude/
 .codex/
 skills-lock.json
+.ruff_cache/
+.impeccable/
