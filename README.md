@@ -34,7 +34,11 @@
 <a id="why-proki"></a>
 ## ✨ Why Proki
 
-Good intentions are easy to lose in a busy day. Proki helps you plan, stay with a task, and keep useful thoughts, with gentle check-ins and activity history kept on your computer.
+Books like *Deep Work* and *Atomic Habits* offer useful ideas for changing how we work. Proki starts with a question: what would it take to put your own idea into practice, day after day?
+
+Choose a principle that matters to you, then express it through signals and a formula: a measurable proxy for things like focus or progress. The measure is not the philosophy itself; it is a way to notice when the idea is showing up in your day. Turn that measure into a routine, and Proki can respond when the moment calls for it. Refine the formula and routine as you learn what works for you.
+
+With MCP, a connected AI assistant can help you design, explain, or revise those formulas and routines whenever your approach changes. Your philosophy stays yours; Proki helps you make it actionable.
 
 <a id="what-you-can-do"></a>
 ## 🧭 What you can do
