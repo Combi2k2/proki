@@ -1,5 +1,5 @@
-"""proki's services, as tools: the LLM and jev, each set by its provider, its key kept in this
-computer's keychain. A change is asked from then on.
+"""proki's services, as tools: the LLM and jev, each set by its provider, its key kept on this
+computer, where only you can read it. A change is asked from then on.
 
     get_settings                               each as it's set, and the providers it can have
     test_connection(service, provider, ...)    whether it answers there, with that key
@@ -114,7 +114,7 @@ def test(service: str, provider: str, url: str, key: str | None, model: str | No
 
 
 def save(config: Settings, path: Path, service: str, provider: str, model: str, url: str | None = None, key: str | None = None) -> dict:
-    """`service` at `provider` with `model`, kept at `path` (its key in the keychain, if given), and
+    """`service` at `provider` with `model`, kept at `path` (its key kept apart, if given), and
     asked by `config`'s from now on. ValueError for a provider there isn't, or no model."""
     url, _ = where(service, provider, url, "")
     if not model.strip():

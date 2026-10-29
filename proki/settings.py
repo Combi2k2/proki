@@ -3,9 +3,9 @@
     llm    the LLM a program's asks go to
     jev    the service that answers questions for you
 
-Each is a provider, its address, its key and the model asked there. The key is kept in this
-computer's keychain, the rest in the config file. Everything else runs on this machine, as
-proki starts it.
+Each is a provider, its address, its key and the model asked there. The keys are kept in a file
+only you can read, the rest in the config file. Everything else runs on this machine, as proki
+starts it.
 """
 
 from __future__ import annotations
@@ -15,8 +15,6 @@ import tomllib
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-import keyring
-from keyring.errors import KeyringError
 from platformdirs import (
     user_config_path,
     user_data_path,
@@ -34,6 +32,7 @@ CONFIG_DIR   = user_config_path("proki")
 CONFIG_PATH  = CONFIG_DIR / "config.toml"
 PROGRAMS_DIR = CONFIG_DIR / "programs"                   # your programs as files, before proki.db kept them (read once)
 TOOLS_TOKEN  = CONFIG_DIR / "tools-token"                # what a client of the tools sends, made the first time
+KEYS         = CONFIG_DIR / "keys.json"                  # every key, by "service.provider": readable by you only
 
 DATA_DIR     = user_data_path("proki")
 DB_PATH      = DATA_DIR / "proki.db"
@@ -103,20 +102,29 @@ def write(path: Path, connections: dict[str, Connection]) -> None:
 
 
 def key(service: str, provider: str) -> str | None:
-    """The key kept for `service` at `provider` (None: none, or no keychain here)."""
+    """The key kept for `service` at `provider` (None: none)."""
+    return keys().get(f"{service}.{provider}")
+
+
+def keys() -> dict[str, str]:
+    """Every key kept, by "service.provider" (none: none, or none readable)."""
     try:
-        return keyring.get_password("proki", f"{service}.{provider}")
-    except KeyringError:
-        return None
+        return json.loads(KEYS.read_text())
+    except (OSError, ValueError):
+        return {}
 
 
 def keep(service: str, provider: str, given: str) -> None:
-    """`given` kept as the key for `service` at `provider` (empty: none kept). ValueError if
-    there's no keychain here."""
+    """`given` kept as the key for `service` at `provider` (empty: none kept), where only you can
+    read it. ValueError if it can't be written."""
+    named = f"{service}.{provider}"
+    if not given and named not in keys():
+        return
+    changed = {k: v for k, v in keys().items() if k != named} | ({named: given} if given else {})
     try:
-        if given:
-            keyring.set_password("proki", f"{service}.{provider}", given)
-        elif key(service, provider) is not None:
-            keyring.delete_password("proki", f"{service}.{provider}")
-    except KeyringError as e:
+        KEYS.parent.mkdir(parents=True, exist_ok=True)
+        KEYS.touch(mode=0o600)  # yours only before a key's in it
+        KEYS.chmod(0o600)
+        KEYS.write_text(json.dumps(changed, indent=2))
+    except OSError as e:
         raise ValueError(f"the key can't be kept: {e}") from None

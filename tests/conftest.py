@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from datetime import timedelta
+from pathlib import Path
 
-import keyring
 import pytest
 
+from proki import settings
 from proki.channels import Channels, Popup
 from proki.channels.base import Question
 from proki.core.actions import Lock, Open, Poke
@@ -48,13 +49,11 @@ def fresh_signals():
 
 
 @pytest.fixture(autouse=True)
-def keychain(monkeypatch) -> dict:
-    """A keychain of the test's own: no test reads or changes yours. The keys kept, by name."""
-    kept: dict[tuple[str, str], str] = {}
-    monkeypatch.setattr(keyring, "get_password", lambda service, name: kept.get((service, name)))
-    monkeypatch.setattr(keyring, "set_password", lambda service, name, key: kept.__setitem__((service, name), key))
-    monkeypatch.setattr(keyring, "delete_password", lambda service, name: kept.pop((service, name)))
-    return kept
+def keys(monkeypatch, tmp_path) -> Path:
+    """A keys' file of the test's own: no test reads or changes yours. Where it is."""
+    monkeypatch.setattr(settings, "KEYS", tmp_path / "keys.json")
+    return settings.KEYS
+
 
 
 def programs_folder(path, data: dict, files: dict | None = None):
@@ -79,7 +78,6 @@ def programs_folder(path, data: dict, files: dict | None = None):
 def with_notes(data: dict) -> dict:
     """`data`, a main.json's, with the shipped one's notes: their variables and signals."""
     import json
-    from proki import settings
 
     main = json.loads((settings.SHIPPED_DIR / "main.json").read_text())
     pick = lambda kind: [spec for spec in main[kind] if spec["name"].split(".")[0] == "note"]
@@ -182,7 +180,6 @@ async def ui(tmp_path):
     database in memory): what a popup draws its pictures and sounds from."""
     import sqlite3
 
-    from proki import settings
     from proki.services.media import Library
 
     Popup.lib = Library(sqlite3.connect(":memory:"), settings.ASSETS_DIR, tmp_path / "media", pools=[Popup.POOL])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tomllib
 from datetime import UTC, datetime
 
@@ -24,12 +25,12 @@ class Reply:
             raise settings.requests.HTTPError(response=self)
 
 
-def test_a_service_set_is_kept_its_key_in_the_keychain_and_asked_at_once(tmp_path, keychain):
+def test_a_service_set_is_kept_its_key_apart_and_asked_at_once(tmp_path, keys):
     path, live = tmp_path / "config.toml", config.Settings()
     shown = settings.save(live, path, "llm", "google", " gemini-2.5-flash ", key="k")
     google = config.PROVIDERS["llm"]["google"]["url"]
     assert tomllib.loads(path.read_text()) == {"llm": {"provider": "google", "url": google, "model": "gemini-2.5-flash"}}
-    assert keychain == {("proki", "llm.google"): "k"}
+    assert json.loads(keys.read_text()) == {"llm.google": "k"} and keys.stat().st_mode & 0o077 == 0  # yours only
     assert (live.llm.api_url, live.llm.api_key, live.llm.model) == (google, "k", "gemini-2.5-flash")  # asked from now on
     assert shown["services"] == {"llm": {"provider": "google", "url": google, "model": "gemini-2.5-flash"}, "jev": None}
     assert shown["providers"]["llm"]["google"]["key"] and not shown["providers"]["llm"]["openai"]["key"]
@@ -39,7 +40,7 @@ def test_a_service_set_is_kept_its_key_in_the_keychain_and_asked_at_once(tmp_pat
     assert (loaded.llm.model, loaded.llm.api_key) == ("gemini-2.5-flash", "k")
     assert (loaded.jev.api_url, loaded.jev.api_key, loaded.jev.model) == ("http://localhost:8000", None, "m")
     settings.save(live, path, "llm", "google", "gemini-2.5-flash", key="")  # empty: the key's taken away
-    assert keychain == {} and live.llm.api_key is None
+    assert json.loads(keys.read_text()) == {} and live.llm.api_key is None
     assert config.load(tmp_path / "nothing.toml").llm.model == ""  # not set: every ask fails
 
     for args, problem in [(("llm", "nope", "m"), "no provider 'nope'"), (("llm", "custom", "m"), "needs its url"),
@@ -48,11 +49,11 @@ def test_a_service_set_is_kept_its_key_in_the_keychain_and_asked_at_once(tmp_pat
             settings.save(live, path, *args)
 
 
-def test_the_models_at_a_provider_with_the_key_given_or_kept(monkeypatch, keychain):
+def test_the_models_at_a_provider_with_the_key_given_or_kept(monkeypatch, keys):
     asked = []
     monkeypatch.setattr(settings.requests, "get", lambda url, headers, params, timeout: asked.append((url, headers, params)) or
                         Reply(200, {"data": [{"id": "models/b"}, {"id": "a"}, {"id": "a"}]}))
-    keychain[("proki", "llm.google")] = "kept"
+    keys.write_text(json.dumps({"llm.google": "kept"}))
     assert settings.models("llm", "google", *settings.where("llm", "google", None, None)) == ["a", "b"]
     assert asked[-1][1] == {"Authorization": "Bearer kept"}
     settings.models("llm", "anthropic", "https://api.anthropic.com/v1", "k")
