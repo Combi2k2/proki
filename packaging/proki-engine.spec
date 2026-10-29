@@ -19,5 +19,6 @@ a = Analysis(
     excludes      = ["pytest", "tkinter"],
 )
 pyz  = PYZ(a.pure)
-exe  = EXE(pyz, a.scripts, [], exclude_binaries=True, name="proki-engine", console=True)
+exe  = EXE(pyz, a.scripts, [("X utf8", None, "OPTION")],   # files read as UTF-8 on Windows too, not its code page
+           exclude_binaries=True, name="proki-engine", console=True)
 coll = COLLECT(exe, a.binaries, a.datas, name="proki-engine")
