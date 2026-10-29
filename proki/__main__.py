@@ -2,6 +2,7 @@
 started by the launcher, or by you.
 
     proki            run it: your programs, served on the bus and as tools
+    proki mcp        its tools, for an AI agent that starts them as a command (proki started if it isn't)
 
 What it does, once:
 1. serves on the bus: jev and the LLM, and what the app asks for
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+import sys
 from datetime import datetime, timezone
 
 from proki import channels, platforms, settings, storage
@@ -43,7 +45,10 @@ BUS   = 10    # seconds it waits for the message bus's server, if it's starting 
 
 
 def main() -> int:
-    """Run, until the app or a signal says to stop."""
+    """Run, until the app or a signal says to stop; or, with `mcp`, the tools for an agent."""
+    if sys.argv[1:2] == ["mcp"]:
+        from proki.tools import stdio
+        return stdio.main()
     config = settings.load()
     if nats.NatsBus.is_up(settings.HOST, settings.TOOLS_PORT):
         print(f"port {settings.TOOLS_PORT} is in use: proki may be running already. Quit it first; nothing was started.", flush=True)
@@ -96,7 +101,10 @@ async def running(config: settings.Settings) -> None:
 
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stopping.set)
+        try:
+            loop.add_signal_handler(sig, stopping.set)
+        except NotImplementedError:  # Windows: a plain handler, handed to the loop
+            signal.signal(sig, lambda *_: loop.call_soon_threadsafe(stopping.set))
     print("proki is running", flush=True)
     purged = loop.time()
     while not stopping.is_set():
