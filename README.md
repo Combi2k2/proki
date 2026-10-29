@@ -35,57 +35,57 @@ It offers gentle check-ins around your work, so you can make progress without tu
 
 ### Getting started
 
-| What you need | How Proki helps | Review |
+| What you need | How Proki helps | Status |
 | --- | --- | --- |
-| Install it | One installer for macOS or Windows, with everything Proki needs inside; ActivityWatch installed for you if it isn't on your computer. | - [ ] Looks good<br>- [ ] Needs work |
-| Start well | A welcome the first time you open it: ActivityWatch checked, your browser's extension a click away (Chrome, Edge, Brave… or Firefox). Shown again from Settings. | - [ ] Looks good<br>- [ ] Needs work |
-| Always at hand | Proki lives in your menu bar or system tray: the focus of the last minutes, a session's time, New note, quit. | - [ ] Looks good<br>- [ ] Needs work |
+| Install it | One installer for macOS or Windows, with everything Proki needs inside; ActivityWatch installed for you if it isn't on your computer. | ~ |
+| Start well | A welcome the first time you open it: ActivityWatch checked, your browser's extension a click away (Chrome, Edge, Brave… or Firefox). Shown again from Settings. | ~ |
+| Always at hand | Proki lives in your menu bar or system tray: the focus of the last minutes, a session's time, New note, quit. | V |
 
 ### Your day
 
-| What you need | How Proki helps | Review |
+| What you need | How Proki helps | Status |
 | --- | --- | --- |
-| See today at a glance | **Today**: your focus through the day, your daily goal and streak, your next task, a box for what's on your mind, and the routines at work. | - [ ] Looks good<br>- [ ] Needs work |
-| Stay with a task | Start a focus session from Today or the tray, tied to a task; a gentle popup when you drift, need a break, or it's time for bed. | - [ ] Looks good<br>- [ ] Needs work |
-| Popups that answer back | Proki asks in a popup, with a sticker: what an app you opened is for, where a note belongs, whether you're still on task. | - [ ] Looks good<br>- [ ] Needs work |
+| See today at a glance | **Today**: your focus through the day, your daily goal and streak, your next task, a box for what's on your mind, and the routines at work. | V |
+| Stay with a task | Start a focus session from Today or the tray, tied to a task; a gentle popup when you drift, need a break, or it's time for bed. | V |
+| Popups that answer back | Proki asks in a popup, with a sticker: what an app you opened is for, where a note belongs, whether you're still on task. | ~ |
 
 ### Your work
 
-| What you need | How Proki helps | Review |
+| What you need | How Proki helps | Status |
 | --- | --- | --- |
-| Make a plan | **Tasks**: your todos under goals, on a board you drag, with a clear next one; talk a todo through and Proki splits it into smaller ones. | - [ ] Looks good<br>- [ ] Needs work |
-| Keep the thought | **Notes**: an idea, a todo or a thought caught as it comes; Proki sorts it into Todo, Idea or Thought, asking you when it isn't sure. | - [ ] Looks good<br>- [ ] Needs work |
-| Know where a note went | A todo made a task stays in Todo, with a link that opens the task. | - [ ] Looks good<br>- [ ] Needs work |
-| Something to smile at | **Media**: the stickers and pictures the popups show, grouped by folder; add one, or a whole folder at once. | - [ ] Looks good<br>- [ ] Needs work |
+| Make a plan | **Tasks**: your todos under goals, on a board you drag, with a clear next one; talk a todo through and Proki splits it into smaller ones. | V |
+| Keep the thought | **Notes**: an idea, a todo or a thought caught as it comes; Proki sorts it into Todo, Idea or Thought, asking you when it isn't sure. | V |
+| Know where a note went | A todo made a task stays in Todo, with a link that opens the task. | V |
+| Something to smile at | **Media**: the stickers and pictures the popups show, grouped by folder; add one, or a whole folder at once. | V |
 
 ### Insight
 
-| What you need | How Proki helps | Review |
+| What you need | How Proki helps | Status |
 | --- | --- | --- |
-| Know where time goes | **Apps**: each app and website you use, and whether it counts as focus, a break or a distraction. You decide; Proki asks about the new ones. | - [ ] Looks good<br>- [ ] Needs work |
-| Watch the trend | **Metrics**: your focus and the signals behind it, over the day and the weeks. | - [ ] Looks good<br>- [ ] Needs work |
+| Know where time goes | **Apps**: each app and website you use, and whether it counts as focus, a break or a distraction. You decide; Proki asks about the new ones. | X |
+| Watch the trend | **Metrics**: your focus and the signals behind it, over the day and the weeks. | ~ |
 
 ### Make it yours
 
-| What you need | How Proki helps | Review |
+| What you need | How Proki helps | Status |
 | --- | --- | --- |
-| A routine that fits | **Automations**: every nudge and check-in is a routine you can read, switch off or change, and what each one uses is shown beside it. | - [ ] Looks good<br>- [ ] Needs work |
-| See it work | Each routine is a graph you can lay out, curved, elbow, straight or on springs; live, it shows the step it's on, the time left to its next try, and the way it takes. | - [ ] Looks good<br>- [ ] Needs work |
-| Change a step | A step opens over the graph, with Back to the one before; its actions and ways out on a line each, dragged into order, each condition ticked or crossed as it is now. | - [ ] Looks good<br>- [ ] Needs work |
-| What a routine knows | The resources drawer: each variable, edited by its type (a number, a time, a list, a record's fields); hidden ones shown on a switch. | - [ ] Looks good<br>- [ ] Needs work |
-| Your own records | **Tables**: tasks, notes and lists of your own, with fields you add, some worked out for you by a rule or by AI; sorted, searched, opened. | - [ ] Looks good<br>- [ ] Needs work |
-| Learn by trying | **Help**: a playground on sample data, where an expression or an action shows what it reads and changes, and a short deck on how routines work. Expressions coloured everywhere. | - [ ] Looks good<br>- [ ] Needs work |
+| A routine that fits | **Automations**: every nudge and check-in is a routine you can read, switch off or change, and what each one uses is shown beside it. | V |
+| See it work | Each routine is a graph you can lay out, curved, elbow, straight or on springs; live, it shows the step it's on, the time left to its next try, and the way it takes. | V |
+| Change a step | A step opens over the graph, with Back to the one before; its actions and ways out on a line each, dragged into order, each condition ticked or crossed as it is now. | V |
+| What a routine knows | The resources drawer: each variable, edited by its type (a number, a time, a list, a record's fields); hidden ones shown on a switch. | V |
+| Your own records | **Tables**: tasks, notes and lists of your own, with fields you add, some worked out for you by a rule or by AI; sorted, searched, opened. | V |
+| Learn by trying | **Help**: a playground on sample data, where an expression or an action shows what it reads and changes, and a short deck on how routines work. Expressions coloured everywhere. | V |
 
 ### AI and assistants
 
-| What you need | How Proki helps | Review |
+| What you need | How Proki helps | Status |
 | --- | --- | --- |
-| Help from AI | Settings, a service at a time: choose the provider from a list, test the connection, and its key stays on this computer, readable by you only. | - [ ] Looks good<br>- [ ] Needs work |
-| Answers in a shape | An AI step's answer built field by field, as the routine needs it. | - [ ] Looks good<br>- [ ] Needs work |
-| Work with your assistant | Claude Code, Codex, OpenClaw and other assistants reach your tasks, notes and routines through `proki mcp`, installed from the tray (see [For builders](#for-builders)). | - [ ] Looks good<br>- [ ] Needs work |
-| Tell us | **Contribute**: the code on GitHub, and a suggestion form that reaches us even if you're offline when you send it. | - [ ] Looks good<br>- [ ] Needs work |
+| Help from AI | Settings, a service at a time: choose the provider from a list, test the connection, and its key stays on this computer, readable by you only. | V |
+| Answers in a shape | An AI step's answer built field by field, as the routine needs it. | V |
+| Work with your assistant | Claude Code, Codex, OpenClaw and other assistants reach your tasks, notes and routines through `proki mcp`, installed from the tray (see [For builders](#for-builders)). | V |
+| Tell us | **Contribute**: the code on GitHub, and a suggestion form that reaches us even if you're offline when you send it. | ~ |
 
-*As you try each feature, mark whether it feels ready or needs more polish.*
+*V reviewed and ready · ~ works, with something left · X not reviewed yet*
 
 ## Your day stays yours
 
