@@ -57,9 +57,9 @@ impl Tools {
         }
     }
 
-    /// A session, retried briefly while proki is starting its tools.
+    /// A session, retried while proki starts its tools (including first-run setup).
     async fn connected(&self) -> Result<String, String> {
-        let given_up = tokio::time::Instant::now() + Duration::from_secs(8);
+        let given_up = tokio::time::Instant::now() + Duration::from_secs(30);
         loop {
             match self.connect().await {
                 Err(error) if retryable(&error) && tokio::time::Instant::now() < given_up => {
@@ -76,6 +76,9 @@ impl Tools {
         let (session, _) = self.post(None, json!({ "jsonrpc": "2.0", "id": self.id(), "method": "initialize", "params": hello })).await?;
         let session = session.ok_or("no MCP session")?;
         self.post(Some(&session), json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).await?;
+        // Don't consider the backend ready just because it accepted initialize. Confirm it can
+        // serve the tools the UI depends on before the first screen leaves its loading state.
+        self.request(Some(&session), "tools/list", json!({})).await?;
         Ok(session)
     }
 
@@ -95,7 +98,15 @@ impl Tools {
     /// One message posted: the session it names, and the answer (none for a notification), sent
     /// as JSON or as server-sent events.
     async fn post(&self, session: Option<&str>, message: Value) -> Result<(Option<String>, Option<Value>), String> {
-        let token = tokio::fs::read_to_string(&self.token_path).await.map_err(|e| format!("the tools' token: {e}"))?;
+        let token = tokio::fs::read_to_string(&self.token_path).await.map_err(|e| {
+            // The app starts its bundled engine asynchronously; on slower machines the engine may
+            // not have created the token yet when the first MCP connection arrives.
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!("tools token not ready: {e}")
+            } else {
+                format!("the tools' token: {e}")
+            }
+        })?;
         let mut posted = self.http.post(&self.url)
             .bearer_auth(token.trim())
             .header("Accept", "application/json, text/event-stream")
@@ -134,5 +145,7 @@ impl Tools {
 }
 
 fn retryable(error: &str) -> bool {
-    error.starts_with("tools connection failed:") || error.starts_with("tools server temporarily unavailable (")
+    error.starts_with("tools token not ready:")
+        || error.starts_with("tools connection failed:")
+        || error.starts_with("tools server temporarily unavailable (")
 }
