@@ -2,10 +2,12 @@
 // Help, Settings and Contribute at the foot. The tray opens it on one of them ("navigate"), the engine on a
 // group's card too (#tasks/12), or an automation (#programs/bedtime), and remembers nothing else: each view loads
 // what it shows. At its right edge, on every view, a drawer: what the automations can use, for the one you're in.
+// The first time it opens, the welcome over it (Settings shows it again).
 
 import { Fragment, useEffect, useState } from "react"
 import { AppWindow, ChartLine, CircleHelp, Image, HeartHandshake, Lightbulb, ListTodo, PanelRightClose, PanelRightOpen, Settings, Sun, Table2, Workflow } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Welcome } from "@/components/welcome"
 import prokiMark from "../../logo/proki.svg"
 import { mount, type View } from "@/lib/proki"
 import { recall, remember } from "@/lib/remember"
@@ -104,6 +106,7 @@ function Main() {
   const [opened, setOpened] = useState<number | string | null>(opening(card))  // a card, or an automation, to open
   const [where, setWhere] = useState<Where>(GLOBAL)
   const [drawer, setDrawer] = useState(() => recall("proki-drawer", ["open", "shut"] as const, "shut") === "open")
+  const [welcome, setWelcome] = useState(() => recall("proki-welcomed", ["yes", "no"] as const, "no") === "no")  // the welcome, not seen through yet
   useEffect(() => {
     window.proki.onNavigate((path) => {
       const [to, card] = path.split("/")
@@ -163,10 +166,12 @@ function Main() {
         {view === "tables" && <TablesView />}
         {view === "manual" && <ManualView onGo={go} />}
         {view === "contribute" && <ContributeView />}
-        {view === "settings" && <SettingsView appearance={appearance} onAppearance={(value) => { setAppearance(value); remember("proki-appearance", value) }} />}
+        {view === "settings" && <SettingsView appearance={appearance} onAppearance={(value) => { setAppearance(value); remember("proki-appearance", value) }}
+                                              onWelcome={() => setWelcome(true)} />}
         {!drawer && view === "programs" && <Drawer where={where} open={false} onOpen={keep} />}
       </div>
       {drawer && view === "programs" && <Drawer where={where} open onOpen={keep} />}
+      {welcome && <Welcome onDone={() => (setWelcome(false), remember("proki-welcomed", "yes"))} />}
     </div>
   )
 }

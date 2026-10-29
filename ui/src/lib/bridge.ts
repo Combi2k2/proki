@@ -37,6 +37,7 @@ if ("__TAURI_INTERNALS__" in window) {
     fileUrl: (path) => convertFileSrc(path),
     note: () => void invoke("note"),
     link: (to) => void invoke("link", { to }),
+    watching: () => invoke<boolean>("watching"),
     session: (op) => void invoke("session", { op }),
     // the main window: the page the tray or the engine asked for, by its path ("tasks/12")
     onNavigate: (callback) => {

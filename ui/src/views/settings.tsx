@@ -1,8 +1,8 @@
 // Settings: how the app looks, and the two services proki asks, one at a time.
 //
 // A service is set by its provider: pick one, give its key (and a custom one's URL) and try
-// it, pick one of the models there, then save. The key is kept in this computer's keychain and
-// never shown again; the service is asked from the moment it's saved. A change not saved yet
+// it, pick one of the models there, then save. The key is kept on this computer, readable by you only,
+// and never shown again; the service is asked from the moment it's saved. A change not saved yet
 // says so where it was made, and on its service's tab.
 
 import { useEffect, useState, type ReactNode } from "react"
@@ -33,9 +33,10 @@ type Result = { ok: boolean; text: string } | null
 
 const failed = (error: unknown) => error instanceof Error ? error.message : "Could not reach Proki."
 
-export function SettingsView({ appearance, onAppearance }: {
+export function SettingsView({ appearance, onAppearance, onWelcome }: {
   appearance: Appearance
   onAppearance: (value: Appearance) => void
+  onWelcome: () => void  // the welcome shown again
 }) {
   const [services, setServices]   = useState<Services | null>(null)
   const [loadError, setLoadError] = useState("")
@@ -54,7 +55,7 @@ export function SettingsView({ appearance, onAppearance }: {
     <div className="mx-auto max-w-2xl px-8 pt-7 pb-24">
       <PageHeader title="Settings" sub="Make Proki feel comfortable to use. Your choices are saved on this computer." className="mb-6" />
 
-      <section aria-labelledby="appearance" className="mb-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-5 py-3.5">
+      <section aria-labelledby="appearance" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-5 py-3.5">
         <div>
           <h2 id="appearance" className="text-sm font-semibold">Brightness</h2>
           <p className="text-xs text-muted-foreground">How bright the app should be.</p>
@@ -67,8 +68,16 @@ export function SettingsView({ appearance, onAppearance }: {
         </ToggleGroup>
       </section>
 
+      <section aria-labelledby="welcome" className="mb-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-5 py-3.5">
+        <div>
+          <h2 id="welcome" className="text-sm font-semibold">Welcome</h2>
+          <p className="text-xs text-muted-foreground">The first steps again: ActivityWatch, and your browser's extension.</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={onWelcome}>Show the welcome</Button>
+      </section>
+
       <h2 className="text-sm font-semibold">Services</h2>
-      <p className="mt-0.5 mb-4 text-sm text-muted-foreground">What Proki asks when a program needs an answer. Keys stay in this computer's keychain.</p>
+      <p className="mt-0.5 mb-4 text-sm text-muted-foreground">What Proki asks when a program needs an answer. Keys stay on this computer, readable by you only.</p>
       {loadError ? (
         <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-destructive">
           <span>{loadError}</span>

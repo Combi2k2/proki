@@ -1,4 +1,5 @@
-// proki's UI: the tray, the popup and the windows. The launcher (launch.py) starts it, or you do.
+// proki's UI: the tray, the popup and the windows. The launcher (launch.py) starts it, or you do;
+// shipped, it starts the engine inside it (packaging/), unless proki's running already.
 // It talks to the engine only over the message bus (bus.rs: --nats=host:port), and to the programs'
 // tools over MCP (tools.rs: --tools=host:port, --tools-token=path), each where the engine is unless
 // it's told. The pages are the same React pages (src/pages/), built into dist/; they reach this
@@ -10,6 +11,10 @@ mod bus;
 mod popup;
 mod tools;
 
+use std::net::TcpStream;
+use std::path::PathBuf;
+use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -17,6 +22,7 @@ use serde_json::{json, Value};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_dialog::DialogExt;
 
 pub struct Args {
     pub nats: String,
@@ -46,6 +52,7 @@ pub struct Proki {
     pub queue: Mutex<popup::Queue>,
     pub tray: Mutex<(String, String)>, // the tray's first line, and the running session next to its icon
     pub tools: tools::Tools,
+    pub quitting: AtomicBool, // the engine asked to stop already
 }
 
 pub fn proki(app: &AppHandle) -> &Proki {
@@ -79,7 +86,12 @@ fn note(app: AppHandle) {
     popup::new_note(&app);
 }
 
-const LINKS: [(&str, &str); 1] = [("github", "https://github.com/Combi2k2/proki")]; // the pages a page may open, by name
+const LINKS: [(&str, &str); 4] = [ // the pages a page may open, by name
+    ("github",        "https://github.com/Combi2k2/proki"),
+    ("activitywatch", "https://activitywatch.net/downloads/"),
+    ("aw-chrome",     "https://chromewebstore.google.com/detail/activitywatch-web-watcher/nglaklhklhcoonedhgnpgddginnjdadi"),
+    ("aw-firefox",    "https://addons.mozilla.org/firefox/addon/aw-watcher-web/"),
+];
 
 #[tauri::command]
 fn link(to: String) {
@@ -93,6 +105,12 @@ fn link(to: String) {
     if let Err(e) = opened {
         eprintln!("couldn't open {url}: {e}");
     }
+}
+
+/// Whether ActivityWatch answers, where the engine reads it (proki/settings.py: AW_PORT).
+#[tauri::command]
+fn watching() -> bool {
+    TcpStream::connect_timeout(&([127, 0, 0, 1], 5600).into(), Duration::from_millis(500)).is_ok()
 }
 
 // --- the tray and the windows -----------------------------------------------------------------
@@ -121,6 +139,9 @@ pub fn update_tray(app: &AppHandle) {
             menu.append(&item(&format!("view:{view}"), label)?)?;
         }
         menu.append(&separator()?)?;
+        if shipped(app).is_some() {
+            menu.append(&item("command", "Install command-line tool…")?)?;
+        }
         menu.append(&item("quit", "Quit proki")?)?;
         Ok(menu)
     };
@@ -135,6 +156,7 @@ fn on_menu(app: &AppHandle, id: &str) {
     match id {
         "note" => popup::new_note(app),
         "quit" => quit(app),
+        "command" => install_command(app),
         _ => {
             if let Some(op) = id.strip_prefix("session:") {
                 let (app, op) = (app.clone(), op.to_string());
@@ -177,10 +199,82 @@ pub fn open_main(app: &AppHandle, path: &str) {
 pub fn quit(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        bus::ask(&app, "proki.app.quit", json!({})).await; // the engine stops, and closes this app
+        stop(&app).await; // the engine stops, and closes this app
         tokio::time::sleep(Duration::from_secs(2)).await;
         app.exit(0);
     });
+}
+
+/// The engine asked to stop, once, however the app quits (the tray, the Dock, Cmd-Q): the launcher
+/// stops the rest with it, so nothing's left running.
+async fn stop(app: &AppHandle) {
+    if proki(app).quitting.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if let Some(bus) = proki(app).bus.get() {
+        let _ = tokio::time::timeout(Duration::from_secs(2), bus.request("proki.app.quit", "{}".into())).await;
+    }
+}
+
+// --- the engine inside it ------------------------------------------------------------------------
+
+/// The engine the app ships with (None: run from the repo, where the launcher starts it).
+fn shipped(app: &AppHandle) -> Option<PathBuf> {
+    let exe  = if cfg!(target_os = "windows") { "proki-engine.exe" } else { "proki-engine" };
+    let path = app.path().resource_dir().ok()?.join("engine").join("proki-engine").join(exe);
+    path.exists().then_some(path)
+}
+
+/// The shipped engine started, and what it needs with it, unless proki's running already: it
+/// stops as the app quits.
+fn start_engine(app: &AppHandle) {
+    let Some(engine) = shipped(app) else { return };
+    let tools = proki(app).args.tools.parse();
+    if tools.is_ok_and(|at| TcpStream::connect_timeout(&at, Duration::from_millis(500)).is_ok()) {
+        return;
+    }
+    let mut command = std::process::Command::new(engine);
+    command.arg("--from-app").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    #[cfg(target_os = "windows")]
+    std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000); // CREATE_NO_WINDOW
+    if let Err(e) = command.spawn() {
+        eprintln!("the engine couldn't start: {e}");
+    }
+}
+
+/// `proki` made a command, in ~/.local/bin, for an AI agent to start the tools with (`proki mcp`):
+/// how to add it to one, said. One that's there already and isn't ours is left as it is.
+fn install_command(app: &AppHandle) {
+    let Some(engine) = shipped(app) else { return };
+    let home = std::env::var(if cfg!(target_os = "windows") { "USERPROFILE" } else { "HOME" }).unwrap_or_default();
+    let bin  = PathBuf::from(home).join(".local").join("bin");
+    let made = std::fs::create_dir_all(&bin).and_then(|_| {
+        #[cfg(unix)]
+        {
+            let link = bin.join("proki");
+            if link.is_symlink() {
+                std::fs::remove_file(&link)?;
+            }
+            std::os::unix::fs::symlink(&engine, &link).map(|_| link)
+        }
+        #[cfg(windows)]
+        {
+            let shim = bin.join("proki.cmd");
+            std::fs::write(&shim, format!("@\"{}\" %*\r\n", engine.display())).map(|_| shim)
+        }
+    });
+    let text = match made {
+        Ok(path) => {
+            let path = path.display().to_string();
+            let json = path.replace('\\', "\\\\");
+            format!("proki is a command now: {path}\n\nAdd it to an AI agent with one of these:\n\n\
+                     claude mcp add proki -- {path} mcp\n\n\
+                     codex mcp add proki -- {path} mcp\n\n\
+                     openclaw mcp set proki '{{\"command\":\"{json}\",\"args\":[\"mcp\"]}}'")
+        }
+        Err(e) => format!("proki couldn't be made a command in {}: {e}", bin.display()),
+    };
+    app.dialog().message(text).title("Command-line tool").show(|_| {});
 }
 
 // --- start ------------------------------------------------------------------------------------
@@ -198,6 +292,7 @@ fn main() {
         queue: Mutex::new(popup::Queue::default()),
         tray: Mutex::new(("proki".into(), String::new())),
         tools,
+        quitting: AtomicBool::new(false),
     };
 
     let app = tauri::Builder::default()
@@ -210,6 +305,7 @@ fn main() {
             session,
             note,
             link,
+            watching,
             popup::popup_ready,
             popup::answer,
             popup::resize,
@@ -225,6 +321,7 @@ fn main() {
             update_tray(app.handle());
 
             popup::make(app.handle())?;
+            start_engine(app.handle());
             tauri::async_runtime::spawn(bus::connect(app.handle().clone()));
             Ok(())
         })
@@ -235,6 +332,7 @@ fn main() {
         RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(), // its windows closed: it keeps running, in the Dock and the tray
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { has_visible_windows: false, .. } => open_main(app, "today"), // its Dock icon clicked
+        RunEvent::Exit => tauri::async_runtime::block_on(stop(app)), // quit from the Dock or with Cmd-Q too
         _ => {}
     });
 }

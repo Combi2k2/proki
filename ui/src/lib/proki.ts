@@ -322,7 +322,8 @@ declare global {
       onDrop: (callback: (kind: "over" | "drop" | "leave", paths: string[]) => void) => Promise<() => void>
       fileUrl: (path: string) => string
       note: () => void
-      link: (to: "github") => void  // a page of proki's, in your browser
+      link: (to: "github" | "activitywatch" | "aw-chrome" | "aw-firefox") => void  // a page of proki's, or ActivityWatch's, in your browser
+      watching: () => Promise<boolean>  // whether ActivityWatch answers
       session: (op: "start" | "stop") => void
       onNavigate: (callback: (path: string) => void) => void  // a page, by its path: "tasks/12"
     }

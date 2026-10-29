@@ -224,6 +224,7 @@ if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
     fileUrl: (path) => path,
     note: () => console.log("[preview] new note"),
     link: (to) => console.log("[preview] open", to),
+    watching: () => Promise.resolve(Date.now() % 20_000 > 10_000),  // ActivityWatch comes and goes, to see both
     session: (op) => { today.in_session = op === "start" },
     onNavigate: () => {},
   }
