@@ -24,7 +24,7 @@ jobs:
       UV_PYTHON: "3.12"   # the Python proki is tested on
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.3
       - uses: actions/setup-node@v7
         with: { node-version: 22, cache: npm, cache-dependency-path: ui/package-lock.json }
       - uses: dtolnay/rust-toolchain@stable
