@@ -1,0 +1,7 @@
+{
+  "openai"    : {"name": "OpenAI",     "url": "https://api.openai.com/v1"},
+  "anthropic" : {"name": "Anthropic",  "url": "https://api.anthropic.com/v1"},
+  "google"    : {"name": "Google",     "url": "https://generativelanguage.googleapis.com/v1beta/openai"},
+  "openrouter": {"name": "OpenRouter", "url": "https://openrouter.ai/api/v1"},
+  "custom"    : {"name": "Custom",     "url": ""}
+}

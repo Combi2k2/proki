@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="18 22 220 220"><title>proki tray</title>
+  <path fill="#000" fill-rule="evenodd" d="M47.5,122 A84,84 0 0 1 208.5,122 Z M52.1,182 H203.9 A84,84 0 0 1 52.1,182 Z M118,192 H138 L128,204 Z"/>
+  <path fill="#000" fill-rule="evenodd" d="M58,104 L58,42 Q59,32 68,37 L116,64.7 Z M66,84 L66,52 L88,64.7 Z  M198,104 L198,42 Q197,32 188,37 L140,64.7 Z M190,84 L190,52 L168,64.7 Z"/>
+  <path fill="#000" fill-rule="evenodd" d="M28,132 H228 V142 H218 V160 Q218,172 206,172 H150 Q138,172 138,160 V142 H118 V160 Q118,172 106,172 H50 Q38,172 38,160 V142 H28 Z M60,166 L80,146 H94 L74,166 Z  M160,166 L180,146 H194 L174,166 Z"/>
+</svg>

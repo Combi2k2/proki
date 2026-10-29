@@ -1,152 +1,127 @@
-# aiwa: AI watcher
+<p align="center">
+  <img src="cover.png" alt="Proki — a focus companion for planning, focus sessions, and ideas" width="960" />
+</p>
 
-aiwa runs quietly in the background, watches how you work (only in the apps you
-choose), and nudges you at good moments: when your focus is fragmenting, when
-small tasks are piling up, or when it's time to clear them in one batch.
+<h1 align="center">Make room for the work that matters.</h1>
 
-Everything stays on your machine.
+<p align="center">
+  Proki helps you see where your time goes, decide what to do next, and return to the work when your attention wanders.
+</p>
 
-## Requirements
+<p align="center">
+  <a href="https://github.com/Combi2k2/proki/stargazers"><img src="https://img.shields.io/github/stars/Combi2k2/proki?style=flat&label=GitHub%20stars" alt="GitHub stars" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Combi2k2/proki?style=flat" alt="MIT license" /></a>
+  <img src="https://img.shields.io/badge/macOS-tested-2f855a?style=flat" alt="macOS tested" />
+  <img src="https://img.shields.io/badge/status-early%20build-blue?style=flat" alt="Early build" />
+</p>
 
-- [ActivityWatch](https://activitywatch.net) installed (it records window activity;
-  aiwa reads it through its local API). aiwa starts ActivityWatch's background
-  programs itself, so ActivityWatch's own app and menu-bar icon aren't needed
-  (set `[activitywatch] manage = false` to run it yourself instead). Add the
-  ActivityWatch browser extension for website titles/URLs.
-- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
+<p align="center">
+  <a href="#why-proki">Why Proki</a> &nbsp;·&nbsp;
+  <a href="#what-you-can-do">What you can do</a> &nbsp;·&nbsp;
+  <a href="#your-day-stays-yours">Privacy</a> &nbsp;·&nbsp;
+  <a href="#try-proki">Try Proki</a> &nbsp;·&nbsp;
+  <a href="#for-builders">For builders</a>
+</p>
 
-## Windows (not yet tested)
+---
 
-Download [`scripts/windows/aiwa.bat`](https://github.com/Combi2k2/aiwa/raw/main/scripts/windows/aiwa.bat)
-and double-click it. It installs everything aiwa needs (uv, Python, ActivityWatch, aiwa
-itself, into your user folder, no admin rights needed), asks once for the optional API
-keys, puts an "aiwa" shortcut on the desktop and starts aiwa (its icon is next to the
-clock). Run the file again to update. Windows may warn about an unknown file the first
-time: "More info" → "Run anyway".
+## Why Proki
 
-## Usage
+Good intentions are easy to lose in a busy day. Proki is a focus companion that helps you make a plan, stay with a task, and keep useful thoughts from slipping away.
+
+It offers gentle check-ins around your work, so you can make progress without turning productivity into another source of pressure. Your activity history stays on your computer, and you choose which apps and websites count toward your focus.
+
+## What you can do
+
+### Your day
+
+| What you need | How Proki helps | Review |
+| --- | --- | --- |
+| Start well | A welcome the first time you open it: ActivityWatch checked (and installed for you), and your browser's extension a click away. | - [ ] Looks good<br>- [ ] Needs work |
+| See today at a glance | **Today** shows your focus through the day, your daily goal and streak, your next task, a box for what's on your mind, and the routines at work. | - [ ] Looks good<br>- [ ] Needs work |
+| Stay with a task | Start a focus session from Today or the tray, tied to a task; a gentle popup when you drift, need a break, or it's time for bed. | - [ ] Looks good<br>- [ ] Needs work |
+
+### Your work
+
+| What you need | How Proki helps | Review |
+| --- | --- | --- |
+| Make a plan | **Tasks** groups your todos under goals, with a clear next one; talk a todo through and Proki splits it into smaller ones. | - [ ] Looks good<br>- [ ] Needs work |
+| Keep the thought | **Notes** catches an idea, a todo or a thought as it comes; Proki sorts it for you. | - [ ] Looks good<br>- [ ] Needs work |
+| Something to smile at | **Media**: the stickers and pictures Proki's popups show, in folders, yours to add to. | - [ ] Looks good<br>- [ ] Needs work |
+
+### Insight
+
+| What you need | How Proki helps | Review |
+| --- | --- | --- |
+| Know where time goes | **Apps**: each app and website you use, and whether it counts as focus, a break or a distraction. You decide. | - [ ] Looks good<br>- [ ] Needs work |
+| Watch the trend | **Metrics**: your focus and the signals behind it, over the day and the weeks. | - [ ] Looks good<br>- [ ] Needs work |
+
+### Advanced
+
+| What you need | How Proki helps | Review |
+| --- | --- | --- |
+| A routine that fits | **Automations**: every nudge and check-in is a routine you can read, switch off or change, and what each one uses is shown beside it. | - [ ] Looks good<br>- [ ] Needs work |
+| Your own records | **Tables**: tasks, notes and lists of your own, with fields you add; some worked out for you by a rule or by AI. | - [ ] Looks good<br>- [ ] Needs work |
+| Help from AI | Choose the AI service behind planning, sorting and the popups' words; its key stays on this computer. | - [ ] Looks good<br>- [ ] Needs work |
+| Work with your assistant | Claude Code, Codex, OpenClaw and other assistants reach your tasks, notes and routines through `proki mcp` (see [For builders](#for-builders)). | - [ ] Looks good<br>- [ ] Needs work |
+
+*As you try each feature, mark whether it feels ready or needs more polish.*
+
+## Your day stays yours
+
+Proki and ActivityWatch keep your activity history on your computer. Depending on your ActivityWatch setup, the activity it records may include app names, window titles, browser pages, and counts of keyboard and mouse activity. ActivityWatch’s input watcher records counts only, not the keys you press.
+
+If you choose to connect an AI service, Proki sends it the information needed for that request. You choose the provider, and its service key stays on your computer, in a file only you can read.
+
+## Try Proki
+
+Proki is an early build, actively being shaped around real workdays. It has been tested on macOS (Apple silicon). The Windows installer is built the same way but has not been tested on a real machine yet, and Linux has no installer.
+
+Download the latest installer from [Releases](https://github.com/Combi2k2/proki/releases). Everything Proki needs is inside it, except [ActivityWatch](https://activitywatch.net/), which records the windows you're in: if it isn't on your computer, Proki installs it for you the first time it starts. The welcome then offers ActivityWatch's extension for your browser (Chrome, Edge, Brave and other Chromium browsers, or Firefox).
+
+**macOS:** open the `.dmg` and drag Proki to Applications. The app isn't signed yet, so macOS says it's damaged or can't be checked. Run this once, then open it as usual:
 
 ```bash
-uv sync          # create .venv and install dependencies
-uv run aiwa      # start the tray app (settings file is created on first run)
-uv run pytest    # run tests
+xattr -cr /Applications/proki.app
 ```
 
-The menu-bar icon is a scope whose ring fills toward today's deep-work goal
-(a dot in the middle once reached). The tray menu shows today's scoreboard:
-deep minutes, streaks, goal progress and time per activity.
+**Windows:** run the installer. The app isn't signed yet, so SmartScreen warns you: choose **More info**, then **Run anyway**.
 
-**Focus sessions** (tray → Start focus session) run until you stop them. aiwa
-pokes you when your focus slips (with an alarm that rings until you're focused again), asks whether you're done if focus drops later
-on, reminds you to wrap up after 50 minutes, and sounds an alarm if you're away
-for 5 minutes (it keeps ringing until you're back; choose your own sound with
-`alarm_sound` in the settings). Details in `docs/plan.md`.
+<details>
+<summary><strong>Run it from the source</strong></summary>
 
-**A daily deep-work block** (Deep Work's "rhythmic" style) at the same time every
-day (weekdays 09:00 by default, `[rhythm]`), with a **chain** of days you kept it.
+The current build requires [ActivityWatch](https://activitywatch.net/), [NATS](https://nats.io/), [uv](https://docs.astral.sh/uv/), and [Node.js](https://nodejs.org/). On macOS, install NATS with Homebrew, then run these commands from the project folder:
 
-**Your task backlog** (tray → Tasks… / New task…): tasks come in over time, each with a
-deadline, your own estimate and a goal group. openjev checks each one; anything vague
-or longer than one 50-minute session is broken down (by you, with suggested steps from
-Gemini when it's available). Each focus session works on one goal group, the most
-urgent one (work left vs. deadlines, weighted by the group's priority), and hands over
-its tasks one at a time. In the evening aiwa asks whether anything new came up.
-
-The goal is a **daily deep-work quota** (4 h to start, up to 10 h): the scope's ring
-fills toward it, and aiwa shows what you did, never what's left.
-
-**A morning start**: when you first pick up the laptop, aiwa shows today's work and asks
-how long your morning routine takes. Back early? It asks whether you're finished ("not yet"
-sends you back with a minute more). When the routine time (plus a small buffer) is over without a
-session, the alarm rings until you start one. "Heading out today" skips it.
-
-**An evening wind-down**, every night: from 22:00 a reminder every 5 minutes while you're
-still at the computer ("10 more minutes" once per night, or lock the screen), and from
-00:00 the alarm rings until you lock the screen or step away. The tray shows when you
-stopped last night and started this morning. Settings under `[bedtime]`.
-
-**Routines**: after you've been away (or the laptop slept), aiwa sometimes asks what it
-was: a meal, a shower, sport… More often for longer absences, never for short ones;
-overnight is logged as sleep. This builds up your typical times for later reminders.
-
-Everything else is in the tray menu: rate your focus,
-snoozing nudges, **Open settings…** (the config file) and **Start at login**.
-
-Developer tools for inspecting the data processing: `uv run aiwa --help`
-(`check`, `focus`, `calibrate`, `track`, `categorize`, ...).
-
-Only tracked apps are recorded by name. Other windows are seen only as
-`(untracked)`: switches still count, but no names or titles are kept.
-
-When you use an untracked app for 5 seconds, aiwa asks whether to track it,
-and as what (Deep / Shallow / Distraction / Neutral / Don't track / Ask later).
-The name is only shown in that popup; it is never sent anywhere, and
-"Don't track" stores just a hash of it. Apps can
-also be listed in `[[track]]` in the config.
-
-## Categories
-
-Every activity counts as **deep**, **shallow**, **distraction** or **neutral**
-(from *Deep Work*). `[[category]]` rules in the config are checked first. For
-any other tracked app or website, aiwa asks once in a popup and remembers
-the answer. Browsers are classified per website domain, never as a whole.
-
-With `[openjev] enabled = true` and `OPENJEV_API_KEY` set (environment, or a
-`.env` next to the config), each new tracked app or website is sent to openjev
-after 2 s on it. A confident answer is shown for you to confirm or change; if
-openjev is less than `min_confidence` sure (or off), you're asked after 10 s,
-with its guess shown. Only the app name or website domain is sent, e.g.
-`github.com`. Your answer always overrides openjev's.
-
-## Focus intensity
-
-Deep work still involves switching, but between a few related things (editor,
-docs, terminal), not endlessly to new ones, and not every few seconds. Over a
-sliding window, aiwa scores
-
-    intensity = depth × working-set fit × hit rate × continuity    (0 to 1)
-
-at several window sizes (default 2, 10, 30 min), and summarizes periods as
-deep minutes, longest deep streak and distraction switches per hour. Every
-component and parameter is described in `docs/components.md`.
-
-## Layout
-
-The code lives in `src/` and is imported as `aiwa` (e.g. `from aiwa.rules.base import Rule`).
-Three kinds of building blocks each have a folder, with `base.py` defining the class and how it
-is evaluated, and one module per concrete one:
-
-```
-src/
-  app.py          the tray app: builds everything, runs the flows every tick (15 s) and poll (2 s)
-  cli.py          entry point: starts the tray app; subcommands are developer tools
-  config.py       settings (TOML)
-  signals/        named quantities over time
-    base.py       Signal (name, eval), Context, Values (lazy, cached)
-    focus/        the focus score: window, depth, stability, continuity, moment, period, params
-    state.py      signals from the app's state; defaults.py: the registered signals
-  rules/          a quantity against a soft threshold
-    base.py       Rule (measure, threshold, softness, direction, range → chance → decide), AllOf, Cadence
-    pipeline.py   numbered levels of rules voting by majority; SignalRule (a rule on a named signal)
-    budget.py, shutdown.py, focus.py, absence.py, reminder.py, capture.py, walk.py, suggest_session.py
-  flows/          what aiwa does over time (popups, alarms, records)
-    base.py       Flow (tick / poll hooks), FlowContext
-    session.py, morning.py, bedtime.py, shutdown.py, routines.py, reminders.py, capture.py,
-    experiment.py, budget.py, suggest.py, hub.py, rhythm.py, sprint.py, grand.py, meditation.py,
-    craftsman.py, tasks.py
-  metrics/        per-minute ledger, day summary, keeper; quota, consistency, session history
-  core/           domain logic the flows use: events, collector, timeline, categories, kinds,
-                  interpret, classifier, store, backlog, openjev, ai, and the flows' pure state
-                  machines (session, morning, bedtime, ...)
-  ui/             PySide6 (Qt): tray, popup, task windows; same on every OS
-  services/       background programs aiwa runs: ActivityWatch's server and watchers
-  platforms/      the only OS-specific code: start at login, ActivityWatch location, lock, close tabs
+```bash
+brew install nats-server
+uv sync
+cd ui && npm install && npm run app
+cd ..
+uv run launch.py
 ```
 
-## Platform status
+For website tracking, add ActivityWatch’s browser extension. Quit Proki or press `Ctrl-C` in the terminal to stop the app.
 
-| | macOS | Windows | Linux X11 | Linux Wayland |
-|---|---|---|---|---|
-| Tested | yes | not yet | not yet | not yet |
-| Window tracking | ✅ | ✅ | ✅ | needs `awatcher` |
-| Popups | ✅ | ✅ | ✅ | position not controllable |
+</details>
+
+## For builders
+
+Proki can connect to compatible AI assistants through a local, password-protected connection. An assistant can read or update tasks, routines, media, and settings. Only connect assistants you trust.
+
+In the app, choose **Install command-line tool…** from the tray menu (from the source: `uv tool install -e .`). Then add Proki to an assistant as a command, `proki mcp`; it starts Proki if it isn't running:
+
+```bash
+claude mcp add proki -- proki mcp
+codex mcp add proki -- proki mcp
+openclaw mcp set proki '{"command":"proki","args":["mcp"]}'
+```
+
+An assistant started from the Dock may not find `proki`: give it the full path the tray menu shows.
+
+To build the installers: `packaging/build.sh` on macOS or Windows (Git Bash), or run the **release** workflow on GitHub; a `v*` tag publishes them as a release.
+
+Explore the [feature review](docs/F-002-feature-review.md), [product architecture notes](docs/components.md), and [demo script](docs/personal-ai-hackathon-demo.md).
+
+## License
+
+[MIT](LICENSE)

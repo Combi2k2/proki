@@ -1,0 +1,47 @@
+{
+  "title": "End of workday",
+  "desc": "Helps you close the day: what's still open, the week, tomorrow",
+  "icon": "moon-star",
+  "tags": ["workday", "evening", "tasks"],
+  "variables": [
+    {"name": "shutdown_requested", "value": false, "desc": "set to start the ritual (a program, or you)"},
+    {"name": "shutdown_day", "value": 0, "desc": "the day the workday was last shut down (minutes since 1970, as today)"},
+    {"name": "next_task", "value": "\"\"", "desc": "the task to start with, as the planner says it"}
+  ],
+  "signals": [
+    {"name": "shutdown_done", "expr": "shutdown_day >= today", "desc": "whether today's work is shut down"}
+  ],
+  "program": {
+    "initial": "idle",
+    "variables": [
+      {"name": "snoozed_until", "value": 0, "desc": "no offer before then (\"ask later\")"},
+      {"name": "checked", "value": 0, "desc": "when the rules last had a chance to offer it"},
+      {"name": "line", "value": null, "desc": "the last thing still open you wrote (none: that's all)"},
+      {"name": "sort_at", "type": "number", "desc": "when the unsorted notes are sorted, as you picked it (none: at 04:00, as each says)"},
+      {"name": "i", "value": 0, "type": "integer", "desc": "the next unsorted note to set it on"}
+    ],
+    "signals": [
+      {"name": "unsorted", "expr": "where(note, note.bucket, 'Unsorted')", "desc": "the notes not sorted yet"}
+    ],
+    "rules": [
+      {"name": "window", "lhs": "daytime", "cmp": "ge", "rhs": 900, "level": 4, "desc": "it's 15:00 or later"},
+      {"name": "late", "lhs": "daytime", "cmp": "gt", "rhs": 1080, "softness": 27.31, "level": 3, "desc": "past 18:00, more and more surely as the evening goes on"},
+      {"name": "not_focused", "lhs": "focus_5m", "cmp": "lt", "rhs": 0.6, "level": 2, "desc": "you're not deep in work"},
+      {"name": "low_focus", "lhs": "focus_5m", "cmp": "lt", "rhs": 0.3, "softness": 0.07, "level": 1, "desc": "focus is low, a good moment to stop"}
+    ],
+    "states": {
+      "idle": {"desc": "waiting for the workday to wind down", "every": "6s", "next": [{"goto": "starting", "when": ["shutdown_requested"], "desc": "asked for"}, {"goto": "deciding", "when": ["weekday < 5", "active", "not session.active", "not shutdown_done", "time >= snoozed_until", "time - checked >= 5"], "desc": "a workday, at work, every 5 minutes"}]},
+      "deciding": {"desc": "the rules' chance to offer it", "do": [{"name": "checked", "desc": "sets checked to time", "set": {"name": "checked", "expr": "time"}}], "every": "6s", "next": [{"goto": "offering", "when": ["window", "late", "not_focused", "low_focus"], "desc": "the day winds down"}, {"goto": "idle"}]},
+      "offering": {"desc": "shut the workday down now?", "do": [{"name": "shutdown", "desc": "asks “Shutdown”", "ask_usr": {"context": "Your workday seems to be winding down. Shut it down now: what's still open, then tomorrow?", "options": ["OK"], "result": "answer", "timeout": 86400, "title": "Shutdown"}}], "every": "6s", "next": [{"goto": "starting", "when": ["answer == 0"], "desc": "start shutdown"}, {"goto": "snoozing", "desc": "ask later"}]},
+      "snoozing": {"desc": "ask again in 30 minutes", "do": [{"name": "snoozed_until", "desc": "sets snoozed_until to time + 30", "set": {"name": "snoozed_until", "expr": "time + 30"}}], "every": "6s", "next": "idle"},
+      "starting": {"desc": "anything still open?", "do": [{"name": "shutdown_requested", "desc": "sets shutdown_requested to False", "set": {"name": "shutdown_requested", "expr": false}}, {"name": "still_open", "desc": "asks “What's still open”", "ask_usr": {"context": "Wrap up your day: anything still open? Write it down as a task, so you can let it go.", "result": "item", "timeout": 86400, "title": "What's still open"}}, {"name": "line", "desc": "sets line to item", "set": {"name": "line", "expr": "item"}}], "every": "6s", "next": [{"goto": "noting", "when": ["line"], "desc": "something was open"}, {"goto": "wrapping"}]},
+      "noting": {"desc": "what's open, to @notes", "do": [{"name": "todo", "desc": "adds a note of line", "append": {"name": "note", "expr": {"due": "today + 1680", "bucket": "'Unsorted'", "content": "line"}}}], "every": "6s", "next": "more"},
+      "more": {"desc": "anything else?", "do": [{"name": "still_open", "desc": "asks “What's still open”", "ask_usr": {"context": "Anything else?", "result": "item", "timeout": 86400, "title": "What's still open"}}, {"name": "line", "desc": "sets line to item", "set": {"name": "line", "expr": "item"}}], "every": "6s", "next": [{"goto": "noting", "when": ["line"], "desc": "something else"}, {"goto": "wrapping"}]},
+      "wrapping": {"desc": "when to sort the day's notes (no answer: 04:00), and the week, on its last workday", "do": [{"name": "sort_when", "desc": "asks “Your notes”", "ask_usr": {"context": "When do you want to come back and sort today's notes? Tomorrow at…", "options": ["Now", "7:00", "7:30", "8:00", "8:30", "9:00", "9:30", "10:00", "10:30", "11:00", "11:30", "12:00"], "result": "pick", "timeout": 86400, "title": "Your notes"}}, {"name": "sort_at", "desc": "the time picked", "set": {"name": "sort_at", "expr": "time if pick == 0 else today + 1860 + 30 * (pick - 1) if pick > 0 else None"}}, {"name": "first", "desc": "from the first unsorted note", "set": {"name": "i", "expr": "0"}}], "every": "6s", "next": [{"goto": "retiming", "when": ["sort_at is not None"], "desc": "a time picked"}, {"goto": "weekly", "when": ["weekday == 4"], "desc": "Friday"}, {"goto": "summary"}]},
+      "retiming": {"desc": "each unsorted note sorted at the time picked, one a cycle", "every": 0, "do": [{"name": "retime", "desc": "sorts the next one then", "set": {"name": "note[index(note.id, unsorted[i].id)].due", "expr": "sort_at", "when": "i < len(unsorted)"}}, {"name": "next", "desc": "the one after it", "add": {"name": "i", "expr": "1"}}], "next": [{"goto": "retiming", "when": ["i < len(unsorted)"], "desc": "more"}, {"goto": "weekly", "when": ["weekday == 4"], "desc": "Friday"}, {"goto": "summary"}]},
+      "weekly": {"desc": "what will change next week?", "do": [{"name": "this_week", "desc": "asks “This week”", "ask_usr": {"context": "Looking at this week: what will you change next week?", "result": "change", "timeout": 86400, "title": "This week"}}], "every": "6s", "next": "summary"},
+      "summary": {"desc": "today's deep work, and tomorrow's first task", "do": [{"name": "days_done", "desc": "asks “Day's done”", "ask_usr": {"context": {"format": "Today: {h:.1f} h of deep work.\nTomorrow starts with {first}.", "values": {"h": "deep_24h / 60", "first": "next_task"}}, "options": ["OK"], "result": "answer", "timeout": 86400, "title": "Day's done"}}], "every": "6s", "next": [{"goto": "closing", "when": ["answer == 0"], "desc": "shutdown complete"}, {"goto": "idle"}]},
+      "closing": {"desc": "the workday is shut down", "do": [{"name": "shutdown_day", "desc": "sets shutdown_day to today", "set": {"name": "shutdown_day", "expr": "today"}}], "every": "6s", "next": "idle"}
+    }
+  }
+}

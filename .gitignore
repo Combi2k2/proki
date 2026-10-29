@@ -7,3 +7,9 @@ build/
 *.egg-info/
 .DS_Store
 .env
+.agents/
+.claude/
+.codex/
+skills-lock.json
+.ruff_cache/
+.impeccable/

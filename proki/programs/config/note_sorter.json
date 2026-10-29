@@ -1,0 +1,24 @@
+{
+  "title": "Note sorter",
+  "desc": "Sorts your notes into todos, ideas and thoughts, with you",
+  "icon": "notebook-pen",
+  "tags": ["notes"],
+  "program": {
+    "initial": "idle",
+    "variables": [
+      {"name": "held", "type": "integer", "desc": "the id of the note at hand (none: none)"},
+      {"name": "bucket", "desc": "the bucket picked for the note at hand"}
+    ],
+    "signals": [
+      {"name": "unsorted", "expr": "where(note, note.bucket, 'Unsorted')", "desc": "the notes not sorted yet"}
+    ],
+    "states": {
+      "idle": {"desc": "a note not weighed yet", "every": 0, "do": [{"name": "fresh", "desc": "takes the first note not weighed yet", "set": {"name": "held", "expr": "where(unsorted, unsorted.urgency, None)[0].id"}}], "next": [{"goto": "weighing", "when": ["held is not None"], "desc": "noted, not weighed yet"}, {"goto": "due", "desc": "else, one due"}]},
+      "due": {"desc": "the unsorted note due first, if it's due, while you're at the computer and no question waits", "every": 0, "do": [{"name": "oldest", "desc": "takes the unsorted note due first", "set": {"name": "held", "expr": "sort(unsorted, unsorted.due)[0].id"}}], "next": [{"goto": "asking", "when": ["held is not None", "note[index(note.id, held)].due <= time", "active", "not asking"], "desc": "due, and you're there"}, {"goto": "idle", "desc": "nothing to do"}]},
+      "weighing": {"desc": "jev's bucket and how urgent it is, then whether to deal with it now", "every": 0, "do": [{"name": "guess", "desc": "asks jev its bucket, and how urgent it is", "ask_jev": {"context": {"format": "A note someone wrote: {text}", "values": {"text": "note[index(note.id, held)].content"}}, "questions": [{"type": "choice", "question": "What is this note?", "criteria": {"Todo": "Something the person needs to do: a task", "Idea": "An idea worth keeping: something to build, try or explore later", "Thought": "Just a thought, noted down to let it go: nothing to do, nor to keep"}, "result": "guessed"}, {"type": "noul", "question": "Does this need dealing with right away, today?", "result": "urgent"}]}}, {"name": "keep_guess", "desc": "keeps jev's bucket", "set": {"name": "note[index(note.id, held)].guess", "expr": "['Todo', 'Idea', 'Thought'][guessed.index]"}}, {"name": "keep_conf", "desc": "and how sure jev is", "set": {"name": "note[index(note.id, held)].conf", "expr": "guessed.conf"}}, {"name": "urgency", "desc": "how urgent it is, weighed", "set": {"name": "note[index(note.id, held)].urgency", "expr": "0.5 if urgent is None else urgent"}}, {"name": "now", "desc": "asks whether to deal with it now", "ask_usr": {"title": "Deal with it now?", "context": {"format": "“{quote}”\n\n{says}", "values": {"quote": "note[index(note.id, held)].content", "says": "'This sounds urgent. Deal with it now?' if note[index(note.id, held)].urgency >= 0.7 else 'This can probably wait. Deal with it now anyway?' if note[index(note.id, held)].urgency < 0.3 else 'Deal with this now?'"}}, "options": ["OK"], "result": "answer", "timeout": 300}}], "next": [{"goto": "asking", "when": ["answer == 0"], "desc": "now"}, {"goto": "idle", "desc": "later: at its time"}]},
+      "asking": {"desc": "its bucket, asked as sure as jev is of it", "every": 0, "do": [{"name": "bucket", "desc": "asks its bucket, jev's picked already", "ask_usr": {"title": "Sort a note", "context": {"format": "“{quote}”\n\n{says}", "values": {"quote": "note[index(note.id, held)].content", "says": "'Is this a todo, an idea, or just a passing thought?' if note[index(note.id, held)].guess is None else \"I'm pretty sure this goes under \" + note[index(note.id, held)].guess + '. Right?' if note[index(note.id, held)].conf is not None and note[index(note.id, held)].conf >= 0.7 else 'This looks like it goes under ' + note[index(note.id, held)].guess + '. Is that right?' if note[index(note.id, held)].conf is not None and note[index(note.id, held)].conf >= 0.4 else \"I'd put this under \" + note[index(note.id, held)].guess + \", but I'm not sure. Where does it go?\""}}, "options": ["Todo", "Idea", "Thought"], "result": "answer", "timeout": 300, "default": "note[index(note.id, held)].guess"}}, {"name": "keep", "desc": "keeps the bucket picked", "set": {"name": "bucket", "expr": "['Todo', 'Idea', 'Thought'][answer]"}}], "next": [{"goto": "sorting", "when": ["answer >= 0"], "desc": "a bucket picked"}, {"goto": "later", "desc": "later"}]},
+      "sorting": {"desc": "into the bucket picked", "every": 0, "do": [{"name": "move", "desc": "moves it", "set": {"name": "note[index(note.id, held)].bucket", "expr": "bucket"}}], "next": "idle"},
+      "later": {"desc": "asked again in two hours", "every": 0, "do": [{"name": "later", "desc": "two hours on", "set": {"name": "note[index(note.id, held)].due", "expr": "time + 120"}}], "next": "idle"}
+    }
+  }
+}

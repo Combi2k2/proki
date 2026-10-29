@@ -1,0 +1,401 @@
+"""Specs: what you write for each part of the programs, a dataclass for each kind.
+
+    InputSpec      a primitive the programs read
+    VariableSpec   a value actions set: global, a program's or a state's
+    SignalSpec     a named expression: global, a program's or a state's
+    RuleSpec       a soft comparison: global, a program's or a state's
+    ProgramSpec    a state machine
+    StateSpec      one of its states
+    BranchSpec     a way out of a state, in order
+    ActionSpec     an action a state takes as it's entered, in order
+
+A spec keeps what you wrote, as you wrote it, its names short: a way out of state `asking`
+of program `suggest` says `answer == 0`, and only once it's built is that
+`suggest.asking.answer`.
+
+Each kind is found by its name in `Spec.kinds` ("rule" → RuleSpec), and moves between JSON
+and Python the same way:
+
+    RuleSpec.parse(data)    JSON → a RuleSpec, its fields checked: none unknown, none
+                            missing, each of its type. ConfigError if not
+    RuleSpec.schema()       those checks, as JSON Schema: what to send
+    rule.json()             a RuleSpec → JSON
+
+Whether a spec makes sense (an expression reading an unknown name, a rule comparing
+nothing) is checked as it's built.
+
+Where a variable, a signal or a rule is (`scope`), and what it goes with (`program`): a
+global one may come with a program, and goes with it.
+
+    scope "global"    program: the one it comes with, or none
+    scope "program"   program: its program
+    scope "state"     program and state: its state
+"""
+
+from __future__ import annotations
+
+import itertools
+import types
+import typing
+from builtins import type as btype
+from collections.abc import Iterable
+from dataclasses import MISSING, Field, dataclass, field, fields
+from typing import Any, ClassVar, Literal
+
+from proki.errors import ConfigError, Inside, ProgramError, RuleError, SignalError, VariableError
+from proki.utils import ident
+
+ScopeName = Literal["global", "program", "state"]
+Compare   = Literal["gt", "ge", "lt", "le", "eq", "ne"]  # as a rule compares
+
+
+class Hint:
+    """A field's type (its hint), as JSON has it: what fits it, how a mistake says it, and
+    how JSON Schema writes it."""
+
+    @staticmethod
+    def fit(value: Any, hint: Any) -> bool:
+        """Whether `value`, from JSON, is of the type `hint`."""
+        origin, args = typing.get_origin(hint), typing.get_args(hint)
+        if origin is Literal:                               return value in args
+        if origin in (typing.Union, types.UnionType):       return any(Hint.fit(value, a) for a in args)
+        if origin is list:                                  return isinstance(value, list) and all(Hint.fit(v, args[0]) for v in value)
+        if origin is dict:                                  return isinstance(value, dict)
+        if hint is type(None):                              return value is None
+        if hint is Any:                                     return True
+        if hint is bool:                                    return isinstance(value, bool)
+        if hint is float:                                   return isinstance(value, int | float) and not isinstance(value, bool)
+        if hint is int:                                     return isinstance(value, int) and not isinstance(value, bool)
+        return isinstance(value, hint)
+
+    @staticmethod
+    def shown(hint: Any) -> str:
+        """The type, as a mistake says it: "a number", "one of gt, ge, ..."."""
+        origin, args = typing.get_origin(hint), typing.get_args(hint)
+        if origin is Literal:                               return f"one of {', '.join(map(str, args))}"
+        if origin in (typing.Union, types.UnionType):       return " or ".join(Hint.shown(a) for a in args)
+        if origin is list:                                  return f"a list of {Hint.shown(args[0]).removeprefix('a ')}s"
+        return {
+            str         : "a text",
+            float       : "a number",
+            int         : "a whole number",
+            bool        : "true or false",
+            type(None)  : "null",
+            dict        : "an object",
+        }.get(origin or hint, "anything")
+
+    @staticmethod
+    def typed(hint: Any) -> dict:
+        """The type, as JSON Schema."""
+        origin, args = typing.get_origin(hint), typing.get_args(hint)
+        if origin is Literal:                               return {"enum": list(args)}
+        if origin in (typing.Union, types.UnionType):       return {"anyOf": [Hint.typed(a) for a in args]}
+        if origin is list:                                  return {"type": "array", "items": Hint.typed(args[0])}
+        if origin is dict or hint is dict:                  return {"type": "object"}
+        if hint is Any:                                     return {}
+        return {"type": {
+            str         : "string",
+            float       : "number",
+            int         : "integer",
+            bool        : "boolean",
+            type(None)  : "null",
+        }[hint]}
+
+
+def doc(text: str) -> Any:
+    """A field's description, for its schema."""
+    return {"doc": text}
+
+
+def spaced(name: Any) -> bool:
+    """Whether `name` is a global one's in a namespace: two names, a dot between (session.active)."""
+    return isinstance(name, str) and name.count(".") == 1 and all(ident(part) for part in name.split("."))
+
+
+@dataclass(frozen=True, kw_only=True)
+class Spec:
+    """What every spec has: its kind ("input", "variable", ...), what it is, the error a
+    mistake in it raises, and its `key`, unique among its kind's (None: a branch or an action,
+    found by its place among its state's)."""
+
+    KIND  : ClassVar[str]                    = ""
+    DOCS  : ClassVar[str]                    = ""
+    ERROR : ClassVar[btype[ConfigError]]     = ProgramError
+    NAMES : ClassVar[tuple[str, ...]]        = ("name", "program", "state", "goto")   # the fields that name something
+    kinds : ClassVar[dict[str, btype[Spec]]] = {}                                     # every kind, by its KIND
+
+    def __init_subclass__(cls, **kwargs: Any):
+        super().__init_subclass__(**kwargs)
+        if cls.KIND:
+            Spec.kinds[cls.KIND] = cls
+
+    # --- what a spec says of itself -----------------------------------------------------------
+
+    def key(self) -> tuple | None:
+        return None
+
+    def owner(self) -> str | None:
+        """The program it goes with (removed with it), if any."""
+        return getattr(self, "program", None)
+
+    def where(self) -> str:
+        """Where it is, to say in a mistake: "rule 'focus_high'", "suggest.asking: way out to 'idle'"."""
+        raise NotImplementedError
+
+    def inside(self) -> Inside:
+        """A mistake made inside is said to be at this spec (`where`)."""
+        return Inside(self.where())
+
+    def json(self, short: bool = False) -> dict:
+        """The spec as JSON: {field: value}, what `parse` takes. `short`: without the fields
+        left as they start (what `parse` gives them anyway)."""
+        return {
+            f.name: getattr(self, f.name) for f in fields(self)
+            if not short or getattr(self, f.name) != Spec.start(f)
+        }
+
+    # --- its fields ---------------------------------------------------------------------------
+
+    @staticmethod
+    def needed(f: Field) -> bool:
+        """Whether a field has to be given (it has no default)."""
+        return f.default is MISSING and f.default_factory is MISSING
+
+    @staticmethod
+    def start(f: Field) -> Any:
+        """What a field starts as (MISSING: it has no default)."""
+        return f.default_factory() if f.default_factory is not MISSING else f.default
+
+    # --- from JSON ----------------------------------------------------------------------------
+
+    @classmethod
+    def parse(cls, data: Any) -> Spec:
+        """A `cls` from JSON `data`, its shape checked: `ERROR` for an unknown field, a
+        missing one, one of the wrong type, or a name that can't name anything."""
+        known = {f.name: f for f in fields(cls)}
+        if not isinstance(data, dict):
+            raise cls.ERROR(f"a {cls.KIND} is {{{', '.join(known)}}} ({data!r})")
+
+        title = f"{cls.KIND} {data['name']!r}" if isinstance(data.get("name"), str) else f"a {cls.KIND}"
+        hints = typing.get_type_hints(cls)
+
+        if unknown := set(data) - set(known):
+            raise cls.ERROR(f"{title}: unknown {', '.join(sorted(unknown))} ({', '.join(known)})")
+        for key, f in known.items():
+            if key not in data and Spec.needed(f):
+                raise cls.ERROR(f"{title}: {key} is missing")
+            if key in data and not Hint.fit(data[key], hints[key]):
+                raise cls.ERROR(f"{title}: {key} is {Hint.shown(hints[key])} ({data[key]!r})")
+
+        spec = cls(**{key: data[key] for key in known if key in data})
+
+        for named in cls.NAMES:
+            value = getattr(spec, named, None)
+            if named == "name" and isinstance(spec, Scoped) and spec.scope == "global" and spaced(value):
+                continue  # a global one, in a namespace of its own: session.active
+            if value is not None and not ident(value):
+                raise cls.ERROR(f"{cls.KIND} {named} {value!r}: a name is letters, digits and _, not starting with a digit")
+
+        return spec
+
+    @classmethod
+    def schema(cls) -> dict:
+        """The shape `parse` checks, as JSON Schema: each field's type and description, and
+        the ones it needs."""
+        hints = typing.get_type_hints(cls)
+        return {
+            "type"                  : "object",
+            "description"           : cls.DOCS,
+            "properties"            : {f.name: {**Hint.typed(hints[f.name]), "description": f.metadata.get("doc", "")}
+                                     for f in fields(cls)},
+            "required"              : [f.name for f in fields(cls) if Spec.needed(f)],
+            "additionalProperties"  : False,
+        }
+
+
+@dataclass(frozen=True, kw_only=True)
+class InputSpec(Spec):
+    KIND  : ClassVar[str]                = "input"
+    DOCS  : ClassVar[str]                = "A primitive the programs read, by its name."
+    ERROR : ClassVar[btype[ConfigError]] = SignalError
+
+    name     : str                = field(metadata=doc("the primitive's name: app_name, keys_pressed, daytime, ..."))
+    backfill : float | str | None = field(default=None, metadata=doc("how much of itself it keeps as a table: minutes, or \"1d\", \"12h\" (none if left out)"))
+
+    def key(self) -> tuple:
+        return (self.name,)
+
+    def where(self) -> str:
+        return f"input {self.name!r}"
+
+
+@dataclass(frozen=True, kw_only=True)
+class Scoped(Spec):
+    """A variable, a signal or a rule: its `name`, in its `scope`. A global one's may be in a
+    namespace of its own, read as it's written (session.active)."""
+
+    name    : str        = field(metadata=doc("its name in its scope, a name as in Python"))
+    desc    : str        = field(default="", metadata=doc("what it's for, in a line"))
+    scope   : ScopeName  = field(default="global", metadata=doc("where it's found: global, its program's, or its state's"))
+    state   : str | None = field(default=None, metadata=doc("its state (scope state)"))
+    program : str | None = field(default=None, metadata=doc("its program (scope program or state), or the one that brings a global one"))
+
+    def __post_init__(self) -> None:
+        fits, takes = {
+            "global" : (not self.state,                  "no state (a program, if one brings it)"),
+            "program": (self.program and not self.state, "its program, and no state"),
+            "state"  : (self.program and self.state,     "its program and its state"),
+        }[self.scope]
+        if not fits:
+            raise ConfigError(f"{self.KIND} {self.name!r}: scope {self.scope} takes {takes}")
+
+    def key(self) -> tuple:
+        return (self.full(),)
+
+    def full(self) -> str:
+        """Its full name: suggest.asking.answer, suggest.left, count."""
+        return {
+            "global" : "",
+            "program": f"{self.program}.",
+            "state"  : f"{self.program}.{self.state}.",
+        }[self.scope] + self.name
+
+    def where(self) -> str:
+        return f"{self.KIND} {self.full()!r}"
+
+
+@dataclass(frozen=True, kw_only=True)
+class VariableSpec(Scoped):
+    KIND  : ClassVar[str]                = "variable"
+    DOCS  : ClassVar[str]                = ("App state, set by actions. A global one is kept across restarts, a program's "
+                                            "starts over with the program, a state's when the state is left.")
+    ERROR : ClassVar[btype[ConfigError]] = VariableError
+
+    value : bool | float | str | None = field(default=None, metadata=doc(
+        "where it starts: a number, true / false, null, or an expression worked out on its first cycle"))
+    type  : str | dict                = field(default="any", metadata=doc(
+        "what its value is: number, integer, boolean, string, array, object, time (minutes since 1970), any, or a "
+        "JSON Schema. A value set that isn't of it is refused"))
+
+
+@dataclass(frozen=True, kw_only=True)
+class SignalSpec(Scoped):
+    KIND  : ClassVar[str]                = "signal"
+    DOCS  : ClassVar[str]                = ("A named expression over inputs, variables and other signals, global or a "
+                                            "program's or a state's (reading what's seen from there).")
+    ERROR : ClassVar[btype[ConfigError]] = SignalError
+
+    expr     : str                = field(metadata=doc("what it is: an expression, e.g. ts_mean(keys, 5)"))
+    backfill : float | str | None = field(default=None, metadata=doc("how much of itself it keeps as a table: minutes, or \"1d\", \"12h\" (none if left out)"))
+    persist  : bool               = field(default=False, metadata=doc("the table is saved too, across restarts (a metric). Needs a backfill"))
+    type     : str | dict         = field(default="any", metadata=doc("what its value is, as a variable's says it"))
+
+
+@dataclass(frozen=True, kw_only=True)
+class RuleSpec(Scoped):
+    KIND  : ClassVar[str]                = "rule"
+    DOCS  : ClassVar[str]                = "A soft comparison of two expressions: the chance of firing now."
+    ERROR : ClassVar[btype[ConfigError]] = RuleError
+
+    lhs      : str | float = field(metadata=doc("the left side, an expression"))
+    cmp      : Compare     = field(metadata=doc("how the sides compare"))
+    rhs      : str | float = field(metadata=doc("the right side, an expression"))
+    softness : float       = field(default=0.0, metadata=doc("how soft the comparison is (0: hard)"))
+    level    : int         = field(default=1, metadata=doc("rules vote by level, the highest first"))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProgramSpec(Spec):
+    KIND  : ClassVar[str] = "program"
+    DOCS  : ClassVar[str] = "A state machine. It starts in its initial state."
+
+    name   : str       = field(metadata=doc("its name, a name as in Python"))
+    title  : str       = field(default="", metadata=doc("what the app calls it (empty: its name, said)"))
+    desc   : str       = field(default="", metadata=doc("what it's for, in a line"))
+    icon   : str       = field(default="", metadata=doc("its icon's name, in-kebab-case (empty: one its tags pick)"))
+    tags   : list[str] = field(default_factory=list, metadata=doc("words to find it by; the first the app knows says its part of the day"))
+    initial: str       = field(default="idle", metadata=doc("the state it starts in"))
+
+    def __post_init__(self) -> None:
+        if not all(self.tags):
+            raise ConfigError(f"program {self.name!r}: a tag is a word ({self.tags!r})")
+        if self.icon and not all(part.isalnum() and part.islower() or part.isdigit() for part in self.icon.split("-")):
+            raise ConfigError(f"program {self.name!r}: an icon is a name in-kebab-case ({self.icon!r})")
+
+    def key(self) -> tuple:
+        return (self.name,)
+
+    def owner(self) -> str | None:
+        return self.name
+
+    def where(self) -> str:
+        return f"program {self.name!r}"
+
+
+@dataclass(frozen=True, kw_only=True)
+class StateSpec(Spec):
+    KIND  : ClassVar[str] = "state"
+    DOCS  : ClassVar[str] = ("A state of a program: it takes its actions as it's entered, then every `every` minutes "
+                             "tries its ways out, in order. None: back to the program's initial state.")
+
+    program : str         = field(metadata=doc("its program"))
+    name    : str         = field(metadata=doc("its name, a name as in Python"))
+    desc    : str         = field(default="", metadata=doc("what it's waiting for, in a line"))
+    every   : float | str = field(default=1.0, metadata=doc("how long between tries of its ways out: minutes, or \"6s\", \"5min\", \"1h\""))
+
+    def key(self) -> tuple:
+        return (self.program, self.name)
+
+    def where(self) -> str:
+        return f"{self.program}.{self.name}"
+
+
+@dataclass(frozen=True, kw_only=True)
+class BranchSpec(Spec):
+    """A way out, tried in its place among its state's."""
+
+    KIND  : ClassVar[str] = "branch"
+    DOCS  : ClassVar[str] = ("One way out of a state, tried in order: all its conditions must be true, then its rules "
+                             "vote. Neither: it always passes (the else, last).")
+
+    program : str       = field(metadata=doc("its program"))
+    state   : str       = field(metadata=doc("the state it leaves"))
+    goto    : str       = field(metadata=doc("the state it goes to, of the same program"))
+    when    : list[str] = field(default_factory=list, metadata=doc("rules (by name) and conditions (expressions). Empty: always (the else)"))
+    desc    : str       = field(default="", metadata=doc("why it's taken, in a line"))
+
+    def where(self) -> str:
+        return f"{self.program}.{self.state}: way out to {self.goto!r}"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActionSpec(Spec):
+    """An action, taken in its place among its state's. Its id is made once, from where it is
+    and its name ("bedtime.asking.good_night"), and kept as they change."""
+
+    KIND  : ClassVar[str] = "action"
+    DOCS  : ClassVar[str] = "One action a state takes as it's entered, in order: its name, its kind, and its params."
+
+    id      : str            = field(default="", metadata=doc("what it's known by, made once from its program, state and name: the media library keeps its picks by it"))
+    program : str            = field(metadata=doc("its program"))
+    state   : str            = field(metadata=doc("its state"))
+    name    : str            = field(metadata=doc("its name, one of its own among its state's"))
+    desc    : str            = field(default="", metadata=doc("what it's for, in a line"))
+    kind    : str            = field(metadata=doc("its kind, an action's name in the config: set, ask_usr, poke, ..."))
+    params  : dict[str, Any] = field(default_factory=dict, metadata=doc("the kind's params, by name"))
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            object.__setattr__(self, "id", f"{self.program}.{self.state}.{self.name}")
+
+    @staticmethod
+    def free(kind: str, taken: Iterable[str]) -> str:
+        """A name for a new action of `kind` that none of `taken` has: "ask_usr", else "ask_usr_2", ..."""
+        taken = set(taken)
+        return next(name for n in itertools.count(1) if (name := kind if n == 1 else f"{kind}_{n}") not in taken)
+
+    def key(self) -> tuple:
+        return (self.program, self.state, self.name)
+
+    def where(self) -> str:
+        return f"{self.program}.{self.state}.{self.name}"

@@ -1,0 +1,77 @@
+{
+  "title": "Task picker",
+  "desc": "Helps you choose what a focus session is for",
+  "icon": "compass",
+  "tags": ["tasks", "session"],
+  "variables": [
+    {"name": "task_asked", "value": false, "desc": "whether you were asked what you're on this session"},
+    {"name": "task_done", "value": false, "desc": "set as a task's done: what's next is asked"}
+  ],
+  "program": {
+    "initial": "watching",
+    "variables": [
+      {"name": "said", "value": null, "desc": "what you said you're working on"},
+      {"name": "groups", "value": null, "desc": "the groups with a task to start now"},
+      {"name": "g", "value": null, "desc": "the group it's in, by its place in groups"},
+      {"name": "tasks", "value": null, "desc": "its tasks to start now"},
+      {"name": "picked", "value": false, "desc": "whether you picked the group (not jev)"},
+      {"name": "others", "value": false, "desc": "whether another group is offered with the tasks"},
+      {"name": "hinted", "value": null, "desc": "jev's task, by its place in the group's"}
+    ],
+    "states": {
+      "watching": {"desc": "a session without a task, not asked yet?", "every": 0, "do": [
+          {"name": "asked", "desc": "out of a session: asked again the next one", "set": {"name": "task_asked", "expr": "task_asked and (session.active or session.requested)"}}],
+        "next": [{"goto": "asking", "when": ["session.active", "work.task is None", "not task_asked", "not asking"], "desc": "a session, no task yet, not asked"},
+                 {"goto": "watching"}]},
+      "asking": {"desc": "what you're working on", "every": 0, "do": [
+          {"name": "asked", "desc": "asked this session", "set": {"name": "task_asked", "expr": "True"}},
+          {"name": "on", "desc": "asks “What are you working on?”", "ask_usr": {"context": {"format": "{says}", "values": {"says": "'Done. What\\'s next?' if task_done else 'What are you working on?'"}},
+                                                                             "result": "text", "timeout": 600, "title": "Focus session"}},
+          {"name": "done", "desc": "what's next, asked", "set": {"name": "task_done", "expr": "False"}},
+          {"name": "said", "desc": "keeps what you said", "set": {"name": "said", "expr": "text"}},
+          {"name": "group", "desc": "no group yet", "set": {"name": "g", "expr": "None"}}],
+        "next": [{"goto": "guessing_group", "when": ["said is not None", "said != ''"], "desc": "you said"}, {"goto": "watching"}]},
+      "guessing_group": {"desc": "jev's group for it: taken if it's sure, or if there's one", "every": 0, "do": [
+          {"name": "groups", "desc": "the groups with a task to start now", "set": {"name": "groups", "expr": "where(work.groups, work.groups.startable)"}},
+          {"name": "guess", "desc": "asks jev its group", "ask_jev": {"context": {"format": "What someone says they're working on: {said}", "values": {"said": "said"}},
+                                                                    "questions": [{"type": "choice", "question": "Which of their groups of tasks is it part of?",
+                                                                                   "criteria": "zip(groups.name, groups.desc) + [['Something new', 'None of these: a todo for the planner']]", "result": "guess"}]}},
+          {"name": "group", "desc": "jev's, or the only one", "set": {"name": "g", "expr": "0 if len(groups) == 1 else guess.index"}},
+          {"name": "picked", "desc": "not by you", "set": {"name": "picked", "expr": "False"}}],
+        "next": [{"goto": "noting", "when": ["len(groups) == 0"], "desc": "no groups: something new"},
+                 {"goto": "guessing_task", "when": ["len(groups) == 1 or guess.conf >= 0.6 and g < len(groups)"], "desc": "jev is sure, or there's one"},
+                 {"goto": "picking_group"}]},
+      "picking_group": {"desc": "which group it's in, jev's picked already", "every": 0, "do": [
+          {"name": "group", "desc": "asks which group", "ask_usr": {"title": "Which group?", "context": {"format": "“{said}”\n\nWhich of your groups is it part of?", "values": {"said": "said"}},
+                                                                    "options": "groups.name + ['Something new']", "default": "g", "result": "answer", "timeout": 600}},
+          {"name": "keep", "desc": "keeps the group", "set": {"name": "g", "expr": "answer"}},
+          {"name": "picked", "desc": "by you", "set": {"name": "picked", "expr": "True"}}],
+        "next": [{"goto": "watching", "when": ["answer is None"], "desc": "no answer"},
+                 {"goto": "noting", "when": ["answer == len(groups)"], "desc": "something new"},
+                 {"goto": "guessing_task"}]},
+      "guessing_task": {"desc": "jev's task for it, in the group", "every": 0, "do": [
+          {"name": "its", "desc": "the group's tasks", "set": {"name": "tasks", "expr": "where(work.tasks, work.tasks.group, groups[g].id)"}},
+          {"name": "tasks", "desc": "the ones to start now", "set": {"name": "tasks", "expr": "where(tasks, tasks.start)"}},
+          {"name": "guess", "desc": "asks jev its task", "ask_jev": {"context": {"format": "What someone says they're working on: {said}\nIt's part of “{name}”: {desc}",
+                                                                              "values": {"said": "said", "name": "groups[g].name", "desc": "groups[g].desc"}},
+                                                                   "questions": [{"type": "choice", "question": "Which of these tasks is it?",
+                                                                                  "criteria": "zip(tasks.name, tasks.desc) + [['Something new', 'None of these: a todo for the planner']]", "result": "hint"}]}},
+          {"name": "hinted", "desc": "keeps jev's task", "set": {"name": "hinted", "expr": "hint.index"}},
+          {"name": "others", "desc": "another group offered, unless you picked it", "set": {"name": "others", "expr": "len(groups) > 1 and not picked"}}],
+        "next": "picking_task"},
+      "picking_task": {"desc": "which task it is, jev's picked already: the task, or another group, or something new", "every": 0, "do": [
+          {"name": "task", "desc": "asks which task", "ask_usr": {"title": "Which task?", "context": {"format": "“{said}”\n\nWhich task in “{name}” is it?", "values": {"said": "said", "name": "groups[g].name"}},
+                                                                  "options": "tasks.name + (['Another group'] if others else []) + ['Something new']",
+                                                                  "default": "hinted", "result": "answer", "timeout": 600}},
+          {"name": "on", "desc": "the task you're on: the one picked", "set": {"name": "work.task", "expr": "tasks[answer] if 0 <= answer < len(tasks) else None"}}],
+        "next": [{"goto": "watching", "when": ["work.task is not None or answer is None"], "desc": "a task, or no answer"},
+                 {"goto": "picking_group", "when": ["others", "answer == len(tasks)"], "desc": "another group"},
+                 {"goto": "noting"}]},
+      "noting": {"desc": "something new: a todo for the planner (its time isn't counted, until it's a task)", "every": 0, "do": [
+          {"name": "todo", "desc": "adds a todo of what you said", "append": {"name": "note", "expr": {"due": "today + 1680", 
+              "content": "said + (', in “' + groups[g].name + '”' if g is not None and 0 <= g < len(groups) else '')", "bucket": "'Todo'"}}},
+          {"name": "noted", "desc": "says it's noted", "poke": {"context": {"format": "Noted for the planner: “{said}”. Its time counts once it's a task.", "values": {"said": "said"}}, "title": "Focus session"}}],
+        "next": "watching"}
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "title": "Inbox guard",
+  "desc": "Reminds you that email and chat can wait while you focus",
+  "icon": "mail",
+  "tags": ["focus", "session"],
+  "signals": [
+    {"name": "on_contact", "expr": "label in (\"Email\", \"Chat\", \"Video calls\")", "desc": "email, chat or a call is in focus"},
+    {"name": "on_contact_15s", "expr": "ts_min(on_contact, 0.25)", "desc": "email, chat or a call for 15 seconds"}
+  ],
+  "rules": [
+    {"name": "hub_in_session", "lhs": "session.active", "cmp": "eq", "rhs": 1, "level": 3, "desc": "a session is running"},
+    {"name": "hub_on_contact", "lhs": "on_contact_15s", "cmp": "eq", "rhs": 1, "level": 2, "desc": "on email, chat or a call for a while"},
+    {"name": "hub_off_contact", "lhs": "on_contact", "cmp": "eq", "rhs": 0, "desc": "left email, chat and calls"}
+  ],
+  "program": {
+    "initial": "idle",
+    "states": {
+      "idle": {"every": "6s", "next": [{"goto": "reminding", "when": ["hub_in_session", "hub_on_contact"]}]},
+      "reminding": {"do": [{"name": "it_can_wait", "desc": "asks “It can wait”", "ask_usr": {"context": "Email, chat and calls can wait until the session is over (hub and spoke: collaboration outside deep work).", "options": ["OK", "Stop session"], "result": "answer", "default": 0, "title": "It can wait"}}], "every": "6s", "next": [{"goto": "stopping", "when": "answer == 1"}, {"goto": "reminded"}]},
+      "reminded": {"every": "6s", "next": [{"goto": "idle", "when": ["hub_off_contact"]}]},
+      "stopping": {"do": [{"name": "session_stop_requested", "desc": "sets session.stop_requested to True", "set": {"name": "session.stop_requested", "expr": true}}], "every": "6s", "next": "reminded"}
+    }
+  }
+}

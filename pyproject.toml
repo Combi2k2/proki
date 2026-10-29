@@ -1,36 +1,62 @@
 [project]
-name = "aiwa"
+name = "proki"
 version = "0.1.0"
-description = "AI watcher: watches how you work and nudges you at the right moment."
+description = "procrastination killer: watches how you work and nudges you at the right moment."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "platformdirs>=4",
-    "python-dotenv>=1",
     "requests>=2.31",
-    "PySide6>=6.6",
+    "numpy>=2.4.6",
+    "nats-py>=2.16.0",
+    "mcp>=1.20",
+    "tiktoken>=0.14.0",
+    "jsonschema>=4.26",
 ]
 
 [project.scripts]
-aiwa = "aiwa.cli:main"
+proki = "proki.__main__:main"
+proki-backfill = "proki.backfill:main"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "pyinstaller>=6.22.3",
+    "pytest>=8",
+    "pytest-asyncio>=1.4.0",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# the code lives in src/ and is imported as `aiwa` (tests/test_packaging.py checks this list)
-package-dir = {"aiwa" = "src"}
+# tests/test_packaging.py checks this list
 packages = [
-    "aiwa", "aiwa.commands", "aiwa.core", "aiwa.flows", "aiwa.metrics", "aiwa.platforms", "aiwa.rules",
-    "aiwa.services", "aiwa.signals", "aiwa.signals.focus", "aiwa.ui",
+    "proki",
+    "proki.core",
+    "proki.core.actions",
+    "proki.core.ops",
+    "proki.core.signals",
+    "proki.core.records",
+    "proki.core.primitives",
+    "proki.core.primitives.aw",
+    "proki.core.primitives.proki",
+    "proki.core.primitives.sys",
+    "proki.channels",
+    "proki.engine",
+    "proki.model",
+    "proki.errors",
+    "proki.platforms",
+    "proki.programs",
+    "proki.programs.code",
+    "proki.services",
+    "proki.tools",
 ]
 
 [tool.setuptools.package-data]
-aiwa = ["assets/sounds/*"]
+proki = ["assets/*.json", "assets/sounds/*", "assets/media/*/*", "programs/config/*.json", "programs/code/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"  # an `async def` test runs on a loop of its own
+asyncio_default_fixture_loop_scope = "function"

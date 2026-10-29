@@ -1,0 +1,17 @@
+{
+  "pools": {
+    "questions": ["bugcat/what", "bugcat/confused"]
+  },
+  "picks": {
+    "bedtime.past_midnight.past_stop_time": ["bugcat/good_night", "alarm-clock"],
+    "pomodoro.starting.started": ["bugcat/bongo"],
+    "pomodoro.slipping.focus_slipping": ["bugcat/sinking"],
+    "pomodoro.away.been_away": ["bugcat/what", "alarm-clock"],
+    "pomodoro.ended.session_ended": ["bugcat/fall_asleep"],
+    "@classify.tracking.ask_tracking": ["bugcat/peeking"],
+    "@classify.noidea.confirm_no_idea": ["bugcat/what"],
+    "@classify.unsure.confirm_unsure": ["bugcat/freak_out"],
+    "@classify.maybe.confirm_maybe": ["bugcat/shy"],
+    "@classify.sure.confirm_sure": ["bugcat/ok"]
+  }
+}

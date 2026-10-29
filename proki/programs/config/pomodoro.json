@@ -1,0 +1,36 @@
+{
+  "title": "Focus sessions",
+  "desc": "Times a focus session, nudges you when focus slips, and suggests a break",
+  "icon": "timer",
+  "tags": ["focus", "session"],
+  "variables": [
+    {"name": "session.started", "value": 0, "desc": "when the session started (minutes since 1970)"}
+  ],
+  "signals": [
+    {"name": "session.minutes", "expr": "time - session.started", "desc": "minutes since the session started"},
+    {"name": "session_away_5m", "expr": "ts_max(active, 2) == 0", "desc": "no activity for a few minutes"},
+    {"name": "session_away_10m", "expr": "ts_max(active, 7) == 0", "desc": "no activity for about 10 minutes"},
+    {"name": "session.daily", "expr": "every(ts_sum(session.active, 1440), 1440, \"last\")", "backfill": "365d", "persist": true, "desc": "minutes in a session each day, kept for a year"}
+  ],
+  "rules": [
+    {"name": "session_low_focus", "lhs": "focus_2m", "cmp": "lt", "rhs": "distracted_below", "level": 2, "desc": "focus over the last 2 minutes is low"},
+    {"name": "session_not_recovering", "lhs": "focus_2m_rise", "cmp": "le", "rhs": 0.05, "level": 1, "desc": "and it isn't coming back up"}
+  ],
+  "program": {
+    "initial": "idle",
+    "variables": [
+      {"name": "asked_done", "value": false, "desc": "whether this session already asked if it's done"}
+    ],
+    "states": {
+      "idle": {"desc": "no session: waiting for one to start", "every": "6s", "next": [{"goto": "stopping", "when": "session.active", "desc": "a session from before proki stopped (or this program was off): it's over"}, {"goto": "starting", "when": "session.requested", "desc": "you asked for a session"}]},
+      "starting": {"desc": "starts the session", "do": [{"name": "session_requested", "desc": "sets session.requested to False", "set": {"name": "session.requested", "expr": false}}, {"name": "session_stop_requested", "desc": "sets session.stop_requested to False", "set": {"name": "session.stop_requested", "expr": false}}, {"name": "session_started", "desc": "sets session.started to time", "set": {"name": "session.started", "expr": "time"}}, {"name": "asked_done", "desc": "sets asked_done to False", "set": {"name": "asked_done", "expr": false}}, {"name": "in_session", "desc": "sets session.active to True", "set": {"name": "session.active", "expr": true}}, {"name": "started", "desc": "pokes “Focus session”", "poke": {"context": "Focus session started. Stop it from the tray when you're done.", "title": "Focus session"}}], "every": "6s", "next": "focusing"},
+      "focusing": {"desc": "in a session, watching focus and time", "every": "6s", "next": [{"goto": "stopping", "when": "session.stop_requested", "desc": "you stopped the session"}, {"goto": "ended", "when": "session_away_10m", "desc": "away for 10 minutes"}, {"goto": "away", "when": "session_away_5m", "desc": "away for 5 minutes"}, {"goto": "wrap_up", "when": "session.minutes >= 50", "desc": "50 minutes in"}, {"goto": "done_yet", "when": ["session.minutes >= 25", "not asked_done", "session_low_focus", "session_not_recovering"], "desc": "focus dropped after 25 minutes, not asked yet"}, {"goto": "slipping", "when": ["session_low_focus", "session_not_recovering"], "desc": "focus is low and not recovering"}]},
+      "slipping": {"desc": "focus is slipping: a poke", "do": [{"name": "focus_slipping", "desc": "pokes “Focus slipping”", "poke": {"context": "Your focus is slipping. Come back to what you were working on?", "title": "Focus slipping"}}], "every": "1min", "next": "focusing"},
+      "done_yet": {"desc": "focus dropped after 25 minutes: is the session done?", "do": [{"name": "asked_done", "desc": "sets asked_done to True", "set": {"name": "asked_done", "expr": true}}, {"name": "session_done", "desc": "asks “Session done?”", "ask_usr": {"context": "Your focus has dropped. Is this session done?", "options": ["Stop session", "Later"], "result": "answer", "default": 1, "title": "Session done?"}}], "every": "6s", "next": [{"goto": "stopping", "when": "answer == 0", "desc": "yes, stop"}, {"goto": "focusing", "desc": "keep going"}]},
+      "wrap_up": {"desc": "50 minutes in: time for a break?", "do": [{"name": "time_for_a_break", "desc": "asks “Time for a break”", "ask_usr": {"context": {"format": "{minutes:.0f} minutes of focus. Time to wrap up and take a real break.", "values": {"minutes": "session.minutes"}}, "options": ["Stop session", "Later"], "result": "answer", "default": 1, "title": "Time for a break"}}], "every": "2min", "next": [{"goto": "stopping", "when": "answer == 0", "desc": "stop the session"}, {"goto": "focusing", "desc": "almost done"}]},
+      "away": {"desc": "you stepped away: a poke that rings until you close it", "do": [{"name": "been_away", "desc": "pokes “You've been away”", "poke": {"context": "You've been away, and your focus session is still running.", "title": "You've been away"}}], "every": "6s", "next": [{"goto": "focusing", "when": "active", "desc": "you're back"}, {"goto": "ended", "when": "session_away_10m", "desc": "still away after 10 minutes"}, {"goto": "stopping", "when": "session.stop_requested", "desc": "you stopped the session"}]},
+      "ended": {"desc": "away for 10 minutes: the session ends", "do": [{"name": "in_session", "desc": "sets session.active to False", "set": {"name": "session.active", "expr": false}}, {"name": "session_ended", "desc": "pokes “Session ended”", "poke": {"context": "Your focus session ended: you were away for 10 minutes.", "title": "Session ended"}}], "every": "6s", "next": "idle"},
+      "stopping": {"desc": "stops the session", "do": [{"name": "session_stop_requested", "desc": "sets session.stop_requested to False", "set": {"name": "session.stop_requested", "expr": false}}, {"name": "in_session", "desc": "sets session.active to False", "set": {"name": "session.active", "expr": false}}], "every": "6s", "next": "idle"}
+    }
+  }
+}

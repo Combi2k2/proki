@@ -1,0 +1,26 @@
+{
+  "title": "Thought catcher",
+  "desc": "Asks now and then if there's anything worth noting down",
+  "icon": "lightbulb",
+  "tags": ["notes", "shallow"],
+  "program": {
+    "initial": "idle",
+    "variables": [
+      {"name": "asked_window", "value": "\"\"", "desc": "the shallow window last asked on (app and title)"},
+      {"name": "stretch_asked", "value": false, "desc": "whether this distraction stretch was asked on"}
+    ],
+    "signals": [
+      {"name": "on_shallow", "expr": "depth == 0.5", "desc": "shallow work in focus (email, chat)"},
+      {"name": "staying", "expr": "delay(app_name, 0.25) == app_name and delay(app_title, 0.25) == app_title and ts_count(app_name, 0.25) == 0 and ts_count(app_title, 0.25) == 0", "desc": "on the same window for 15 seconds"},
+      {"name": "distracted", "expr": "ts_min(ts_max(depth == 0, 1), 5) == 1", "desc": "in distractions for 5 minutes, a minute's break at most"},
+      {"name": "near_distraction", "expr": "ts_max(depth == 0, 1) == 1", "desc": "a distraction in the last minute"}
+    ],
+    "states": {
+      "idle": {"desc": "waiting for shallow work or a distraction", "every": "6s", "next": [{"goto": "on_window", "when": ["not session.active", "not shutdown_done", "active", "on_shallow", "staying", "app_name + app_title != asked_window"], "desc": "on a shallow window, not asked on yet"}, {"goto": "on_stretch", "when": ["not session.active", "not shutdown_done", "active", "distracted", "not stretch_asked"], "desc": "a distraction stretch, not asked on yet"}, {"goto": "stretch_over", "when": ["stretch_asked", "not near_distraction"], "desc": "the stretch ended"}]},
+      "on_window": {"desc": "this window: asked once", "do": [{"name": "asked_window", "desc": "sets asked_window to app_name + app_title", "set": {"name": "asked_window", "expr": "app_name + app_title"}}], "every": "6s", "next": "asking"},
+      "on_stretch": {"desc": "this stretch: asked once", "do": [{"name": "stretch_asked", "desc": "sets stretch_asked to True", "set": {"name": "stretch_asked", "expr": true}}], "every": "6s", "next": "asking"},
+      "stretch_over": {"desc": "the next stretch may be asked on", "do": [{"name": "stretch_asked", "desc": "sets stretch_asked to False", "set": {"name": "stretch_asked", "expr": false}}], "every": "6s", "next": "idle"},
+      "asking": {"desc": "anything worth noting? to @notes", "do": [{"name": "worth_noting", "desc": "asks “Worth noting?”", "ask_usr": {"context": {"format": "Anything worth noting from {app}? Write it down, and get back to what matters.", "values": {"app": "app_name"}}, "result": "said", "timeout": 86400, "title": "Worth noting?"}}, {"name": "noted", "desc": "adds a note of said", "append": {"name": "note", "expr": {"due": "today + 1680", "bucket": "'Unsorted'", "content": "said"}, "when": "said"}}], "every": "6s", "next": "idle"}
+    }
+  }
+}

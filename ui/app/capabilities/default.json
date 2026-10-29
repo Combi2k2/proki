@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the popup and the main window may do: proki's own commands (src/main.rs), events, dragging the window, picking files.",
+  "windows": ["main", "popup"],
+  "permissions": ["core:default", "core:window:allow-start-dragging", "dialog:allow-open"]
+}
