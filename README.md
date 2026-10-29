@@ -1,134 +1,127 @@
-# proki: procrastination killer
+<p align="center">
+  <img src="cover.png" alt="Proki — a focus companion for planning, focus sessions, and ideas" width="960" />
+</p>
 
-proki runs quietly in the background, watches how you work (only in the apps you
-choose), and nudges you at good moments: when your focus slips, when a session has run
-long, when it's time to wind down.
+<h1 align="center">Make room for the work that matters.</h1>
 
-Everything stays on your machine, except what you let jev or an LLM see (an app's name
-and a window title).
+<p align="center">
+  Proki helps you see where your time goes, decide what to do next, and return to the work when your attention wanders.
+</p>
 
-## Requirements
+<p align="center">
+  <a href="https://github.com/Combi2k2/proki/stargazers"><img src="https://img.shields.io/github/stars/Combi2k2/proki?style=flat&label=GitHub%20stars" alt="GitHub stars" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Combi2k2/proki?style=flat" alt="MIT license" /></a>
+  <img src="https://img.shields.io/badge/macOS-tested-2f855a?style=flat" alt="macOS tested" />
+  <img src="https://img.shields.io/badge/status-early%20build-blue?style=flat" alt="Early build" />
+</p>
 
-- [ActivityWatch](https://activitywatch.net): it records window activity, and proki reads
-  it through its local API. With `[activitywatch] manage = true`, proki starts its
-  background programs itself. Add its browser extension for websites, and
-  aw-watcher-input for key and mouse activity.
-- [NATS server](https://nats.io) (`brew install nats-server`): the message bus between the
-  engine and the UI. The launcher starts it.
-- Python 3.11+ with [uv](https://docs.astral.sh/uv/), and Node.js for the UI.
+<p align="center">
+  <a href="#why-proki">Why Proki</a> &nbsp;·&nbsp;
+  <a href="#what-you-can-do">What you can do</a> &nbsp;·&nbsp;
+  <a href="#your-day-stays-yours">Privacy</a> &nbsp;·&nbsp;
+  <a href="#try-proki">Try Proki</a> &nbsp;·&nbsp;
+  <a href="#for-builders">For builders</a>
+</p>
 
-## Usage
+---
+
+## Why Proki
+
+Good intentions are easy to lose in a busy day. Proki is a focus companion that helps you make a plan, stay with a task, and keep useful thoughts from slipping away.
+
+It offers gentle check-ins around your work, so you can make progress without turning productivity into another source of pressure. Your activity history stays on your computer, and you choose which apps and websites count toward your focus.
+
+## What you can do
+
+### Your day
+
+| What you need | How Proki helps | Review |
+| --- | --- | --- |
+| Start well | A welcome the first time you open it: ActivityWatch checked (and installed for you), and your browser's extension a click away. | - [ ] Looks good<br>- [ ] Needs work |
+| See today at a glance | **Today** shows your focus through the day, your daily goal and streak, your next task, a box for what's on your mind, and the routines at work. | - [ ] Looks good<br>- [ ] Needs work |
+| Stay with a task | Start a focus session from Today or the tray, tied to a task; a gentle popup when you drift, need a break, or it's time for bed. | - [ ] Looks good<br>- [ ] Needs work |
+
+### Your work
+
+| What you need | How Proki helps | Review |
+| --- | --- | --- |
+| Make a plan | **Tasks** groups your todos under goals, with a clear next one; talk a todo through and Proki splits it into smaller ones. | - [ ] Looks good<br>- [ ] Needs work |
+| Keep the thought | **Notes** catches an idea, a todo or a thought as it comes; Proki sorts it for you. | - [ ] Looks good<br>- [ ] Needs work |
+| Something to smile at | **Media**: the stickers and pictures Proki's popups show, in folders, yours to add to. | - [ ] Looks good<br>- [ ] Needs work |
+
+### Insight
+
+| What you need | How Proki helps | Review |
+| --- | --- | --- |
+| Know where time goes | **Apps**: each app and website you use, and whether it counts as focus, a break or a distraction. You decide. | - [ ] Looks good<br>- [ ] Needs work |
+| Watch the trend | **Metrics**: your focus and the signals behind it, over the day and the weeks. | - [ ] Looks good<br>- [ ] Needs work |
+
+### Advanced
+
+| What you need | How Proki helps | Review |
+| --- | --- | --- |
+| A routine that fits | **Automations**: every nudge and check-in is a routine you can read, switch off or change, and what each one uses is shown beside it. | - [ ] Looks good<br>- [ ] Needs work |
+| Your own records | **Tables**: tasks, notes and lists of your own, with fields you add; some worked out for you by a rule or by AI. | - [ ] Looks good<br>- [ ] Needs work |
+| Help from AI | Choose the AI service behind planning, sorting and the popups' words; its key stays on this computer. | - [ ] Looks good<br>- [ ] Needs work |
+| Work with your assistant | Claude Code, Codex, OpenClaw and other assistants reach your tasks, notes and routines through `proki mcp` (see [For builders](#for-builders)). | - [ ] Looks good<br>- [ ] Needs work |
+
+*As you try each feature, mark whether it feels ready or needs more polish.*
+
+## Your day stays yours
+
+Proki and ActivityWatch keep your activity history on your computer. Depending on your ActivityWatch setup, the activity it records may include app names, window titles, browser pages, and counts of keyboard and mouse activity. ActivityWatch’s input watcher records counts only, not the keys you press.
+
+If you choose to connect an AI service, Proki sends it the information needed for that request. You choose the provider, and its service key stays on your computer, in a file only you can read.
+
+## Try Proki
+
+Proki is an early build, actively being shaped around real workdays. It has been tested on macOS (Apple silicon). The Windows installer is built the same way but has not been tested on a real machine yet, and Linux has no installer.
+
+Download the latest installer from [Releases](https://github.com/Combi2k2/proki/releases). Everything Proki needs is inside it, except [ActivityWatch](https://activitywatch.net/), which records the windows you're in: if it isn't on your computer, Proki installs it for you the first time it starts. The welcome then offers ActivityWatch's extension for your browser (Chrome, Edge, Brave and other Chromium browsers, or Firefox).
+
+**macOS:** open the `.dmg` and drag Proki to Applications. The app isn't signed yet, so macOS says it's damaged or can't be checked. Run this once, then open it as usual:
 
 ```bash
-uv sync                                  # the engine's dependencies
-(cd ui && npm install && npm run build)  # the UI
-uv run launch.py                         # start it all: NATS, ActivityWatch, the engine, the UI, kept running
-uv run proki                             # the engine alone, for what's already running
-uv run proki-backfill --days 14          # the metrics' past, from what ActivityWatch recorded
-uv run pytest                            # the tests
+xattr -cr /Applications/proki.app
 ```
 
-The app can be opened by itself too (`ui/app/target/release/bundle/macos/proki.app`): it finds
-the engine where the engine is, on its own.
+**Windows:** run the installer. The app isn't signed yet, so SmartScreen warns you: choose **More info**, then **Run anyway**.
 
-On Windows, [`scripts/windows/proki.bat`](scripts/windows/proki.bat) installs and starts
-proki, but it was written for the app before the UI was rewritten: it doesn't install
-NATS or build the UI yet.
+<details>
+<summary><strong>Run it from the source</strong></summary>
 
-## What you see
+The current build requires [ActivityWatch](https://activitywatch.net/), [NATS](https://nats.io/), [uv](https://docs.astral.sh/uv/), and [Node.js](https://nodejs.org/). On macOS, install NATS with Homebrew, then run these commands from the project folder:
 
-- **The tray**: your focus over the last 5 minutes, a running session's minutes next to
-  the icon, and the menu: open proki, a new note, start or stop a focus session, Tasks,
-  Ideas, Metrics, Programs, quit.
-- **The popup**: proki's questions and messages, one at a time. A message with an alarm
-  rings while it's on the screen, and stops as you close it.
-- **The main window**:
-  - **Today**: your focus now, the last 24 hours (deep, shallow, active minutes) and your
-    next task
-  - **Tasks** and **Ideas**: your tasks in goal groups, and the thoughts you kept
-  - **Metrics**: the history of any persisted signal, switched on and off
-  - **Programs**: the config's programs, edited and run without restarting, with what
-    they can use (inputs, signals, variables, rules, actions) and their values now
-
-## What it does
-
-Programs run side by side, each a state machine. Most are written in the config (JSON,
-`proki/programs/config/`), the rest in code (`proki/programs/code/`).
-
-| Program | What it does |
-|---|---|
-| `focus_session` | a session you start (tray, or a suggestion) and stop: a poke when focus slips, "is this session done?" after 25 minutes, time to wrap up after 50, a ringing poke when you're away 5 minutes, the end after 10 |
-| `suggest` | focus building up outside a session: start one? |
-| `budget` | shallow work over 30% of the day: a session? |
-| `hub` | email and chat during a session: a reminder |
-| `morning` | the first activity: today's work, the routine timer, a question at its end |
-| `evening`, `bedtime` | "anything new?" at 21:30, and pokes from 22:00, a ringing poke and a question to lock the screen from 00:00 |
-| `day` | the day's deadline, moved on at its end |
-| `classify` (code) | an app proki hasn't seen: track it? A window without a label: jev's or the LLM's guess to confirm, or yours |
-| `task_planner` | a todo talked through into a group's tasks: changes suggested on its card |
-| `task_reminder` | a task due soon, or stuck, now and then outside a session: and what's in the way, once put off again and again |
-| `task_picker` | a session without a task: what you're on, jev's group and task for it for you to confirm, or a todo for the planner |
-| `capture` | "anything worth noting?" on shallow work or a distraction stretch, handed to the planner |
-| `shutdown` | the end of the workday: what's still open (tasks, through the planner), the week, then tomorrow |
-
-Only tracked apps are recorded by name. When you use an untracked app, proki asks whether
-to track it, and how it counts (deep, shallow, distraction, neutral). "Don't track"
-keeps only a hash of its name. Browsers are tracked per website.
-
-## Settings
-
-Set in the app, under Settings → Services: the LLM a program's asks go to, and jev. Each is a
-provider (OpenAI, Anthropic, Google, OpenRouter, or a custom one at your URL), its key and a
-model: try the connection, fetch the models there, pick one and save. It's asked from then on.
-The key is kept in your computer's keychain, the rest in `config.toml` in proki's config folder
-(`~/Library/Application Support/proki/` on macOS).
-
-Everything else runs on this machine as the launcher starts it: ActivityWatch on port 5600, the
-message bus on 4222, and the tools on 9144.
-
-Your signals, rules and programs are kept in
-proki.db, made from the defaults the first time, changed in the Programs window or by an
-AI agent through the same tools (MCP, on 127.0.0.1, port 9144, with the token in
-`tools-token` next to config.toml). Each can go back to its default.
-
-## Layout
-
-```
-launch.py         starts NATS, ActivityWatch, the engine and the UI, and keeps them running
-proki/
-  __main__.py     the engine (`proki`, `python -m proki`): your programs, served on the bus and as tools
-  settings.py     where proki's files are, and the services it asks
-  storage.py      proki.db: the app's state, variables, persisted signals
-  serve.py        what the UI asks the engine for (proki.app.*): tasks, ideas, today, metrics
-  editor.py       the Programs window: your programs as files of JSON, checked, kept and run
-  backfill.py     proki-backfill: the metrics' past
-  core/
-    signals/      Stream and the cycles, expressions, signals, variables
-    primitives/   the inputs, a folder per source: aw/ ActivityWatch, sys/ the clock, proki/ labels
-    ops/          time-series operators, one file each (ts_mean, every, delay, ...)
-    rules.py      Rule: a soft comparison, the chance of firing now
-    actions/      what a state does as it's entered: var.py, ask.py, ui.py
-    programs.py   Program: state machines, each woken by the engine's cycles
-  model/          your programs as specs (one per node: program, state, branch, action, variable,
-                  signal, rule, input), the operations that change them, built into what runs
-  engine/         Engine: the programs run cycle by cycle, each change checked aside, then kept
-  channels/       asking you (popup.py), jev and an LLM, on the message bus
-  programs/       every program, as shipped:
-    config/       the config's files: main.json (the global scope: inputs, variables, signals,
-                  rules) and one JSON file per program
-    code/         the programs written in code: classify, notes, tasks/
-    shipped.py    the defaults coming into your programs (kept in proki.db), and back to one
-  services/       ActivityWatch, NATS, jev, LLMs, the supervisor the launcher runs them with
-  platforms/      the only OS-specific code
-  errors/         what proki raises on purpose
-  assets/         media: the alarm's sound
-ui/               the app: the tray, the popup, the main window (app/: `npm run app`), and
-                  its pages (src/, React)
+```bash
+brew install nats-server
+uv sync
+cd ui && npm install && npm run app
+cd ..
+uv run launch.py
 ```
 
-## Platform status
+For website tracking, add ActivityWatch’s browser extension. Quit Proki or press `Ctrl-C` in the terminal to stop the app.
 
-| | macOS | Windows | Linux X11 | Linux Wayland |
-|---|---|---|---|---|
-| Tested | yes | not yet | not yet | not yet |
-| Window tracking | ✅ | ✅ | ✅ | needs `awatcher` |
+</details>
+
+## For builders
+
+Proki can connect to compatible AI assistants through a local, password-protected connection. An assistant can read or update tasks, routines, media, and settings. Only connect assistants you trust.
+
+In the app, choose **Install command-line tool…** from the tray menu (from the source: `uv tool install -e .`). Then add Proki to an assistant as a command, `proki mcp`; it starts Proki if it isn't running:
+
+```bash
+claude mcp add proki -- proki mcp
+codex mcp add proki -- proki mcp
+openclaw mcp set proki '{"command":"proki","args":["mcp"]}'
+```
+
+An assistant started from the Dock may not find `proki`: give it the full path the tray menu shows.
+
+To build the installers: `packaging/build.sh` on macOS or Windows (Git Bash), or run the **release** workflow on GitHub; a `v*` tag publishes them as a release.
+
+Explore the [feature review](docs/F-002-feature-review.md), [product architecture notes](docs/components.md), and [demo script](docs/personal-ai-hackathon-demo.md).
+
+## License
+
+[MIT](LICENSE)
