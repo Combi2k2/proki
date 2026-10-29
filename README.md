@@ -2,7 +2,7 @@
   <img src="cover.png" alt="Proki — a focus companion for planning, focus sessions, and ideas" width="960" />
 </p>
 
-<h1 align="center">Make room for the work that matters.</h1>
+<h1 align="center">✨ Make room for the work that matters.</h1>
 
 <p align="center">
   Proki helps you see where your time goes, decide what to do next, and return to the work when your attention wanders.
@@ -10,125 +10,126 @@
 
 <p align="center">
   <a href="https://github.com/Combi2k2/proki/stargazers"><img src="https://img.shields.io/github/stars/Combi2k2/proki?style=flat&label=GitHub%20stars" alt="GitHub stars" /></a>
+  <a href="https://github.com/Combi2k2/proki/actions/workflows/release.yml"><img src="https://github.com/Combi2k2/proki/actions/workflows/release.yml/badge.svg?branch=main" alt="Release workflow status" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Combi2k2/proki?style=flat" alt="MIT license" /></a>
-  <img src="https://img.shields.io/badge/macOS-tested-2f855a?style=flat" alt="macOS tested" />
   <img src="https://img.shields.io/badge/status-early%20build-blue?style=flat" alt="Early build" />
 </p>
 
+<a id="download"></a>
 <p align="center">
-  <a href="#why-proki">Why Proki</a> &nbsp;·&nbsp;
-  <a href="#what-you-can-do">What you can do</a> &nbsp;·&nbsp;
-  <a href="#your-day-stays-yours">Privacy</a> &nbsp;·&nbsp;
-  <a href="#try-proki">Try Proki</a> &nbsp;·&nbsp;
-  <a href="#for-builders">For builders</a>
+  <a href="https://github.com/Combi2k2/proki/actions/runs/40832324993/artifacts/12878943097"><img src="https://img.shields.io/badge/macOS-installer-007AFF?style=flat&logo=apple&logoColor=white" alt="macOS installer" /></a>
+  <a href="https://github.com/Combi2k2/proki/actions/runs/40832324993/artifacts/12879575491"><img src="https://img.shields.io/badge/Windows-installer-0078D4?style=flat&logo=windows11&logoColor=white" alt="Windows installer" /></a>
+</p>
+
+<p align="center">
+  <a href="#why-proki">Why Proki</a> ·
+  <a href="#what-you-can-do">Features</a> ·
+  <a href="#your-day-stays-yours">Privacy</a> ·
+  <a href="#try-proki">Try it</a> ·
+  <a href="#for-builders">Builders</a>
 </p>
 
 ---
 
-## Why Proki
+<a id="why-proki"></a>
+## ✨ Why Proki
 
-Good intentions are easy to lose in a busy day. Proki is a focus companion that helps you make a plan, stay with a task, and keep useful thoughts from slipping away.
+Good intentions are easy to lose in a busy day. Proki helps you plan, stay with a task, and keep useful thoughts, with gentle check-ins and activity history kept on your computer.
 
-It offers gentle check-ins around your work, so you can make progress without turning productivity into another source of pressure. Your activity history stays on your computer, and you choose which apps and websites count toward your focus.
+<a id="what-you-can-do"></a>
+## 🧭 What you can do
 
-## What you can do
-
-### Getting started
-
-| What you need | How Proki helps | Status |
-| --- | --- | --- |
-| Install it | One installer for macOS or Windows, with everything Proki needs inside; ActivityWatch installed for you if it isn't on your computer. | ~ |
-| Start well | A welcome the first time you open it: ActivityWatch checked, your browser's extension a click away (Chrome, Edge, Brave… or Firefox). Shown again from Settings. | ~ |
-| Always at hand | Proki lives in your menu bar or system tray: the focus of the last minutes, a session's time, New note, quit. | V |
-
-### Your day
+### 🚀 Getting started
 
 | What you need | How Proki helps | Status |
 | --- | --- | --- |
-| See today at a glance | **Today**: your focus through the day, your daily goal and streak, your next task, a box for what's on your mind, and the routines at work. | V |
-| Stay with a task | Start a focus session from Today or the tray, tied to a task; a gentle popup when you drift, need a break, or it's time for bed. | V |
-| Popups that answer back | Proki asks in a popup, with a sticker: what an app you opened is for, where a note belongs, whether you're still on task. | ~ |
+| Install it | Installers for macOS and Windows; ActivityWatch setup included. | 🟡 |
+| Start well | First-run welcome, ActivityWatch check, and a link to your browser extension. | 🟡 |
+| Always at hand | Proki lives in your menu bar or system tray: the focus of the last minutes, a session's time, New note, quit. | ✅ |
 
-### Your work
-
-| What you need | How Proki helps | Status |
-| --- | --- | --- |
-| Make a plan | **Tasks**: your todos under goals, on a board you drag, with a clear next one; talk a todo through and Proki splits it into smaller ones. | V |
-| Keep the thought | **Notes**: an idea, a todo or a thought caught as it comes; Proki sorts it into Todo, Idea or Thought, asking you when it isn't sure. | V |
-| Know where a note went | A todo made a task stays in Todo, with a link that opens the task. | V |
-| Something to smile at | **Media**: the stickers and pictures the popups show, grouped by folder; add one, or a whole folder at once. | V |
-
-### Insight
+### ⏱️ Your day
 
 | What you need | How Proki helps | Status |
 | --- | --- | --- |
-| Know where time goes | **Apps**: each app and website you use, and whether it counts as focus, a break or a distraction. You decide; Proki asks about the new ones. | X |
-| Watch the trend | **Metrics**: your focus and the signals behind it, over the day and the weeks. | ~ |
+| See today at a glance | Focus, daily goal, streak, next task, and your notes for the day. | ✅ |
+| Stay with a task | Start a task-linked focus session and get gentle prompts when useful. | ✅ |
+| Popups that answer back | Respond to short prompts about focus, apps, or where a note belongs. | 🟡 |
 
-### Make it yours
-
-| What you need | How Proki helps | Status |
-| --- | --- | --- |
-| A routine that fits | **Automations**: every nudge and check-in is a routine you can read, switch off or change, and what each one uses is shown beside it. | V |
-| See it work | Each routine is a graph you can lay out, curved, elbow, straight or on springs; live, it shows the step it's on, the time left to its next try, and the way it takes. | V |
-| Change a step | A step opens over the graph, with Back to the one before; its actions and ways out on a line each, dragged into order, each condition ticked or crossed as it is now. | V |
-| What a routine knows | The resources drawer: each variable, edited by its type (a number, a time, a list, a record's fields); hidden ones shown on a switch. | V |
-| Your own records | **Tables**: tasks, notes and lists of your own, with fields you add, some worked out for you by a rule or by AI; sorted, searched, opened. | V |
-| Learn by trying | **Help**: a playground on sample data, where an expression or an action shows what it reads and changes, and a short deck on how routines work. Expressions coloured everywhere. | V |
-
-### AI and assistants
+### 📝 Your work
 
 | What you need | How Proki helps | Status |
 | --- | --- | --- |
-| Help from AI | Settings, a service at a time: choose the provider from a list, test the connection, and its key stays on this computer, readable by you only. | V |
-| Answers in a shape | An AI step's answer built field by field, as the routine needs it. | V |
-| Work with your assistant | Claude Code, Codex, OpenClaw and other assistants reach your tasks, notes and routines through `proki mcp`, installed from the tray (see [For builders](#for-builders)). | V |
-| Tell us | **Contribute**: the code on GitHub, and a suggestion form that reaches us even if you're offline when you send it. | ~ |
+| Make a plan | Group tasks under goals, choose what’s next, and break down a todo with AI. | ✅ |
+| Keep the thought | Capture notes; Proki sorts them into todos, ideas, or thoughts and checks when unsure. | ✅ |
+| Follow a note to its task | Turn a todo note into a task with a link back to it. | ✅ |
+| Add a little fun | Personalize popup stickers and pictures. | ✅ |
 
-*V reviewed and ready · ~ works, with something left · X not reviewed yet*
+### 📈 Insight
 
-## Your day stays yours
+| What you need | How Proki helps | Status |
+| --- | --- | --- |
+| Know where time goes | Choose how each app or website counts toward focus, breaks, or distractions. | ⚪ |
+| Watch the trend | Explore focus and activity patterns across days and weeks. | 🟡 |
 
-Proki and ActivityWatch keep your activity history on your computer. Depending on your ActivityWatch setup, the activity it records may include app names, window titles, browser pages, and counts of keyboard and mouse activity. ActivityWatch’s input watcher records counts only, not the keys you press.
+### 🎛️ Make it yours
 
-If you choose to connect an AI service, Proki sends it the information needed for that request. You choose the provider, and its service key stays on your computer, in a file only you can read.
+| What you need | How Proki helps | Status |
+| --- | --- | --- |
+| Personalize routines | Read, switch off, and adjust the prompts that guide your day. | ✅ |
+| See routines in action | Follow a routine’s steps and see what it will do next. | ✅ |
+| Organize your information | Create tables for tasks, notes, and other records. | ✅ |
+| Learn as you go | Try expressions and actions on sample data in the built-in Help area. | ✅ |
 
-## Try Proki
+### 🤝 AI and assistants
 
-Proki is an early build, actively being shaped around real workdays. It has been tested on macOS (Apple silicon). The Windows installer is built the same way but has not been tested on a real machine yet, and Linux has no installer.
+| What you need | How Proki helps | Status |
+| --- | --- | --- |
+| AI when you need it | Choose a provider for AI-assisted planning and prompts. | ✅ |
+| Connect an assistant | Let Claude Code, Codex, OpenClaw, or another compatible assistant use your Proki tasks and routines. | ✅ |
+| Share feedback | Send a suggestion, even when you’re offline; Proki queues it to send later. | 🟡 |
 
-Download the latest installer from [Releases](https://github.com/Combi2k2/proki/releases). Everything Proki needs is inside it, except [ActivityWatch](https://activitywatch.net/), which records the windows you're in: if it isn't on your computer, Proki installs it for you the first time it starts. The welcome then offers ActivityWatch's extension for your browser (Chrome, Edge, Brave and other Chromium browsers, or Firefox).
+*Status: ✅ ready · 🟡 needs polish · ⚪ not reviewed.*
 
-**macOS:** open the `.dmg` and drag Proki to Applications. The app isn't signed yet, so macOS says it's damaged or can't be checked. Run this once, then open it as usual:
+<a id="your-day-stays-yours"></a>
+## 🔒 Your day stays yours
+
+ActivityWatch keeps activity history on your computer, such as app names, window titles, and browser pages. Its optional input watcher records activity counts, not the keys you press.
+
+If you connect an AI service, Proki sends it the context needed for each request. You choose the provider; its key stays on your computer.
+
+<a id="try-proki"></a>
+## 🚀 Try Proki
+
+Proki is an early build. macOS (Apple silicon) is tested; Windows is not yet tested on a real machine, and Linux installers are not available.
+
+### 📦 From installer
+
+The current macOS and Windows preview installers are linked at the top of this README. They are temporary GitHub Actions artifacts, not a versioned release. ActivityWatch is included in setup and its browser extension is offered on first launch.
+
+- **macOS:** Open the `.dmg` and drag Proki to Applications. If macOS blocks the unsigned app, run `xattr -cr /Applications/proki.app` once.
+- **Windows:** Run the installer. If SmartScreen appears, choose **More info → Run anyway**.
+
+### [⬆️ Back to installer downloads](#download)
+
+### 🧑‍💻 From source
+
+Install ActivityWatch, NATS, [uv](https://docs.astral.sh/uv/), and [Node.js](https://nodejs.org/). On macOS, install NATS with `brew install nats-server`, then from the repo folder:
 
 ```bash
-xattr -cr /Applications/proki.app
-```
-
-**Windows:** run the installer. The app isn't signed yet, so SmartScreen warns you: choose **More info**, then **Run anyway**.
-
-<details>
-<summary><strong>Run it from the source</strong></summary>
-
-The current build requires [ActivityWatch](https://activitywatch.net/), [NATS](https://nats.io/), [uv](https://docs.astral.sh/uv/), and [Node.js](https://nodejs.org/). On macOS, install NATS with Homebrew, then run these commands from the project folder:
-
-```bash
-brew install nats-server
 uv sync
 cd ui && npm install && npm run app
 cd ..
 uv run launch.py
 ```
 
-For website tracking, add ActivityWatch’s browser extension. Quit Proki or press `Ctrl-C` in the terminal to stop the app.
+For browser tracking, add ActivityWatch’s browser extension. Quit Proki or press `Ctrl-C` to stop it.
 
-</details>
+<a id="for-builders"></a>
+## 🛠️ For builders
 
-## For builders
+Compatible AI assistants can access Proki’s tasks, routines, media, and settings through its local, token-protected MCP connection.
 
-Proki can connect to compatible AI assistants through a local, password-protected connection. An assistant can read or update tasks, routines, media, and settings. Only connect assistants you trust.
-
-In the app, choose **Install command-line tool…** from the tray menu (from the source: `uv tool install -e .`). Then add Proki to an assistant as a command, `proki mcp`; it starts Proki if it isn't running:
+Choose **Install command-line tool…** in the tray menu, then add `proki mcp` to your assistant:
 
 ```bash
 claude mcp add proki -- proki mcp
@@ -136,12 +137,8 @@ codex mcp add proki -- proki mcp
 openclaw mcp set proki '{"command":"proki","args":["mcp"]}'
 ```
 
-An assistant started from the Dock may not find `proki`: give it the full path the tray menu shows.
+See the [feature review](docs/F-002-feature-review.md), [architecture notes](docs/components.md), and [demo script](docs/personal-ai-hackathon-demo.md).
 
-To build the installers: `packaging/build.sh` on macOS or Windows (Git Bash), or run the **release** workflow on GitHub; a `v*` tag publishes them as a release.
-
-Explore the [feature review](docs/F-002-feature-review.md), [product architecture notes](docs/components.md), and [demo script](docs/personal-ai-hackathon-demo.md).
-
-## License
+## 📄 License
 
 [MIT](LICENSE)
