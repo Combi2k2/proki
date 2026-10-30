@@ -77,6 +77,15 @@ def test_nebius_schema_envelope(posts):
     }
 
 
+def test_nebius_internal_error_on_schema_falls_back_to_prompt_json(posts):
+    schema = {"type": "object", "properties": {"choice": {"type": "string"}}}
+    posts.replies = [Reply(500), Reply(200, '{"choice": "ready"}')]
+    assert Llm("https://api.tokenfactory.nebius.com/v1", None, "nemotron").ask("Choose", schema=schema) == {"choice": "ready"}
+    assert "response_format" in posts[0][2]
+    assert "response_format" not in posts[1][2]
+    assert json.dumps(schema) in posts[1][2]["messages"][-1]["content"]
+
+
 @pytest.mark.parametrize("model", ["nvidia/Nemotron-3.5-Lightning", "Nemotron-3.5-Lighting"])
 def test_nemotron_is_explicitly_asked_for_brief_useful_output(posts, model):
     posts.replies = [Reply(200, "Take the next small step.")]

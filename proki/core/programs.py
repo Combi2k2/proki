@@ -23,7 +23,7 @@ from typing import ClassVar
 
 from proki.core.actions import Action
 from proki.core.rules import Rule
-from proki.core.signals import Signal, Variable
+from proki.core.signals import Signal, Stream, Variable
 from proki.errors import ProgramError
 
 
@@ -39,9 +39,26 @@ class Branch:
 
     def passes(self) -> bool:
         """Whether it's taken now."""
-        if not all(cond.current() for cond in self.conds):  # unknown isn't true
+        if not all(_condition_now(cond) for cond in self.conds):  # unknown isn't true
             return False
         return Rule.vote(self.rules)
+
+
+def _condition_now(cond: Signal) -> bool:
+    """Read a branch after its actions, even if the editor read it while an ask waited.
+
+    Keep named inputs' cycle values; only the condition's own expression cache is
+    refreshed. A variable itself reads its latest value without a cache.
+    """
+    def clear(stream: Stream) -> None:
+        if stream is not cond and stream.name and Stream.registry.get(stream.name) is stream:
+            return
+        stream._cached = False
+        for input in stream.inputs:
+            clear(input)
+
+    clear(cond)
+    return bool(cond.current())
 
 
 @dataclass

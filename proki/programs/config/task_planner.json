@@ -25,9 +25,9 @@
         "desc": "the questions asked of it so far"
       },
       {
-        "name": "later",
+        "name": "review_until",
         "value": 0,
-        "desc": "not before then: a todo put off (minutes since 1970)"
+        "desc": "wait for a plan review until then (minutes since 1970)"
       },
       {
         "name": "groups",
@@ -57,7 +57,7 @@
             "desc": "takes the first todo",
             "set": {
               "name": "todo",
-              "expr": "todos[0]"
+              "expr": "where(todos, todos.plan_after, None)[0] if len(where(todos, todos.plan_after, None)) > 0 else sort(todos, todos.plan_after)[0]"
             }
           },
           {
@@ -100,7 +100,7 @@
             "when": [
               "todo is not None",
               "not asking",
-              "time >= later",
+              "todo.plan_after is None or time >= todo.plan_after",
               "work.plan is not None and len(work.plan.changes) > 0"
             ],
             "desc": "the plan still has changes to review"
@@ -110,7 +110,7 @@
             "when": [
               "todo is not None",
               "not asking",
-              "time >= later",
+              "todo.plan_after is None or time >= todo.plan_after",
               "len(where(work.groups, work.groups.status, 'open')) == 0"
             ],
             "desc": "no groups yet: a new one"
@@ -120,7 +120,7 @@
             "when": [
               "todo is not None",
               "not asking",
-              "time >= later"
+              "todo.plan_after is None or time >= todo.plan_after"
             ],
             "desc": "a todo"
           },
@@ -187,10 +187,10 @@
             }
           },
           {
-            "name": "later",
+            "name": "postpone",
             "desc": "later: two hours on",
             "set": {
-              "name": "later",
+              "name": "note[index(note.id, todo.id)].plan_after",
               "expr": "time + 120",
               "when": "answer is None"
             }
@@ -244,10 +244,18 @@
             }
           },
           {
-            "name": "later",
-            "desc": "a while at most",
+            "name": "postpone",
+            "desc": "this todo waits while the plan is reviewed",
             "set": {
-              "name": "later",
+              "name": "note[index(note.id, todo.id)].plan_after",
+              "expr": "time + 120"
+            }
+          },
+          {
+            "name": "review_until",
+            "desc": "a while at most for reviewing",
+            "set": {
+              "name": "review_until",
               "expr": "time + 120"
             }
           }
@@ -288,7 +296,7 @@
             "name": "reviewed",
             "desc": "reviewed: the todo's taken on at once",
             "set": {
-              "name": "later",
+              "name": "note[index(note.id, todo.id)].plan_after",
               "expr": "time",
               "when": "work.plan is None or len(work.plan.changes) == 0"
             }
@@ -305,7 +313,7 @@
           {
             "goto": "idle",
             "when": [
-              "time >= later"
+              "time >= review_until"
             ],
             "desc": "a while"
           },
@@ -424,10 +432,10 @@
             }
           },
           {
-            "name": "later",
+            "name": "postpone",
             "desc": "no answer: two hours on",
             "set": {
-              "name": "later",
+              "name": "note[index(note.id, todo.id)].plan_after",
               "expr": "time + 120",
               "when": "work.plan is None"
             }
@@ -608,10 +616,10 @@
             }
           },
           {
-            "name": "later",
+            "name": "review_until",
             "desc": "a while at most",
             "set": {
-              "name": "later",
+              "name": "review_until",
               "expr": "time + 120"
             }
           }

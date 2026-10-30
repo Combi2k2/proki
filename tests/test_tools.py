@@ -5,6 +5,7 @@ import asyncio
 import json
 import socket
 import sqlite3
+import urllib.error
 
 import pytest
 
@@ -13,6 +14,7 @@ from proki.core.programs import Program
 from proki.engine import Engine
 from proki.programs.shipped import Shipped
 from proki.tools.server import Tools
+from proki.tools.stdio import Bridge
 
 
 @pytest.fixture
@@ -91,6 +93,56 @@ async def test_the_server_answers_clients_with_the_token(tools):
     finally:
         server.should_exit = True
         await serving
+
+
+def test_stdio_bridge_rejoins_after_the_http_server_restarts(tmp_path, monkeypatch):
+    token = tmp_path / "token"
+    token.write_text("secret")
+    monkeypatch.setattr(settings, "TOOLS_TOKEN", token)
+    generation = [1]
+    requests = []
+
+    class Reply:
+        def __init__(self, message, session=None):
+            self.headers = {"mcp-session-id": session} if session else {}
+            self.body = json.dumps(message).encode() if message is not None else b""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def read(self):
+            return self.body
+
+    def urlopen(request, timeout):
+        message = json.loads(request.data)
+        session = request.get_header("Mcp-session-id")
+        requests.append((message["method"], session))
+        if session and session != f"session-{generation[0]}":
+            raise urllib.error.HTTPError(request.full_url, 404, "Session not found", {}, None)
+        if message["method"] == "initialize":
+            assert session is None
+            return Reply({"jsonrpc": "2.0", "id": message["id"], "result": {"protocolVersion": "2025-06-18"}},
+                         f"session-{generation[0]}")
+        if message["method"] == "notifications/initialized":
+            return Reply(None)
+        assert session == f"session-{generation[0]}"
+        return Reply({"jsonrpc": "2.0", "id": message["id"], "result": {"tools": []}})
+
+    monkeypatch.setattr("proki.tools.stdio.urllib.request.urlopen", urlopen)
+    bridge = Bridge("http://127.0.0.1:1234/mcp")
+    hello = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}}
+    listed = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+    bridge.forward(hello)
+    bridge.forward({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    assert json.loads(bridge.forward(listed)[0])["id"] == 2
+    generation[0] = 2
+    assert json.loads(bridge.forward(listed)[0])["id"] == 2
+    assert requests[-4:] == [("tools/list", "session-1"), ("initialize", None),
+                             ("notifications/initialized", "session-2"), ("tools/list", "session-2")]
 
 
 def test_a_signal_of_a_program(tools):

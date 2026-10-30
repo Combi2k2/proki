@@ -50,7 +50,10 @@ class Llm:
 
         try:
             response = self._post(body)
-            if response.status_code == 400 and schema is not None:  # no structured output here
+            if schema is not None and (response.status_code == 400 or
+                                       response.status_code == 500 and self.api_url == "https://api.tokenfactory.nebius.com/v1"):
+                # Nebius can return 500 for a schema a model cannot enforce, even when
+                # the same model accepts a simpler schema and answers the prompt.
                 response = self._post(_schema_in_prompt(body, schema))
             if response.status_code != 200:
                 raise LlmError(f"{self.model}: HTTP {response.status_code}")

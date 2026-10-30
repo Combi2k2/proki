@@ -42,11 +42,13 @@ def read(bucket):
     return [note for note in Stream.registry["note"].current() or [] if note["bucket"] == bucket]
 
 
-def add(bucket, text, at=None, due=None):
+def add(bucket, text, at=None, due=None, plan_after=None):
     """A note in `bucket`, noted `at` (None: now), sorted at `due` (None: the next 04:00)."""
     at, notes = (at or Program.now or datetime.now(timezone.utc)).astimezone(), Stream.registry["note"]
     four = at.replace(hour=4, minute=0, second=0, microsecond=0)
     made = {"content": text, "bucket": bucket, "due": minutes(due or (four if four > at else four + timedelta(days=1)))}
+    if plan_after is not None:
+        made["plan_after"] = plan_after
     with notes.writing():
         return made | {"id": notes.put_row(made, at=at), "created_at": minutes(at)}
 
@@ -730,6 +732,81 @@ async def test_a_todo_for_a_group_you_have_is_planned_with_it(tmp_path, ui, stor
     assert board.groups.current()[0]["tags"] == ["papers", "research"]
     first, check = sorted(board.ops.read(), key=lambda op: op.id)
     assert (first.group, check.after) == (thesis, ["list_the_key_papers", "outline_the_chapters"])  # a new one, and the one it had
+    Program.stop()
+
+
+async def test_choosing_a_new_group_is_not_treated_as_no_answer(tmp_path, ui, store):
+    from proki.channels import Channels, jev, llm
+
+    now = datetime.now(timezone.utc)
+    records.add("work.groups", now, name="Thesis", desc="writing")
+    await jev.serve(Channels.bus, SayingJev({"milk": [0.9]}, choice={"milk": {0: 0.8, 1: 0.1}}))
+    await llm.serve(Channels.bus, breaking := BreakingLlm())
+    go = planning(tmp_path, store)
+    add("Todo", "Buy milk", now)
+    await go(lambda: ui.questions())
+    assert ui.labels(ui.questions()[0]) == ["A new group", "Thesis"]
+    # The open automation editor reads this condition before the popup is answered.
+    matching = Program.registry["task_planner"].states["matching"]
+    assert matching.next[0].conds[0].current() is True
+    await ui.click("A new group")  # index 0 is an answer, not Later
+    await go(lambda: bool(breaking.prompts))
+    assert "a new group" in breaking.prompts[0]
+    Program.stop()
+
+
+async def test_a_new_todo_is_not_held_by_another_todos_delay(tmp_path, ui, store):
+    from proki.channels import Channels, jev
+
+    now = datetime.now(timezone.utc)
+    records.add("work.groups", now, name="Thesis", desc="writing")
+    await jev.serve(Channels.bus, SayingJev({}, choice={"milk": {0: 0.8, 1: 0.1}}))
+    go = planning(tmp_path, store)
+    add("Todo", "Wait for reply", now, plan_after=minutes(now + timedelta(hours=2)))
+    add("Todo", "Buy milk", now)
+    await go(lambda: bool(ui.questions()))
+    assert ui.labels(ui.questions()[0]) == ["A new group", "Thesis"]
+    Program.stop()
+
+
+async def test_a_delayed_todo_waits_for_its_own_delay(tmp_path, ui, store):
+    go = planning(tmp_path, store)
+    now = datetime.now(timezone.utc)
+    add("Todo", "Buy milk", now, plan_after=minutes(now + timedelta(hours=2)))
+    await go(cycles=3)
+    assert ui.questions() == []
+    Program.stop()
+
+
+async def test_the_earliest_ready_postponed_todo_goes_next(tmp_path, ui, store):
+    from proki.channels import Channels, jev
+
+    now = datetime.now(timezone.utc)
+    records.add("work.groups", now, name="Thesis", desc="writing")
+    await jev.serve(Channels.bus, SayingJev({}, choice={"milk": {0: 0.8, 1: 0.1}}))
+    go = planning(tmp_path, store)
+    add("Todo", "Wait for reply", now, plan_after=minutes(now + timedelta(hours=2)))
+    add("Todo", "Buy milk", now, plan_after=minutes(now - timedelta(minutes=1)))
+    await go(lambda: bool(ui.questions()))
+    assert "Buy milk" in ui.questions()[0]["context"]
+    Program.stop()
+
+
+async def test_postponing_one_group_question_does_not_repeat_it_or_block_the_next_todo(tmp_path, ui, store):
+    from proki.channels import Channels, jev
+
+    now = datetime.now(timezone.utc)
+    records.add("work.groups", now, name="Thesis", desc="writing")
+    await jev.serve(Channels.bus, SayingJev({}, choice={"milk": {0: 0.8, 1: 0.1}}))
+    go = planning(tmp_path, store)
+    add("Todo", "Wait for reply", now)
+    await go(lambda: bool(ui.questions()))
+    await ui.click(None)
+    await go(lambda: read("Todo")[0].get("plan_after") is not None)
+    assert len(ui.questions()) == 1
+    add("Todo", "Buy milk", now)
+    await go(lambda: len(ui.questions()) == 2)
+    assert "Buy milk" in ui.questions()[-1]["context"]
     Program.stop()
 
 
