@@ -17,8 +17,8 @@
 
 <a id="download"></a>
 <p align="center">
-  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.0/proki_0.1.0_aarch64.dmg"><img src="https://img.shields.io/badge/macOS-installer-007AFF?style=flat&logo=apple&logoColor=white" alt="macOS installer" /></a>
-  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.0/proki_0.1.0_x64-setup.exe"><img src="https://img.shields.io/badge/Windows-installer-0078D4?style=flat&logo=windows11&logoColor=white" alt="Windows installer" /></a>
+  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.1/proki_0.1.0_aarch64.dmg"><img src="https://img.shields.io/badge/macOS-installer-007AFF?style=flat&logo=apple&logoColor=white" alt="macOS installer" /></a>
+  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.1/proki_0.1.0_x64-setup.exe"><img src="https://img.shields.io/badge/Windows-installer-0078D4?style=flat&logo=windows11&logoColor=white" alt="Windows installer" /></a>
 </p>
 
 <p align="center">
