@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://img.shields.io/github/downloads/Combi2k2/proki/total"><img src="https://img.shields.io/github/downloads/Combi2k2/proki/total?style=flat&label=Downloads" alt="Downloads" /></a>
   <a href="https://github.com/Combi2k2/proki/stargazers"><img src="https://img.shields.io/github/stars/Combi2k2/proki?style=flat&label=GitHub%20stars" alt="GitHub stars" /></a>
   <a href="https://github.com/Combi2k2/proki/actions/workflows/release.yml"><img src="https://github.com/Combi2k2/proki/actions/workflows/release.yml/badge.svg?branch=main" alt="Release workflow status" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Combi2k2/proki?style=flat" alt="MIT license" /></a>
@@ -17,8 +18,13 @@
 
 <a id="download"></a>
 <p align="center">
-  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.1/proki_0.1.0_aarch64.dmg"><img src="https://img.shields.io/badge/macOS-installer-007AFF?style=flat&logo=apple&logoColor=white" alt="macOS installer" /></a>
-  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.1/proki_0.1.0_x64-setup.exe"><img src="https://img.shields.io/badge/Windows-installer-0078D4?style=flat&logo=windows11&logoColor=white" alt="Windows installer" /></a>
+  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.1/proki_0.1.0_aarch64.dmg">
+    <img src="https://img.shields.io/badge/Download-macOS-24292F?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" />
+  </a>
+  &nbsp;
+  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.1/proki_0.1.0_x64-setup.exe">
+    <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" />
+  </a>
 </p>
 
 <p align="center">
