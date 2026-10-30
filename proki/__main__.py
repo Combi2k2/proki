@@ -46,12 +46,13 @@ BUS   = 10    # seconds it waits for the message bus's server, if it's starting 
 
 def main() -> int:
     """Run, until the app or a signal says to stop; or, with `mcp`, the tools for an agent."""
+    settings.configure_ports()
     if sys.argv[1:2] == ["mcp"]:
         from proki.tools import stdio
         return stdio.main()
     config = settings.load()
-    if nats.NatsBus.is_up(settings.HOST, settings.TOOLS_PORT):
-        print(f"port {settings.TOOLS_PORT} is in use: proki may be running already. Quit it first; nothing was started.", flush=True)
+    if nats.NatsBus.is_up(settings.HOST, settings.PORTS.tools):
+        print(f"port {settings.PORTS.tools} is in use: proki may be running already. Quit it first; nothing was started.", flush=True)
         return 1
     asyncio.run(running(config))
     return 0
@@ -64,10 +65,10 @@ async def running(config: settings.Settings) -> None:
     migrate(db, new)
     work, apps, stopping = Work(db), Apps(AppDB(db)), asyncio.Event()
 
-    up = lambda: nats.NatsBus.is_up(settings.HOST, settings.NATS_PORT)
+    up = lambda: nats.NatsBus.is_up(settings.HOST, settings.PORTS.nats)
     wait_until(up, BUS)  # its server, if it's starting too
     try:
-        bus = await nats.NatsBus.connect(settings.HOST, settings.NATS_PORT) if up() else nats.LocalBus()
+        bus = await nats.NatsBus.connect(settings.HOST, settings.PORTS.nats) if up() else nats.LocalBus()
     except Exception:
         bus = nats.LocalBus()
     if isinstance(bus, nats.LocalBus):  # one in this process: the app can't reach it
@@ -80,7 +81,7 @@ async def running(config: settings.Settings) -> None:
     library = Popup.lib = Library(db, settings.ASSETS_DIR, settings.MEDIA_DIR, pools=[Popup.POOL])
     library.purge()
     Lock.handler = platforms.current().lock_screen  # the engine locks the screen itself
-    Recording.client = aw.ActivityWatchClient(settings.HOST, settings.AW_PORT)
+    Recording.client = aw.ActivityWatchClient(settings.HOST, settings.PORTS.activitywatch)
     history = Stream.storage = storage.HistoryDB(db)
     kept    = storage.SpecDB(db)
     if (specs := kept.load()) is None:  # the first time: your programs' folder if you had one (read once, then left as it is), else proki's
@@ -96,7 +97,7 @@ async def running(config: settings.Settings) -> None:
                 apps=apps, reload=engine.reload, model=engine.model)
     shipped = Shipped(settings.SHIPPED_DIR, storage.StateDB(db))
     shipped.update(engine.model)
-    tools   = Tools(engine, shipped, library, stores=[work], config=config).http(settings.TOOLS_PORT, Tools.token(settings.TOOLS_TOKEN))
+    tools   = Tools(engine, shipped, library, stores=[work], config=config).http(settings.PORTS.tools, Tools.token(settings.TOOLS_TOKEN))
     serving = asyncio.create_task(tools.serve())
 
     loop = asyncio.get_running_loop()

@@ -1,7 +1,7 @@
 // A stand-in for the app, in a browser (`npm run serve`): each page loads made-up rows, so it can
 // be seen and tried without the engine. Only in development; the app's own build never has it.
 
-import type { Board, Reference, Today } from "@/lib/proki"
+import type { Board, Ports, Reference, Today } from "@/lib/proki"
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString()
 const day = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString()
@@ -109,6 +109,9 @@ function operated(expr: string): unknown[] {
     return op === "ts_mean" ? k.reduce((a, b) => a + b, 0) / k.length : op === "ts_sum" ? k.reduce((a, b) => a + b, 0) : op === "ts_min" ? Math.min(...k) : Math.max(...k)
   })
 }
+let previewPorts: Ports = { activitywatch: 5600, nats: 4222, tools: 9144 }
+const activePorts = { ...previewPorts }
+
 const tools: Record<string, (args: Record<string, unknown>) => unknown> = {
   playground: ({ expr, action, variables }) => {
     const vars = Object.fromEntries(Object.entries(played).map(([k, v]) => [k, { ...v, value: (variables as Record<string, unknown> | undefined)?.[k] ?? v.value }]))
@@ -162,6 +165,8 @@ const tools: Record<string, (args: Record<string, unknown>) => unknown> = {
                                { name: "working", desc: "while you work", every: 1, do: [], next: [{ goto: "idle", conds: [], rules: [], desc: "" }] }] }
   },
   get_settings: () => ({
+    ports: previewPorts,
+    active_ports: activePorts,
     services: {
       llm: { provider: "openrouter", url: "https://openrouter.ai/api/v1", model: "google/gemini-3.5-flash-lite" },
       jev: null,
@@ -172,6 +177,8 @@ const tools: Record<string, (args: Record<string, unknown>) => unknown> = {
         anthropic:  { name: "Anthropic", url: "https://api.anthropic.com/v1", key: false },
         google:     { name: "Google", url: "https://generativelanguage.googleapis.com/v1beta/openai", key: false },
         openrouter: { name: "OpenRouter", url: "https://openrouter.ai/api/v1", key: true },
+        nebius:     { name: "Nebius", url: "https://api.tokenfactory.nebius.com/v1", key: false },
+        nvidia:     { name: "NVIDIA", url: "https://integrate.api.nvidia.com/v1", key: false },
         custom:     { name: "Custom", url: "", key: false },
       },
       jev: {
@@ -181,6 +188,10 @@ const tools: Record<string, (args: Record<string, unknown>) => unknown> = {
       },
     },
   }),
+  set_ports: (args) => {
+    previewPorts = { activitywatch: Number(args.activitywatch), nats: Number(args.nats), tools: Number(args.tools) }
+    return tools.get_settings({})
+  },
   get_media: ({ kind }) => {
     const media = media_.filter((m) => !kind || m.kind === kind)
     return { media, total: media.length }

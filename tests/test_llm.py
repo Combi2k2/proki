@@ -39,8 +39,9 @@ def test_asking_with_context(posts):
     assert llm.ask("Deep or shallow?", context={"role": "You help with focus.", "activity": "thesis"}) == "Deep."
     url, headers, body = posts[0]
     assert url == "https://x/v1/chat/completions" and headers == {"Authorization": "Bearer k"}
-    assert [m["role"] for m in body["messages"]] == ["system", "user"]  # the context, then the question
-    assert '"activity": "thesis"' in body["messages"][0]["content"]
+    assert [m["role"] for m in body["messages"]] == ["system", "system", "user"]
+    assert "Think less" in body["messages"][0]["content"]
+    assert '"activity": "thesis"' in body["messages"][1]["content"]
 
 
 def test_structured_answers_and_a_service_without_them(posts):
@@ -65,3 +66,22 @@ def test_json_in_a_reply():
     assert parse_json("[1, 2]") == [1, 2]
     with pytest.raises(LlmError, match="not JSON"):
         parse_json("no")
+
+
+def test_nebius_schema_envelope(posts):
+    schema = {"type": "object", "properties": {"choice": {"type": "string"}}}
+    posts.replies = [Reply(200, '{"choice": "deep"}')]
+    Llm("https://api.tokenfactory.nebius.com/v1", None, "model").ask("Classify", schema=schema)
+    assert posts[0][2]["response_format"]["json_schema"] == {
+        "name": "reasoning_schema", "strict": True, "schema": schema,
+    }
+
+
+@pytest.mark.parametrize("model", ["nvidia/Nemotron-3.5-Lightning", "Nemotron-3.5-Lighting"])
+def test_nemotron_is_explicitly_asked_for_brief_useful_output(posts, model):
+    posts.replies = [Reply(200, "Take the next small step.")]
+    Llm("https://x/v1", None, model).ask("Help me focus", context="Be kind.")
+    messages = posts[0][2]["messages"]
+    assert messages[0]["role"] == "system"
+    assert "Think less" in messages[0]["content"] and "useful" in messages[0]["content"]
+    assert messages[1] == {"role": "system", "content": "Be kind."}

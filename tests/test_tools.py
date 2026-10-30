@@ -198,3 +198,39 @@ def test_the_playground_works_on_its_own_names_and_leaves_yours_alone(tools):
     assert call(tools, "playground", action={"poke": {"text": "'hi'"}})[0]  # only a variable's
     assert "unknown name" in call(tools, "playground", expr="focus")[1]  # yours aren't there
     assert Stream.registry is live and Stream.now == now
+
+
+async def test_settings_reply_finishes_for_the_desktop_client(tools, tmp_path):
+    import httpx2
+    from proki.tools.settings import tools as service_tools
+
+    # A settings file of our own; the desktop's ordinary HTTP client reads the
+    # whole reply rather than keeping an SSE reader running.
+    tool = next(t for t in service_tools(settings.Settings(), tmp_path / "config.toml") if t.name == "get_settings")
+    schema, _ = tools.tools[tool.name]
+    tools.tools[tool.name] = schema, tool.run
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    server = tools.http(port, "secret")
+    serving = asyncio.create_task(server.serve())
+    while not server.started:  await asyncio.sleep(0.01)
+    headers = {"Authorization": "Bearer secret", "Accept": "application/json, text/event-stream",
+               "MCP-Protocol-Version": "2025-06-18"}
+    try:
+        async with httpx2.AsyncClient(headers=headers, timeout=2) as client:
+            url = f"http://127.0.0.1:{port}/mcp"
+            hello = await client.post(url, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+                "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "proki-ui", "version": "test"}}})
+            assert hello.status_code == 200 and hello.headers["content-type"].startswith("application/json")
+            client.headers["Mcp-Session-Id"] = hello.headers["mcp-session-id"]
+            ready = await client.post(url, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+            assert ready.status_code == 202
+            for id, method, params in [(2, "tools/list", {}), (3, "tools/call", {"name": "get_settings", "arguments": {}})]:
+                reply = await client.post(url, json={"jsonrpc": "2.0", "id": id, "method": method, "params": params})
+                assert reply.status_code == 200 and reply.headers["content-type"].startswith("application/json")
+                assert reply.json()["id"] == id
+            assert set(reply.json()["result"]["structuredContent"]) == {"services", "providers", "ports", "active_ports"}
+    finally:
+        server.should_exit = True
+        await serving

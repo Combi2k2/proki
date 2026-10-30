@@ -1,8 +1,8 @@
 # Benchmarks
 
-> The score checked here was the first app's (`legacy/focus/`), removed on 2026-10-10 with
-> it, and `benchmarks/swell_kw.py` still imports it, so it doesn't run now. Today's focus
-> score is a signal of the config (docs/components.md).
+> Historical results for the first app's score (`legacy/focus/`), removed on 2026-10-10.
+> The unused benchmark folder was removed on 2026-10-30. Today's focus score is a signal
+> of the config (docs/components.md).
 
 ## SWELL-KW direction check (2026-09-28)
 
@@ -13,7 +13,7 @@
 did office work (reports, presentations, research) under three conditions,
 every minute labelled: **N** normal, **I** email interruptions, **T** time pressure.
 
-**Method** (`benchmarks/swell_kw.py`): the raw uLog computer logs are turned
+**Method used at the time:** the raw uLog computer logs were turned
 into proki segments like ActivityWatch would record them (focused app changes
 only on window activation; 3 min without input = away). Word, PowerPoint and
 Internet Explorer count as deep, Outlook as shallow, everything else neutral.
@@ -25,10 +25,6 @@ ours from the raw log, per participant. 23 of 25 match exactly (correlation
 1.00, so labels and log times line up to the minute). **PP11 and PP16 don't
 match at any time shift** (their label and log files don't belong together) and
 are excluded automatically.
-
-```
-uv run python benchmarks/swell_kw.py DATA_DIR   # DATA_DIR: features.csv + logs/*.xml
-```
 
 **Result, 10-min window:**
 

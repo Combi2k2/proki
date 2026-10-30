@@ -5,6 +5,7 @@ computer, where only you can read it. A change is asked from then on.
     test_connection(service, provider, ...)    whether it answers there, with that key
     list_models(service, provider, ...)        the models there
     set_settings(service, provider, model)     kept, and asked from now on
+    set_ports(activitywatch, nats, tools)      local ports, applied at the next start
 
 A key left out is the one kept for that provider.
 """
@@ -48,6 +49,9 @@ def tools(config: Settings, path: Path = settings.CONFIG_PATH) -> list[Tool]:
         Tool("set_settings", "A service set: its provider, url, key and model, kept, and asked from now on. The services "
                              "then, as get_settings gives them.", given | {"model": MODEL},
              lambda args: save(config, path, **args), ("service", "provider", "model")),
+        Tool("set_ports", "Save local service ports. Quit and reopen Proki to apply them.",
+             {name: {"type": "integer", "minimum": 1, "maximum": 65535} for name in settings.Ports.__dataclass_fields__},
+             lambda args: save_ports(path, **args), tuple(settings.Ports.__dataclass_fields__)),
     ]
 
 
@@ -58,7 +62,16 @@ def read(path: Path) -> dict[str, Any]:
         "services" : {service: asdict(said[service]) if service in said else None for service in settings.PROVIDERS},
         "providers": {service: {provider: {**known, "key": settings.key(service, provider) is not None} for provider, known in providers.items()}
                       for service, providers in settings.PROVIDERS.items()},
+        "ports"       : asdict(settings.read_ports(path)),
+        "active_ports": asdict(settings.PORTS),
     }
+
+
+def save_ports(path: Path, **values: int) -> dict[str, Any]:
+    """Local ports kept for the next start; the running connections stay as they are."""
+    ports = settings.Ports(**values)
+    settings.write(path, settings.read(path), ports=ports)
+    return read(path)
 
 
 def where(service: str, provider: str, url: str | None, given: str | None) -> tuple[str, str | None]:

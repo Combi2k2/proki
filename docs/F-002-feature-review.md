@@ -1,5 +1,44 @@
 # F-002: what the feature review asks for
 
+## Follow-up audit — 2026-10-30
+
+- Onboarding keeps its first two messages and gives the setup steps a more conversational
+  voice. The brain setup step opens Settings directly; Later still completes the welcome.
+- Settings names the services LLM and Jev, includes colored Nebius and NVIDIA provider
+  marks, and provides compact controls for ActivityWatch, NATS and MCP ports. Changes
+  take effect together after restart; service saves preserve the port table. The launcher,
+  engine, backfill command, MCP proxy and native app read the saved configuration.
+- Appearance preferences and duplicate light-theme tokens were removed. All app windows
+  start in dark mode, including users who previously saved a light preference.
+- Import-graph and exported-binding checks found no unused UI modules after cleanup. Removed 34
+  unreachable component declarations and the imports and exports they left behind.
+  Helpers still used inside a component were kept, even when their exports were removed.
+- Python layout was compared with unchanged `storage.py`, `services/activitywatch.py`,
+  `tools/media.py` and `tools/records.py`, as well as the existing untracked installer
+  entry point and tests. The formatter-only changes were removed: edited modules retain
+  the project's aligned assignments, compact tool definitions and short guards. Repeated
+  key-file reads were removed. Ruff's 21 unused-import findings in `core/ops/__init__.py` are intentional
+  operator registration imports; deleting them would break expression lookup. No other
+  Pyflakes findings were reported in `proki/` or `launch.py`.
+- Removed the unused `benchmarks/` folder, obsolete Windows bootstrap, completed key and
+  notes migration scripts, and the old Jev smoke script. These paths had no active callers;
+  the benchmark and bootstrap imported packages already removed from Proki. Historical
+  benchmark results remain in `docs/benchmarks.md`, without a stale execution command.
+- Moved the remaining toggle variants into their sole consumer, `toggle-group.tsx`, and
+  removed `toggle.tsx`. Removed the now-unreferenced `separator.tsx`, the unused `DoLabel`
+  component and its imports, plus 23
+  unnecessary exports from application modules; locally used helpers and types stay private.
+- Verification covers Python regressions, native port parsing/validation, TypeScript
+  unused-symbol checks, the frontend build, and isolated Chrome flows for onboarding,
+  Settings navigation, provider selection, dark mode and port saving at desktop and
+  narrow widths. New port settings do not disconnect the running app.
+
+Remaining limits: Windows/WebView2 needs a native installer retest. Browser-extension
+ports must be matched in the extension's own settings. Vite still reports its existing
+large bundle and configuration-loader warnings. No live provider credentials were used
+in the browser preview. The broader brevity prompt present in the LLM client was kept;
+the context regression now checks that the instruction and supplied context both arrive.
+
 ## Objective
 
 FEATURE_REVIEW.md, worked through: the programs made simpler where they ask for it (notes,
@@ -111,7 +150,7 @@ M1 the programs
     no name starts with `notes`; your notes are all still there.
     [x] main.json: the variable and its signals renamed; every program that reads them
     [x] proki/serve.py on_notes, noted: the new names (and each note's link, read)
-    [x] scripts/notes_rename.py (one-off): your copy's specs and var_notes renamed; run on a
+    [x] The one-off notes rename (script retired after completion): your copy's specs and var_notes renamed; run on a
         copy first, with a backup, your go-ahead before your proki.db
   1.5 a sorted note kept, with where it went                                           done
     AC: a todo made a task stays, in Todo, with its link to the task's group; the app opens it.

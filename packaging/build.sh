@@ -20,6 +20,24 @@ esac
 rm -rf build/engine build/nats
 uv run pyinstaller packaging/proki-engine.spec --distpath build/engine --workpath build/pyinstaller --noconfirm
 
+# The input watcher is not part of ActivityWatch's standard release. Freeze it in
+# its own environment: its aw-core pins conflict with the engine's platformdirs.
+uv venv --python 3.12 build/input-venv
+if [ "$os" = windows ]; then
+  watcher_python=build/input-venv/Scripts/python.exe
+  watcher_exe=aw-watcher-input.exe
+else
+  watcher_python=build/input-venv/bin/python
+  watcher_exe=aw-watcher-input
+fi
+uv pip install --python "$watcher_python" pyinstaller==6.22.3 \
+  'aw-watcher-input @ git+https://github.com/ActivityWatch/aw-watcher-input.git@4e6461dbf55a1c1aa8f9ece4df5f109188f56f61' \
+  'aw-watcher-afk @ git+https://github.com/ActivityWatch/aw-watcher-afk.git@b4839261688eb7980d1730d46dd35a36b21cfc1d'
+"$watcher_python" -m PyInstaller packaging/input-watcher.py --name aw-watcher-input \
+  --distpath build/engine/proki-engine --workpath build/input-pyinstaller --specpath build \
+  --collect-submodules aw_watcher_afk --collect-submodules pynput --noconfirm
+"build/engine/proki-engine/aw-watcher-input/$watcher_exe" --help
+
 name="nats-server-v$NATS-$os-$arch"
 url="https://github.com/nats-io/nats-server/releases/download/v$NATS"
 mkdir -p build/nats

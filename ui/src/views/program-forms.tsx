@@ -42,11 +42,11 @@ export type Save = (data: Record<string, unknown>) => Promise<string | null>
 // --- values, as they're typed ---------------------------------------------------------------
 
 /** A variable's value as it's typed: empty is unknown, true / false, a number, else an expression. */
-export function valueText(value: unknown): string {
+function valueText(value: unknown): string {
   return value === null || value === undefined ? "" : String(value)
 }
 
-export function parseValue(text: string): boolean | number | string | null {
+function parseValue(text: string): boolean | number | string | null {
   const t = text.trim()
   if (t === "") return null
   if (t === "true" || t === "false") return t === "true"
@@ -92,7 +92,7 @@ function Form({ children, onSave, onCancel, saveLabel = "Save", plain }: {
 
 /** A field: its label, a hint beside it, then what it holds (`group`: several controls of their
  *  own, so a click on one isn't taken as one on the first). */
-export function Field({ label, hint, group, children, className }: { label: string; hint?: string; group?: boolean; children: ReactNode; className?: string }) {
+function Field({ label, hint, group, children, className }: { label: string; hint?: string; group?: boolean; children: ReactNode; className?: string }) {
   const Box = group ? "div" : "label"
   return (
     <Box role={group ? "group" : undefined} aria-label={group ? label : undefined} className={cn("flex min-w-0 flex-col gap-1", className)}>
@@ -112,7 +112,7 @@ function Text({ value, onChange, code, names, ...props }: {
   return <Input value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-8 text-sm", code && "font-mono text-xs")} spellCheck={!code} {...props} />
 }
 
-export function Choice({ value, onChange, options, className }: {
+function Choice({ value, onChange, options, className }: {
   value: string
   onChange: (value: string) => void
   options: [string, string][]  // value, label
@@ -132,7 +132,7 @@ const Row = ({ children }: { children: ReactNode }) => <div className="grid grid
 type Where = { scope: Scope; program: string | null; state: string | null }
 /** A name, a description and a type given from outside the form (a panel's title, the line
  *  under it, and the type beside its name). */
-export type Named = { name: string; desc: string; type: Type }
+type Named = { name: string; desc: string; type: Type }
 
 /** A variable: where it starts, and its type. */
 export function VariableForm({ spec, where, named, onSave, onCancel }: {

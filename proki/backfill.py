@@ -40,12 +40,13 @@ class Replayed:
 
 
 def main() -> int:
+    settings.configure_ports()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--days", type=float, default=14, help="how far back (default 14)")
     days   = parser.parse_args().days
     db     = storage.connect(settings.DB_PATH)
     Apps(AppDB(db))  # the `label` and `depth` inputs read your labels
-    Recording.client = ActivityWatchClient(settings.HOST, settings.AW_PORT)
+    Recording.client = ActivityWatchClient(settings.HOST, settings.PORTS.activitywatch)
     Stream.storage   = Replayed(storage.HistoryDB(db))
 
     if (specs := storage.SpecDB(db).load()) is None:

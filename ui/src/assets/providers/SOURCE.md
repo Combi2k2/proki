@@ -1,3 +1,8 @@
-The providers' logos, as published: @lobehub/icons-static-svg 1.101.0 (MIT), icons/<name>.svg
-(https://unpkg.com/@lobehub/icons-static-svg@1.101.0/icons/openai.svg, and so on), the one-colour
-versions. Their paths are unchanged; only width, height, style and title were taken off.
+Provider logos: @lobehub/icons-static-svg 1.101.0 (MIT), downloaded from
+https://unpkg.com/@lobehub/icons-static-svg@1.101.0/icons/.
+
+Google, OpenRouter and NVIDIA use their published `<name>-color.svg` variants.
+OpenAI, Anthropic and Nebius use `<name>.svg`, with white, warm tan and yellow
+fills respectively on the dark UI. OpenAI's monochrome treatment follows its
+[brand guidelines](https://openai.com/brand/).
+The logo geometry is unchanged.

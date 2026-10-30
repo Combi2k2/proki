@@ -43,9 +43,44 @@ SHIPPED_DIR  = BACKEND_DIR / "programs" / "config"       # the programs proki sh
 ASSETS_DIR   = BACKEND_DIR / "assets"                    # what proki ships: the media library's, and the providers
 
 HOST         = "127.0.0.1"                               # where ActivityWatch, the message bus and the tools are
-AW_PORT      = 5600
-NATS_PORT    = 4222
-TOOLS_PORT   = 9144
+
+
+@dataclass(frozen=True)
+class Ports:
+    """Local service ports, applied together when Proki starts."""
+
+    activitywatch : int = 5600
+    nats          : int = 4222
+    tools         : int = 9144
+
+    def __post_init__(self) -> None:
+        values = asdict(self)
+        for name, value in values.items():
+            if type(value) is not int or not 1 <= value <= 65535:
+                raise ValueError(f"{name}: choose a whole-number port from 1 to 65535")
+        if len(set(values.values())) != len(values):
+            raise ValueError("Each service needs a different port")
+
+
+PORTS = Ports()
+
+
+def document(path: Path) -> dict:
+    """Read the shared configuration, including Windows UTF-8 BOM files."""
+    return tomllib.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else {}
+
+
+def read_ports(path: Path = CONFIG_PATH) -> Ports:
+    values = document(path).get("ports", {})
+    if not isinstance(values, dict):  raise ValueError("ports must be a table")
+    return Ports(**{name: values[name] for name in Ports.__dataclass_fields__ if name in values})
+
+
+def configure_ports(path: Path = CONFIG_PATH) -> None:
+    """Load ports once at startup; saving settings does not disconnect this process."""
+    global PORTS
+    PORTS = read_ports(path)
+
 
 PROVIDERS = {  # each service's, by id: its name, its url (custom: yours), and its models if it can't list them, or where it does
     "llm": json.loads((ASSETS_DIR / "llms.json").read_text()),
@@ -88,17 +123,21 @@ def connect(client: Llm | Jev, connection: Connection, key: str | None) -> None:
 def read(path: Path) -> dict[str, Connection]:
     """The services set at `path`, by name (none if it's missing). One whose provider isn't
     known isn't set."""
-    said  = tomllib.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else {}
+    said  = document(path)
     shown = lambda service: Connection(**{k: str(v) for k, v in said[service].items() if k in Connection.__dataclass_fields__})
     return {service: made for service in PROVIDERS
             if isinstance(said.get(service), dict) and (made := shown(service)).provider in PROVIDERS[service]}
 
 
-def write(path: Path, connections: dict[str, Connection]) -> None:
-    """`connections` kept at `path`, the only thing there."""
+def write(path: Path, connections: dict[str, Connection], *, ports: Ports | None = None) -> None:
+    """The services kept at `path`, with the ports preserved unless given."""
+    if ports is None and "ports" in document(path):  ports = read_ports(path)
+    sections = [f"[{service}]\n" + "".join(f"{name} = {json.dumps(value)}\n" for name, value in asdict(connection).items())
+                for service, connection in connections.items()]
+    if ports is not None:
+        sections.append("[ports]\n" + "".join(f"{name} = {value}\n" for name, value in asdict(ports).items()))
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(f"[{service}]\n" + "".join(f"{k} = {json.dumps(v)}\n" for k, v in asdict(connection).items())
-                              for service, connection in connections.items()))
+    path.write_text("\n".join(sections), encoding="utf-8")
 
 
 def key(service: str, provider: str) -> str | None:
@@ -118,9 +157,11 @@ def keep(service: str, provider: str, given: str) -> None:
     """`given` kept as the key for `service` at `provider` (empty: none kept), where only you can
     read it. ValueError if it can't be written."""
     named = f"{service}.{provider}"
-    if not given and named not in keys():
+    changed = keys()
+    if not given and named not in changed:
         return
-    changed = {k: v for k, v in keys().items() if k != named} | ({named: given} if given else {})
+    if given:   changed[named] = given
+    else:       del changed[named]
     try:
         KEYS.parent.mkdir(parents=True, exist_ok=True)
         KEYS.touch(mode=0o600)  # yours only before a key's in it

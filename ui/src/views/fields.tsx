@@ -331,7 +331,7 @@ export function Criteria({ criteria, label = "Options", hint = "label, and what 
   )
 }
 
-export const TYPES = ["any", "number", "integer", "boolean", "string", "time", "object", "list"]
+const TYPES = ["any", "number", "integer", "boolean", "string", "time", "object", "list"]
 type Schema = Record<string, unknown>
 const SCHEMAS: Record<string, Schema> = {
   any: {}, number: { type: "number" }, integer: { type: "integer" }, boolean: { type: "boolean" }, string: { type: "string" },
@@ -340,7 +340,7 @@ const SCHEMAS: Record<string, Schema> = {
 const isObject = (t: Type | undefined) => typeof t === "object" && t.type === "object"
 
 /** A type's kind, as it's picked: its name, an object or a list (inherit: none, its own). */
-export function kindOf(t: Type | undefined): string {
+function kindOf(t: Type | undefined): string {
   if (t === undefined) return "inherit"
   if (typeof t === "string") return t === "array" || t.startsWith("list[") ? "list" : t in SCHEMAS ? t : "any"
   if (t.type === "array") return "list"
@@ -349,7 +349,7 @@ export function kindOf(t: Type | undefined): string {
 }
 
 /** A type as a schema, a short name as the one it stands for. */
-export const schemaOf = (t: Type): Schema => (typeof t === "string" ? SCHEMAS[t === "array" ? "list" : t] ?? {} : t)
+const schemaOf = (t: Type): Schema => (typeof t === "string" ? SCHEMAS[t === "array" ? "list" : t] ?? {} : t)
 
 /** A schema of a kind, from the one it was: the same kind, as it was (its options, what's
  *  proki's); another, a fresh one, what it means kept. */

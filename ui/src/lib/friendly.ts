@@ -16,7 +16,7 @@ export const AREAS: { id: Area; title: string; about: string }[] = [
   { id: "background", title: "Behind the scenes", about: "Quiet helpers the others rely on" },
 ]
 
-export type Icon = ComponentType<LucideProps>
+type Icon = ComponentType<LucideProps>
 type Known = { title: string; icon: Icon; about: string; area: Area }
 
 const drawn = new Map<string, Icon>()
@@ -34,7 +34,7 @@ const AREA_OF_TAG: Record<string, Area> = {
 /** A name, said: "call_family" → "Call family". */
 export const humane = (name: string) => (name.charAt(0).toUpperCase() + name.slice(1)).replace(/[_.-]+/g, " ")
 /** A program's name, as a title: "task_planner" → "Task Planner". */
-export const titled = (name: string) => name.split(/[_.-]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+const titled = (name: string) => name.split(/[_.-]+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
 
 /** A program, as anyone would say it. */
 export function friendly(program: { name: string; title?: string; desc: string; icon?: string; tags: string[] }): Known {

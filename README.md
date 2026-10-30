@@ -128,6 +128,17 @@ uv run launch.py
 
 For browser tracking, add ActivityWatch’s browser extension. Quit Proki or press `Ctrl-C` to stop it.
 
+### Local connections
+
+Settings lets you choose the ActivityWatch, message bus, and app tools ports. Each must be a
+different whole number from 1 to 65535. Defaults work for most computers; change them when a
+port is already in use. Save, then quit and reopen Proki to apply the changes together.
+If you run ActivityWatch separately or use its browser extension, configure the same
+ActivityWatch port there too. All three services stay on the loopback interface.
+
+Ports are saved in the `[ports]` section of `config.toml`, alongside the LLM and Jev
+connections. Saving a connection preserves your port settings. Proki uses the dark theme.
+
 <a id="for-builders"></a>
 ## 🛠️ For builders
 

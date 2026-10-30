@@ -134,7 +134,7 @@ Deep work still involves switching, but within a small set of related items (a
 - `proki check`: prints timeline, categories, metrics and findings on real ActivityWatch data.
 - New `proki replay --date YYYY-MM-DD`: replays a real day and lists the nudges that *would*
   have fired, to tune thresholds without being interrupted.
-- `scripts/try_openjev.py`-style smoke test for `OpenjevDecider`.
+- A smoke test for the former `OpenjevDecider` (the old script has since been retired).
 - Manual: run `uv run proki start`, walk through each new popup on macOS.
 
 

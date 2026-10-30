@@ -26,7 +26,7 @@ function plain(value: unknown): string {
 }
 
 /** What a list or a record holds, to open: "3 items", "4 fields". */
-export function holds(value: unknown): string {
+function holds(value: unknown): string {
   if (Array.isArray(value)) return value.length === 1 ? "1 item" : `${value.length} items`
   const n = Object.keys(value as object).length
   return n === 1 ? "1 field" : `${n} fields`

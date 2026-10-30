@@ -31,6 +31,7 @@ class Supervisor:
         healthy: Callable[[], bool],
         log_dir: Path,
         timeout: float = 10.0,
+        start_when_healthy: bool = False,
     ):
         self.name = name  # for the status: "ActivityWatch", "NATS", ...
         self.commands = commands  # each module's command line, by module name, the server first
@@ -40,15 +41,18 @@ class Supervisor:
         self.pid_file = log_dir / "pids"
         self.processes: dict[str, subprocess.Popen] = {}
         self.external = False  # already running, not started here
+        self.start_when_healthy = start_when_healthy  # a watcher attaches to an existing server
 
     def clean(self) -> bool:
         """Stop what an earlier run started and never stopped: whether there was any."""
-        if not self.pid_file.exists():
+        try:
+            pids = self.pid_file.read_text().split()
+        except FileNotFoundError:  # another launcher may have finished stopping it
             return False
         found = False
         win32 = sys.platform == "win32"
 
-        for line in self.pid_file.read_text().split():
+        for line in pids:
             if not line.isdigit():
                 continue  # a damaged file: skip what isn't a pid
             pid = int(line)
@@ -68,13 +72,13 @@ class Supervisor:
                     found = True
             except OSError:
                 pass
-        self.pid_file.unlink()
+        self.pid_file.unlink(missing_ok=True)
         return found
 
     def start(self) -> str:
         """Start them all, the server first: a short status for the tray."""
-        if self.clean():    wait_while(self.healthy, self.timeout)
-        if self.healthy():
+        if self.clean() and not self.start_when_healthy:  wait_while(self.healthy, self.timeout)
+        if self.healthy() and not self.start_when_healthy:
             self.external = True
             return f"{self.name} already running (not managed by proki)"
 

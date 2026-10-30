@@ -114,6 +114,8 @@ def test_prokis_windows_and_the_systems_are_never_in_focus():
         return module.watch()
 
     assert watching("proki", "proki question") is None and watching("proki", "proki") is None
+    assert watching("proki.exe", "proki question") is None
+    assert watching("proki-ui.exe", "proki") is None
     assert watching("Krita", "proki") == ("Krita", None)  # another app's window of that name
 
 
@@ -173,3 +175,36 @@ def test_one_pinned_is_read_whatever_is_in_focus(track):
     assert track.apps.get("Krita").track is False and track.apps.get("Quillpad").track is None
     Stream.registry["track.pin"].set(None)
     assert read("track.pin") is None and read("track.since") == pytest.approx(0)
+
+
+def test_tracking_reads_fresh_activity_after_streams_advance(track, monkeypatch):
+    # track is registered first, as in production; its inputs still hold last cycle's
+    # values when track.advance runs. Program.now also still refers to that cycle.
+    from proki.core.signals import Signal, Variable
+
+    app = Variable("app_name", None)
+    active = Variable("has_input", False)
+    Signal("active", "has_input")
+    Variable("tab_url", None)
+    monkeypatch.setattr(Program, "now", NOW)
+    Stream.tick(NOW)
+    assert read("track.now") is None
+    app.set("Quillpad")
+    active.set(True)
+    for seconds in (10, 20, 30, 40, 50, 60, 70):
+        at = NOW + timedelta(seconds=seconds)
+        Stream.tick(at)
+        Program.now = at
+        assert read("track.now")["key"] == "Quillpad"
+        assert read("track.since") == pytest.approx((seconds - 10) / 60)
+    assert Expr("track.now.track is None and track.since >= 1").value() is True
+
+
+def test_dwell_uses_the_cycle_clock_even_before_programs_tick(track, monkeypatch):
+    monkeypatch.setattr(module, "watch", lambda: ("Quillpad", None))
+    monkeypatch.setattr(Program, "now", NOW)
+    for seconds in (0, 10, 20, 30, 40, 50, 60):
+        at = NOW + timedelta(seconds=seconds)
+        Stream.tick(at)
+        assert read("track.since") == pytest.approx(seconds / 60)
+        Program.now = at

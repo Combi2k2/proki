@@ -3,7 +3,6 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 import { Slot } from "radix-ui"
 
-import { Separator } from "@/components/ui/separator"
 
 function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -14,20 +13,6 @@ function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
         "group/item-group flex w-full flex-col gap-4 has-data-[size=sm]:gap-2.5 has-data-[size=xs]:gap-2",
         className
       )}
-      {...props}
-    />
-  )
-}
-
-function ItemSeparator({
-  className,
-  ...props
-}: React.ComponentProps<typeof Separator>) {
-  return (
-    <Separator
-      data-slot="item-separator"
-      orientation="horizontal"
-      className={cn("my-2", className)}
       {...props}
     />
   )
@@ -156,41 +141,4 @@ function ItemActions({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function ItemHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="item-header"
-      className={cn(
-        "flex basis-full items-center justify-between gap-2",
-        className
-      )}
-      {...props}
-    />
-  )
-}
-
-function ItemFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="item-footer"
-      className={cn(
-        "flex basis-full items-center justify-between gap-2",
-        className
-      )}
-      {...props}
-    />
-  )
-}
-
-export {
-  Item,
-  ItemMedia,
-  ItemContent,
-  ItemActions,
-  ItemGroup,
-  ItemSeparator,
-  ItemTitle,
-  ItemDescription,
-  ItemHeader,
-  ItemFooter,
-}
+export { Item, ItemMedia, ItemContent, ItemActions, ItemGroup, ItemTitle, ItemDescription }

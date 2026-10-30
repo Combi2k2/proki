@@ -71,7 +71,8 @@ class Tools:
     def http(self, port: int, token: str) -> uvicorn.Server:
         """The tools on this machine's `port`, for the clients sending `token`.
         `await server.serve()` serves them, `should_exit = True` stops it."""
-        app = Bearer(self.server.streamable_http_app(), token)
+        # Calls return one result; desktop and stdio clients can read a complete body.
+        app = Bearer(self.server.streamable_http_app(json_response=True), token)
         return Quiet(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on",
                                     timeout_graceful_shutdown=2))  # a connection left open doesn't hold proki up
 

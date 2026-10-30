@@ -37,10 +37,15 @@ class Llm:
             "messages": _messages(prompt, context),
             "temperature": temperature,
         }
+        body["messages"].insert(0, {
+            "role": "system",
+            "content": "Think less. Keep reasoning brief and focus on useful, concrete results. "
+                        "Answer directly, without a long analysis. Follow the requested output format.",
+        })
         if schema is not None:
             body["response_format"] = {
                 "type": "json_schema",
-                "json_schema": {"name": "answer", "schema": schema, "strict": True},
+                "json_schema": {"name": "reasoning_schema", "strict": True, "schema": schema},
             }
 
         try:

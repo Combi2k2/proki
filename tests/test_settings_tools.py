@@ -88,3 +88,54 @@ def test_an_expression_evaluated_gives_its_value_and_type_or_why_not():
     make_variable("queue", [1, 2, 3])
     assert editor.evaluate("queue[1:]")["value"] == [2, 3]
     assert "unknown name" in editor.evaluate("nope")["error"]
+
+
+def test_ports_are_saved_validated_and_preserved_when_services_change(tmp_path):
+    path = tmp_path / "config.toml"
+    live = config.Settings()
+    defaults = config.read_ports(path)
+    assert (defaults.activitywatch, defaults.nats, defaults.tools) == (5600, 4222, 9144)
+    shown = settings.save_ports(path, activitywatch=5610, nats=4230, tools=9150)
+    assert shown["ports"] == {"activitywatch": 5610, "nats": 4230, "tools": 9150}
+    assert config.PORTS == defaults  # saving must not disconnect the running app
+    settings.save(live, path, "llm", "google", "gemini")
+    assert config.read_ports(path).tools == 9150
+    settings.save_ports(path, activitywatch=5611, nats=4231, tools=9151)
+    assert config.read(path)["llm"].model == "gemini"
+    assert config.read_ports(path).activitywatch == 5611
+
+
+@pytest.mark.parametrize("changed", [
+    {"activitywatch": 0}, {"nats": 65536}, {"tools": True}, {"tools": 9144.5},
+    {"tools": "9144"}, {"nats": 5600},
+])
+def test_bad_ports_do_not_replace_saved_settings(tmp_path, changed):
+    path = tmp_path / "config.toml"
+    settings.save_ports(path, activitywatch=5600, nats=4222, tools=9144)
+    before = path.read_text()
+    with pytest.raises(ValueError):
+        settings.save_ports(path, **({"activitywatch": 5600, "nats": 4222, "tools": 9144} | changed))
+    assert path.read_text() == before
+
+
+def test_startup_loads_ports_and_launcher_forwards_them(tmp_path, monkeypatch):
+    import importlib.util
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    path = tmp_path / "config.toml"
+    settings.save_ports(path, activitywatch=5612, nats=4232, tools=9152)
+    monkeypatch.setattr(config, "PORTS", config.Ports())
+    config.configure_ports(path)
+    assert config.PORTS == config.Ports(activitywatch=5612, nats=4232, tools=9152)
+    spec = importlib.util.spec_from_file_location("test_launch_ports", Path(__file__).resolve().parents[1] / "launch.py")
+    launcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(launcher)
+    monkeypatch.setattr(launcher.platforms, "current", lambda: SimpleNamespace(EXE=".exe", NATS_DIRS=[], AW_DIRS=[]))
+    monkeypatch.setattr(launcher, "find_commands", lambda names, *args: {name: [name] for name in names})
+    monkeypatch.setattr(launcher.ActivityWatchClient, "buckets", lambda self: {})
+    services = launcher.services(app=True)
+    assert services["NATS"].commands["nats-server"][-1] == "4232"
+    for command in services["ActivityWatch"].commands.values():
+        assert command[-4:] == ["--host", "127.0.0.1", "--port", "5612"]
+    assert services["ActivityWatch Input"].commands["aw-watcher-input"][-1] == "5612"

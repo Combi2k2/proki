@@ -102,7 +102,6 @@ const opening = (card?: string) => (!card ? null : /^\d+$/.test(card) ? Number(c
 function Main() {
   const [first, card] = location.hash.slice(1).split("/")  // the page it opens at, by its path: its view, then what in it
   const [view, setView] = useState<View>((first as View) || "today")
-  const [appearance, setAppearance] = useState(() => recall("proki-appearance", ["system", "light", "dark"] as const, "dark"))
   const [opened, setOpened] = useState<number | string | null>(opening(card))  // a card, or an automation, to open
   const [where, setWhere] = useState<Where>(GLOBAL)
   const [drawer, setDrawer] = useState(() => recall("proki-drawer", ["open", "shut"] as const, "shut") === "open")
@@ -127,15 +126,6 @@ function Main() {
     return () => (clearInterval(every), window.removeEventListener("online", send))
   }, [])
   const keep = (open: boolean) => (setDrawer(open), remember("proki-drawer", open ? "open" : "shut"))
-
-  useEffect(() => {
-    const root = document.documentElement
-    const systemDark = window.matchMedia("(prefers-color-scheme: dark)")
-    const apply = () => root.classList.toggle("dark", appearance === "dark" || (appearance === "system" && systemDark.matches))
-    apply()
-    systemDark.addEventListener("change", apply)
-    return () => systemDark.removeEventListener("change", apply)
-  }, [appearance])
 
   return (
     <div className="proki-frame flex h-screen gap-0 bg-muted p-2">
@@ -166,12 +156,15 @@ function Main() {
         {view === "tables" && <TablesView />}
         {view === "manual" && <ManualView onGo={go} />}
         {view === "contribute" && <ContributeView />}
-        {view === "settings" && <SettingsView appearance={appearance} onAppearance={(value) => { setAppearance(value); remember("proki-appearance", value) }}
-                                              onWelcome={() => setWelcome(true)} />}
+        {view === "settings" && <SettingsView onWelcome={() => setWelcome(true)} />}
         {!drawer && view === "programs" && <Drawer where={where} open={false} onOpen={keep} />}
       </div>
       {drawer && view === "programs" && <Drawer where={where} open onOpen={keep} />}
-      {welcome && <Welcome onDone={() => (setWelcome(false), remember("proki-welcomed", "yes"))} />}
+      {welcome && <Welcome onDone={(settings) => {
+        setWelcome(false)
+        remember("proki-welcomed", "yes")
+        if (settings) go("settings")
+      }} />}
     </div>
   )
 }

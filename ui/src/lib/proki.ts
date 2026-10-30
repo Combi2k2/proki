@@ -3,7 +3,6 @@
 import "@/lib/bridge"
 import "@/lib/preview"
 import { createRoot } from "react-dom/client"
-import { recall } from "@/lib/remember"
 import type { ReactNode } from "react"
 import "@/index.css"
 
@@ -25,7 +24,7 @@ export type Shown = {
 /** The board (proki/programs/code/work.py): groups, a card each, of tasks. A
  * group's tags, the most relevant first: its first tag's row is where its card is. Times,
  * deadlines too, are ISO text. */
-export type Status = "open" | "done" | "dropped"
+type Status = "open" | "done" | "dropped"
 
 export type TaskGr = {
   id: number
@@ -165,7 +164,7 @@ export type Reference = {
 }
 
 /** A rule, as a branch reads it: its sides, how soft, its level, the chance of firing now. */
-export type RuleDetail = {
+type RuleDetail = {
   name: string
   desc: string
   lhs: string
@@ -180,20 +179,20 @@ export type RuleDetail = {
 export type VarDetail = { name: string; desc: string; type?: Type; value: unknown; persist: boolean }
 
 /** A signal: `backfill`, how many minutes of itself it keeps as a table, `persist`, saved. */
-export type SignalRow = { name: string; desc: string; expr: string; type?: Type; value: unknown; backfill: number | null; persist: boolean }
+type SignalRow = { name: string; desc: string; expr: string; type?: Type; value: unknown; backfill: number | null; persist: boolean }
 
-export type InputRow = { name: string; desc: string; type?: Type; value: unknown }
+type InputRow = { name: string; desc: string; type?: Type; value: unknown }
 
 /** What a program depends on (proki/editor.py: `uses`): the rules its ways out vote with,
  * the signals and variables it reads, down to the inputs. `sets`: its actions change it. */
-export type Uses = { rules: RuleDetail[]; signals: SignalRow[]; variables: (VarDetail & { sets: boolean })[]; inputs: InputRow[] }
+type Uses = { rules: RuleDetail[]; signals: SignalRow[]; variables: (VarDetail & { sets: boolean })[]; inputs: InputRow[] }
 
 /** One way out of a state: no conditions nor rules is the else. */
 export type BranchDetail = { goto: string; desc: string; conds: { expr: string; value: unknown }[]; rules: RuleDetail[] }
 
 /** A state, as its diagram shows it. It, its ways out, rules and variables each say what
  * they're for (`desc`, "" if they don't). */
-export type StateDetail = {
+type StateDetail = {
   name: string
   desc: string
   do: unknown[]  // its actions, as written ({"set": {...}}), or as made for a program in code
@@ -220,14 +219,14 @@ export type ProgramDetail = {
 }
 
 /** The specs, as you write them (proki/model/specs.py). Names are short: found from where they are. */
-export type Scoped = { name: string; desc: string; scope: Scope; program: string | null; state: string | null }
+type Scoped = { name: string; desc: string; scope: Scope; program: string | null; state: string | null }
 export type VariableSpec = Scoped & { value: boolean | number | string | null; type?: Type }  // value, a text: an expression
 /** A time: minutes, or a phrase ("6s", "5min", "1h", "1d"). */
-export type Span = number | string
+type Span = number | string
 export type SignalSpec = Scoped & { expr: string; backfill: Span | null; persist: boolean; type?: Type }
 export type RuleSpec = Scoped & { lhs: string | number; cmp: RuleDetail["cmp"]; rhs: string | number; softness: number; level: number }
-export type InputSpec = { name: string; backfill: Span | null }
-export type ProgramSpec = { name: string; title?: string; desc: string; icon?: string; tags: string[]; initial: string }
+type InputSpec = { name: string; backfill: Span | null }
+type ProgramSpec = { name: string; title?: string; desc: string; icon?: string; tags: string[]; initial: string }
 export type StateSpec = { program: string; name: string; desc: string; every: Span }
 export type BranchSpec = { program: string; state: string; goto: string; when: string[]; desc: string }
 export type ActionSpec = { id: string; program: string; state: string; name: string; desc: string; kind: string; params: Record<string, unknown> }
@@ -282,6 +281,7 @@ type Tools = {
   evaluate: { value?: unknown; type?: Type; error?: string }  // an expression's value now, as an action works it out
   get_settings: Services
   set_settings: Services  // a service set, asked from now on
+  set_ports: Services  // saved for the next app launch
   test_connection: { ok: true; models?: number }  // else its error says why
   list_models: { models: string[] }  // none: it can't say, so name one
   suggest: { waiting: number }  // how many of yours aren't sent yet
@@ -292,16 +292,20 @@ type Tools = {
 export type Service = "llm" | "jev"
 
 /** A service as it's set: who provides it, where it is, and the model asked there. */
-export type Connection = { provider: string; url: string; model: string }
+type Connection = { provider: string; url: string; model: string }
 
 /** A provider a service can have: its name, its url (custom: yours), whether a key is kept for it, and its models if it can't list them. */
-export type Provider = { name: string; url: string; key: boolean; models?: string[] }
+type Provider = { name: string; url: string; key: boolean; models?: string[] }
 
 /** Each service as it's set (null: not set), and the providers each can have, by id. */
 export type Services = {
   services: Record<Service, Connection | null>
   providers: Record<Service, Record<string, Provider>>
+  ports: Ports
+  active_ports: Ports
 }
+
+export type Ports = { activitywatch: number; nats: number; tools: number }
 
 declare global {
   interface Window {
@@ -333,12 +337,9 @@ declare global {
 /** A file on disk (the media library's), as a page loads it. */
 export const fileUrl = (path: string) => window.proki.fileUrl(path)
 
-/** Apply saved appearance preferences, then show `page`. */
+/** Apply the app's dark theme, then show `page`. */
 export function mount(page: ReactNode) {
-  const dark = window.matchMedia("(prefers-color-scheme: dark)")
-  const root = document.documentElement
-  const appearance = recall("proki-appearance", ["system", "light", "dark"] as const, "dark")
-  root.classList.toggle("dark", appearance === "dark" || (appearance === "system" && dark.matches))
+  document.documentElement.classList.add("dark")
   createRoot(document.getElementById("root")!).render(page)
 }
 

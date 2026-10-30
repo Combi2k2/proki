@@ -58,61 +58,6 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.62 0.15 258);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --brand: oklch(0.55 0.19 260);   /* proki's one hue: focus, on the data and the focus ring */
-    --metric: var(--brand);
-    --focused: oklch(0.6 0.13 165);
-    --shallow: oklch(0.72 0.13 80);
-    --code-keyword:  oklch(0.5 0.24 320);    /* an expression's words: and, or, not, in, if, else */
-    --code-constant: oklch(0.48 0.2 262);    /* True, False, None */
-    --code-string:   oklch(0.5 0.16 30);
-    --code-number:   oklch(0.52 0.12 160);
-    --code-call:     oklch(0.5 0.1 75);      /* a function called */
-    --type-any:     oklch(0.55 0.03 257);   /* a type's icon: anything, text, a whole number, a number, yes/no, a time, a list, an object */
-    --type-string:  oklch(0.55 0.2 260);
-    --type-integer: oklch(0.58 0.16 148);
-    --type-number:  oklch(0.58 0.21 25);
-    --type-boolean: oklch(0.6 0.2 355);
-    --type-time:    oklch(0.58 0.1 195);
-    --type-list:    oklch(0.68 0.15 85);
-    --type-object:  oklch(0.55 0.2 300);
-    --distracted: oklch(0.6 0.17 25);
-    --radius: 0.625rem;
-    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);  /* things arriving, and pressed */
-    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -162,6 +107,10 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+
+    --radius: 0.625rem;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);  /* things arriving, and pressed */
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 .proki-sidebar { background: var(--sidebar); }
@@ -185,9 +134,8 @@
   :focus-visible { outline-color: var(--ring); }
 }
 
-/* native parts (scrollbars, date pickers) follow the theme */
-:root { color-scheme: light; }
-.dark { color-scheme: dark; }
+/* Native controls and scrollbars use the same dark theme. */
+:root { color-scheme: dark; }
 ::selection { background: color-mix(in oklab, var(--brand) 30%, var(--background)); color: var(--foreground); }
 html { scrollbar-color: var(--border) transparent; caret-color: var(--brand); }
 @layer base { * { scrollbar-width: thin; } }  /* in base: a part's own class (hidden) wins */

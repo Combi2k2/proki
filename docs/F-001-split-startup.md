@@ -99,10 +99,8 @@ Slice 4: the docs
     LIKELIHOOD: low (the tools' port check stops the second engine; the app is single-instance)
     MITIGATION: the port check stays in the engine; the launcher checks the port too, first
 
-    RISK: scripts/windows/proki.bat is already out of date (it imports proki.config, writes .env)
-    IMPACT: the Windows install breaks either way
-    LIKELIHOOD: high
-    MITIGATION: out of this feature; it's its own (its last step becomes `-m proki`, as now)
+    RESOLVED 2026-10-30: the obsolete Windows bootstrap was removed. The supported
+    Windows installer is built by packaging/build.sh and the release workflow.
 
 ## Checkpoint gates
 

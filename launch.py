@@ -42,12 +42,12 @@ STARTS = {"engine": 300}                        # seconds a service may take to 
 
 # the programs started for each service, the server first
 NATS = ["nats-server"]      # its address is added as it's started
-AW   = [
+AW   = [                    # the modules included in ActivityWatch's standard download
     "aw-server",
     "aw-watcher-window",    # aw.WINDOW
     "aw-watcher-afk",       # aw.AFK
-    "aw-watcher-input",     # aw.INPUT: counts of key presses and clicks (never which keys)
 ]                           # aw.WEBTAB comes from the browser extension
+INPUT = ["aw-watcher-input"]  # discovered separately: a missing input watcher must not hide an installed AW
 
 AW_HOME = settings.DATA_DIR / "activitywatch"   # where it's installed for you, if it was nowhere
 AW_URL  = "https://github.com/ActivityWatch/activitywatch/releases/download/v0.14.1/activitywatch-v0.14.1-{}.zip"
@@ -71,15 +71,19 @@ def services(app: bool) -> dict[str, Supervisor]:
         release / "bundle" / "macos" / "proki.app" / "Contents" / "MacOS" / "proki",
         release / f"proki-ui{here.EXE}"
     ]) if path.exists()), None)
-    nats    = find_commands(NATS, [Path(sys.executable).parent, *here.NATS_DIRS] if FROZEN else here.NATS_DIRS, here.EXE)  # shipped, its own first
-    at      = ["-a", settings.HOST, "-p", str(settings.NATS_PORT)]
-    flags   = [f"--nats={settings.HOST}:{settings.NATS_PORT}", f"--tools={settings.HOST}:{settings.TOOLS_PORT}", f"--tools-token={settings.TOOLS_TOKEN}"]
-    engine  = [sys.executable, *(["engine"] if FROZEN else ["-m", "proki"])]   # shipped, it's this program again
-    made    = {}
+    nats      = find_commands(NATS,  [Path(sys.executable).parent, *here.NATS_DIRS] if FROZEN else here.NATS_DIRS, here.EXE)  # shipped, its own first
+    aw_client = ActivityWatchClient(settings.HOST, settings.PORTS.activitywatch)
+    aw_flags  = ["--host", settings.HOST, "--port", str(settings.PORTS.activitywatch)]
+    if aw_commands := find_commands(AW, [*here.AW_DIRS, AW_HOME], here.EXE):
+        aw_commands = {name: [*command, *aw_flags] for name, command in aw_commands.items()}
+    at     = ["-a", settings.HOST, "-p", str(settings.PORTS.nats)]
+    flags  = [f"--nats={settings.HOST}:{settings.PORTS.nats}", f"--tools={settings.HOST}:{settings.PORTS.tools}", f"--tools-token={settings.TOOLS_TOKEN}"]
+    engine = [sys.executable, *(["engine"] if FROZEN else ["-m", "proki"])]   # shipped, it's this program again
+    made   = {}
     for name, commands, up, missing in [  # its programs (none: it isn't there, `missing` says what to do), whether it answers
-        ("NATS",          nats and {"nats-server": [*nats["nats-server"], *at]}, lambda: NatsBus.is_up(settings.HOST, settings.NATS_PORT),             "nats-server not found (brew install nats-server): the app can't connect"),
-        ("ActivityWatch", find_commands(AW, [*here.AW_DIRS, AW_HOME], here.EXE), ActivityWatchClient(settings.HOST, settings.AW_PORT).is_up,           "ActivityWatch not found: installing it for you"),
-        ("engine",        {"engine": engine},                                    lambda: NatsBus.is_up(settings.HOST, settings.TOOLS_PORT),            ""),
+        ("ActivityWatch", aw_commands,                                           aw_client.is_up,           "ActivityWatch not found: installing it for you"),
+        ("NATS",          nats and {"nats-server": [*nats["nats-server"], *at]}, lambda: NatsBus.is_up(settings.HOST, settings.PORTS.nats),             "nats-server not found (brew install nats-server): the app can't connect"),
+        ("engine",        {"engine": engine},                                    lambda: NatsBus.is_up(settings.HOST, settings.PORTS.tools),            ""),
         ("UI",            built and {"ui": [str(built), *flags]},                lambda: (ui := made["UI"].processes.get("ui")) and ui.poll() is None, f"the UI isn't built: run `npm install` then `npm run app` in {settings.FRONTEND_DIR}"),
     ]:
         if name == "UI" and app:
@@ -88,6 +92,22 @@ def services(app: bool) -> dict[str, Supervisor]:
             made[name] = Supervisor(name, commands, up, settings.LOG_DIR / name.lower(), timeout=STARTS.get(name, 30))
         else:
             print(missing, flush=True)
+    if (input_commands := find_commands(INPUT, [Path(sys.executable).parent, settings.ROOT_DIR / "build" / "engine" / "proki-engine", *here.AW_DIRS, AW_HOME], here.EXE)) and ("ActivityWatch" in made or aw_client.is_up()):
+        input_commands = {name: [*command, *aw_flags] for name, command in input_commands.items()}
+        # An external server must not prevent our watcher starting; leave a recently
+        # reporting external watcher alone, but recover one left behind by Proki.
+        from datetime import UTC, datetime, timedelta
+        try:
+            recent = any(datetime.fromisoformat(e["timestamp"]) + timedelta(seconds=e["duration"]) > datetime.now(UTC) - timedelta(minutes=1)
+                         for key, bucket in aw_client.buckets().items() if bucket.get("type") == "os.hid.input"
+                         for e in aw_client.events(key, limit=1))
+        except (requests.RequestException, KeyError, TypeError, ValueError):
+            recent = False
+        if not recent or (settings.LOG_DIR / "activitywatch-input" / "pids").exists():
+            made["ActivityWatch Input"] = Supervisor("ActivityWatch Input", input_commands, aw_client.is_up,
+                settings.LOG_DIR / "activitywatch-input", timeout=30, start_when_healthy=True)
+    elif not input_commands:
+        print("Input watcher not found: rebuild the installer with packaging/build.sh", flush=True)
     return made
 
 
@@ -121,6 +141,7 @@ def install_aw() -> None:
 def main() -> int:
     """Start each service, keep them running, and stop them all as the engine quits, or as
     you stop this."""
+    settings.configure_ports()
     app        = "--from-app" in sys.argv
     started    = services(app)
     engine     = started["engine"]
@@ -136,9 +157,10 @@ def main() -> int:
             time.sleep(1)
             if installing and not installing.is_alive():  # ActivityWatch is there now, or never will be
                 installing = None
-                if aw := services(app).get("ActivityWatch"):
-                    started["ActivityWatch"] = aw
-                    print(aw.start(), flush=True)
+                for name, service in services(app).items():
+                    if name.startswith("ActivityWatch") and name not in started:
+                        started[name] = service
+                        print(service.start(), flush=True)
             ended = (process := engine.processes.get("engine")) and process.poll()  # None: it runs, or isn't ours
             if ended == 0:  # it was asked to quit
                 break

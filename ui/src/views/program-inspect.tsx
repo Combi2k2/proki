@@ -1,7 +1,6 @@
 // What a program's views share: how a state, a way out and a value read.
 
-import { Clock } from "lucide-react"
-import type { BranchDetail, StateDetail } from "@/lib/proki"
+import type { BranchDetail } from "@/lib/proki"
 
 /** What's clicked in a diagram: a state, or one of its ways out. */
 export type Inspected = { kind: "state"; state: string } | { kind: "way"; state: string; index: number } | null
@@ -40,14 +39,4 @@ export function action(entry: unknown): { kind: string; text: string } {
     ? `${params.name}${fields ? ` {${Object.keys(fields).join(", ")}}` : params.expr !== undefined ? ` · ${params.expr}` : ""}`
     : said ?? (params?.view as string | undefined) ?? ""
   return { kind, text: params?.when ? `${text} · when ${params.when}` : text }
-}
-
-/** A "do" capsule's label: how many actions, and how often the ways out are tried. */
-export function DoLabel({ state }: { state: StateDetail }) {
-  return (
-    <>
-      {state.do.length ? `do ${state.do.length}` : "wait"}
-      <span className="flex items-center gap-0.5 text-muted-foreground"><Clock className="size-3" />{minutes(state.every)}</span>
-    </>
-  )
 }

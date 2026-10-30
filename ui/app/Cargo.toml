@@ -17,3 +17,4 @@ tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-ap
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"
 tokio = { version = "1.53.3", features = ["time", "sync", "fs"] }
+toml = "1.1.8"

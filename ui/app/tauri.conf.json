@@ -14,7 +14,7 @@
     "macOSPrivateApi": true,
     "security": {
       "csp": null,
-      "assetProtocol": { "enable": true, "scope": ["$DATA/proki/media/**"] }
+      "assetProtocol": { "enable": true, "scope": ["$DATA/proki/media/**", "$LOCALDATA/proki/proki/media/**"] }
     }
   },
   "bundle": {

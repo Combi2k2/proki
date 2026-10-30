@@ -13,14 +13,15 @@ from proki import settings
 from proki.services.nats import NatsBus
 from proki.utils import wait_until
 
-URL   = f"http://{settings.HOST}:{settings.TOOLS_PORT}/mcp"
 START = 300   # seconds proki may take to start: it waits on you if the keychain asks
 CALL  = 600   # seconds a tool may take to answer
 
 
 def main() -> int:
     """Pass the agent's messages, a line each on stdin, to proki's tools, and their answers to stdout, until stdin closes."""
-    up = lambda: NatsBus.is_up(settings.HOST, settings.TOOLS_PORT)
+    settings.configure_ports()
+    url = f"http://{settings.HOST}:{settings.PORTS.tools}/mcp"
+    up = lambda: NatsBus.is_up(settings.HOST, settings.PORTS.tools)
     if not up():
         launcher = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, str(settings.ROOT_DIR / "launch.py")]
         subprocess.Popen(launcher, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
@@ -36,7 +37,7 @@ def main() -> int:
             continue
         asked = json.loads(line)
         try:
-            with urllib.request.urlopen(urllib.request.Request(URL, line.encode(), headers), timeout=CALL) as answer:
+            with urllib.request.urlopen(urllib.request.Request(url, line.encode(), headers), timeout=CALL) as answer:
                 if session := answer.headers.get("mcp-session-id"):
                     headers["Mcp-Session-Id"] = session
                 said = answer.read().decode()

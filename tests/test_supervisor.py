@@ -1,6 +1,8 @@
 """Running a service's programs (services/supervisor.py), with ActivityWatch's as the example."""
 import sys
 
+import pytest
+
 from proki.services.supervisor import Supervisor
 from proki.utils import find_commands
 
@@ -86,3 +88,34 @@ def test_detects_programs_in_per_program_folders(tmp_path):
     commands = find_commands(["aw-watcher-afk", "aw-server"], [tmp_path], ".exe")
     assert set(commands) == {"aw-server", "aw-watcher-afk"}
     assert commands["aw-server"] == [str(tmp_path / "aw-server" / "aw-server.exe")]
+
+
+def test_can_manage_a_watcher_when_its_server_is_already_running(tmp_path):
+    s = Supervisor("Input", {"input": SLEEPER}, lambda: True, tmp_path,
+                   start_when_healthy=True)
+    try:
+        assert s.start() == "Input started by proki"
+        assert not s.external and s.processes["input"].poll() is None
+        s.processes["input"].kill()
+        s.processes["input"].wait()
+        assert s.check() == ["input"]
+    finally:
+        s.stop()
+
+
+@pytest.mark.parametrize("during_read", [True, False])
+def test_a_previous_launcher_can_remove_its_pid_file_during_cleanup(tmp_path, monkeypatch, during_read):
+    s = supervisor(tmp_path)
+    s.pid_file.parent.mkdir()
+    s.pid_file.write_text("not-a-pid")
+    read = type(tmp_path).read_text
+
+    def disappearing(path, *args, **kwargs):
+        text = read(path, *args, **kwargs)
+        if path == s.pid_file:
+            path.unlink()
+            if during_read:  raise FileNotFoundError(path)
+        return text
+
+    monkeypatch.setattr(type(tmp_path), "read_text", disappearing)
+    assert s.clean() is False

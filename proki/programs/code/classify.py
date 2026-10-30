@@ -39,7 +39,7 @@ from proki.storage import Table, record_tables
 from proki.utils import minutes, slugify
 
 BROWSERS = platforms.current().BROWSER_APPS
-IGNORED  = {"proki", *platforms.current().SYSTEM_APPS}  # proki's windows and the system's: never in focus
+IGNORED  = {"proki", "proki.exe", "proki-ui", "proki-ui.exe", *platforms.current().SYSTEM_APPS}  # proki's windows and the system's: never in focus
 SIMILAR  = 0.5                                          # cosine similarity that settles a label without asking
 
 
@@ -287,6 +287,11 @@ class Track(Linked):
 
         super().__init__("track", myread, None, "the apps seen, the one in focus, and the one asked about", mytype)
 
+    @property
+    def inputs(self) -> list[Stream]:
+        # Refresh activity before observing focus, even though track is registered first.
+        return [Stream.registry[name] for name in ("app_name", "tab_url", "active") if name in Stream.registry]
+
     def advance(self, t: datetime) -> None:
         super().advance(t)
         self.look(t)
@@ -318,7 +323,7 @@ class Track(Linked):
     @property
     def focus(self) -> str | None:
         """What's in focus now."""
-        self.look(clock())
+        self.look(Stream.now or clock())
         return self.seen
 
     def all(self) -> list[dict]:
@@ -340,7 +345,7 @@ class Track(Linked):
 
     def dwell(self) -> float | None:
         """The minutes what's in focus has been (None: nothing is)."""
-        return (clock() - self.since).total_seconds() / 60 if self.focus else None
+        return ((Stream.now or clock()) - self.since).total_seconds() / 60 if self.focus else None
 
     def depth(self) -> float | None:
         """How deep what's in focus is: by its label, else a similar one's (None: neither)."""
