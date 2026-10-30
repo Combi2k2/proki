@@ -72,7 +72,7 @@ impl Tools {
 
     async fn connect(&self) -> Result<String, String> {
         let hello = json!({ "protocolVersion": PROTOCOL, "capabilities": {},
-                            "clientInfo": { "name": "proki-ui", "version": "0.1.0" } });
+                            "clientInfo": { "name": "proki-ui", "version": "0.1.2" } });
         let (session, _) = self.post(None, json!({ "jsonrpc": "2.0", "id": self.id(), "method": "initialize", "params": hello })).await?;
         let session = session.ok_or("no MCP session")?;
         self.post(Some(&session), json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).await?;

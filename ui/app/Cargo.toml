@@ -1,6 +1,6 @@
 [package]
 name = "proki-ui"
-version = "0.1.0"
+version = "0.1.2"
 description = "proki's UI: the tray, the popup and the windows. The engine (Python) starts it."
 edition = "2021"
 

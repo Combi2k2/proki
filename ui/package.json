@@ -1,6 +1,6 @@
 {
   "name": "proki-ui",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "description": "proki's UI: the tray, the popup and the windows (app/), its pages (src/). The launcher starts it, or you do.",
   "scripts": {
