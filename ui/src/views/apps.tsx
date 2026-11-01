@@ -114,7 +114,7 @@ export function AppsView() {
               <EmptyMedia variant="icon"><AppWindow /></EmptyMedia>
               <EmptyTitle>{apps.length ? "Nothing matches" : "No apps yet"}</EmptyTitle>
               <EmptyDescription>
-                {apps.length ? "Try another filter or search." : "As you use apps and websites, proki asks about them, and they show here."}
+                {apps.length ? "Try another filter or search." : "As you use apps and websites, Proki asks about them, and they show here."}
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -184,6 +184,6 @@ export function AppsView() {
 function source(app: App): string {
   if (app.label === null) return app.track === false ? "you: not tracked" : "not labeled yet"
   if (app.source === "usr") return "you"
-  if (app.source === "dev") return "proki's list"
+  if (app.source === "dev") return "Proki's list"
   return app.conf === null ? "jev" : `jev, ${Math.round(app.conf * 100)}% sure`
 }

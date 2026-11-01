@@ -61,7 +61,7 @@ def tools(engine: Engine, shipped: Shipped) -> list[Tool]:
              lambda args: model.apply(editor.unused(engine))),
         Tool("program_specs", "One program's specs, each kind a list in order (a branch's or an action's place "
                               "among its state's, `at`, is its order there), or with name null the global scope's "
-                              "(inputs, and the variables, signals and rules no program brings). `default`: proki "
+                              "(inputs, and the variables, signals and rules no program brings). `default`: Proki "
                               "ships one, `changed`: yours differs from it.", {"name": NAME},
              lambda args: editor.specs(model, shipped, args["name"]), ("name",), readonly=True),
         Tool("switch_program", "A program on or off. Off, the cycles leave it alone; on again, it starts over.",

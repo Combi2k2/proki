@@ -96,7 +96,7 @@ pub async fn ask(app: &AppHandle, subject: &str, request: Value) -> Value {
         let starting = tokio::time::Instant::now() < given_up;
         let Some(bus) = proki(app).bus.get() else {
             if !starting {
-                return json!({ "error": "not connected to proki" });
+                return json!({ "error": "not connected to Proki" });
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
             continue;

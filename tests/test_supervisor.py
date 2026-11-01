@@ -94,7 +94,7 @@ def test_can_manage_a_watcher_when_its_server_is_already_running(tmp_path):
     s = Supervisor("Input", {"input": SLEEPER}, lambda: True, tmp_path,
                    start_when_healthy=True)
     try:
-        assert s.start() == "Input started by proki"
+        assert s.start() == "Input started by Proki"
         assert not s.external and s.processes["input"].poll() is None
         s.processes["input"].kill()
         s.processes["input"].wait()

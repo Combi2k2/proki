@@ -86,7 +86,7 @@ def main() -> int:
         except (urllib.error.URLError, OSError, RuntimeError) as error:
             if "id" in asked and "method" in asked:
                 print(json.dumps({"jsonrpc": "2.0", "id": asked["id"], "error": {"code": -32000,
-                      "message": f"proki isn't answering: {error}"}}), flush=True)
+                      "message": f"Proki isn't answering: {error}"}}), flush=True)
             continue
         for message in said:
             print(message, flush=True)

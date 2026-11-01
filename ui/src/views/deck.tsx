@@ -31,7 +31,7 @@ const SLIDES: Slide[] = [
     points: ["Worked out every cycle, never set.", "`ts_mean(focus, 30)`: its 30-minute mean.",
              "`delay(focus, 10)`: it, 10 minutes ago.", "`every(focus, 5)`: a mean per 5 minutes."] },
   { id: "records", title: "Records", shots: [["records", "a list of records opened as a table: a row each, a column a field"]],
-    points: ["Named fields; a list of them opens as a table.", "`track.labels` is one proki keeps.",
+    points: ["Named fields; a list of them opens as a table.", "`track.labels` is one Proki keeps.",
              "A field set on a record is set on its table.", "A plain value is only a copy."] },
   { id: "lists", title: "Lists", shots: [["lists", "a list of numbers opened: each item and its place"]],
     points: ["Counted from 0: `focus_lines[0]` is 0.35.", "`xs[-1]` the last, `xs[1:]` all but the first.",

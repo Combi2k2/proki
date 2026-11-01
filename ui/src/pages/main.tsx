@@ -132,7 +132,7 @@ function Main() {
       <nav aria-label="Main navigation" data-tauri-drag-region className="proki-sidebar mr-2 flex w-[228px] shrink-0 flex-col gap-1 rounded-[14px] border border-black/[0.07] px-2.5 pt-10 pb-2.5 dark:border-white/[0.06] [-webkit-app-region:drag] max-[760px]:w-[58px] max-[760px]:items-center max-[760px]:px-1.5">
         <div className="mb-6 flex items-center gap-2.5 px-2.5 text-[15px] font-semibold tracking-[-0.03em] max-[760px]:px-0">
           <img src={prokiMark} alt="" className="size-[22px] dark:invert" />
-          <span className="max-[760px]:hidden">proki</span>
+          <span className="max-[760px]:hidden">Proki</span>
         </div>
         {SECTIONS.map(({ head, items }) => (
           <Fragment key={head ?? ""}>

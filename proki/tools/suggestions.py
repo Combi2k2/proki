@@ -26,7 +26,7 @@ TIMEOUT = 10                                       # seconds the vault has to an
 def tools(path: Path = OUTBOX, vault: str = VAULT) -> list[Tool]:
     """Making a suggestion and sending the ones waiting, kept at `path` until `vault` has them."""
     return [
-        Tool("suggest", "A suggestion for proki's developer: what could be better, in `text`, and how to reach you "
+        Tool("suggest", "A suggestion for Proki's developer: what could be better, in `text`, and how to reach you "
                         "(`contact`, if you want an answer). Kept, and sent as soon as you're online: `waiting`, "
                         "how many aren't sent yet.",
              {"text": {"type": "string", "maxLength": LONGEST}, "contact": {"type": "string", "maxLength": 200}},

@@ -60,7 +60,7 @@ async def test_the_local_bus():
 async def test_nats(tmp_path):
     FOUND["nats-server"] += ["-a", HOST, "-p", str(PORT)]
     server = Supervisor("NATS", FOUND, lambda: NatsBus.is_up(HOST, PORT), tmp_path)
-    assert server.start() == "NATS started by proki"
+    assert server.start() == "NATS started by Proki"
     bus = await NatsBus.connect(HOST, PORT)
     try:
         await exercise(bus)

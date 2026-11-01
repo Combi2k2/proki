@@ -74,7 +74,7 @@ function Popup() {
               ) : (
                 <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
                   <span className="size-2 rounded-full bg-primary" />
-                  proki
+                  Proki
                 </div>
               )}
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{item.text}</p>

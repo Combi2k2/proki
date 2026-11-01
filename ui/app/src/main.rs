@@ -194,7 +194,7 @@ pub fn update_tray(app: &AppHandle) {
         let menu = Menu::new(app)?;
         menu.append(&MenuItem::with_id(app, "status", &status, false, None::<&str>)?)?;
         menu.append(&separator()?)?;
-        menu.append(&item("view:today", "Open proki")?)?;
+        menu.append(&item("view:today", "Open Proki")?)?;
         menu.append(&item("note", "New note…")?)?;
         if session.is_empty() {
             menu.append(&item("session:start", "Start focus session")?)?;
@@ -210,7 +210,7 @@ pub fn update_tray(app: &AppHandle) {
         if shipped(app).is_some() {
             menu.append(&item("command", "Install command-line tool…")?)?;
         }
-        menu.append(&item("quit", "Quit proki")?)?;
+        menu.append(&item("quit", "Quit Proki")?)?;
         Ok(menu)
     };
     if let Ok(menu) = menu() {
@@ -248,7 +248,7 @@ pub fn open_main(app: &AppHandle, path: &str) {
         return;
     }
     let built = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("main.html".into()))
-        .title("proki")
+        .title("Proki")
         .inner_size(1180.0, 720.0)
         .min_inner_size(720.0, 480.0)
         .accept_first_mouse(true)
@@ -335,12 +335,12 @@ fn install_command(app: &AppHandle) {
         Ok(path) => {
             let path = path.display().to_string();
             let json = path.replace('\\', "\\\\");
-            format!("proki is a command now: {path}\n\nAdd it to an AI agent with one of these:\n\n\
+            format!("The Proki command-line tool is available at: {path}\n\nAdd it to an AI agent with one of these:\n\n\
                      claude mcp add proki -- {path} mcp\n\n\
                      codex mcp add proki -- {path} mcp\n\n\
                      openclaw mcp set proki '{{\"command\":\"{json}\",\"args\":[\"mcp\"]}}'")
         }
-        Err(e) => format!("proki couldn't be made a command in {}: {e}", bin.display()),
+        Err(e) => format!("The Proki command-line tool couldn't be created in {}: {e}", bin.display()),
     };
     app.dialog().message(text).title("Command-line tool").show(|_| {});
 }
@@ -397,7 +397,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("proki's UI couldn't start");
+        .expect("Proki's UI couldn't start");
 
     app.run(|app, event| match event {
         RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(), // its windows closed: it keeps running, in the Dock and the tray

@@ -52,7 +52,7 @@ def main() -> int:
         return stdio.main()
     config = settings.load()
     if nats.NatsBus.is_up(settings.HOST, settings.PORTS.tools):
-        print(f"port {settings.PORTS.tools} is in use: proki may be running already. Quit it first; nothing was started.", flush=True)
+        print(f"port {settings.PORTS.tools} is in use: Proki may be running already. Quit it first; nothing was started.", flush=True)
         return 1
     asyncio.run(running(config))
     return 0
@@ -72,7 +72,7 @@ async def running(config: settings.Settings) -> None:
     except Exception:
         bus = nats.LocalBus()
     if isinstance(bus, nats.LocalBus):  # one in this process: the app can't reach it
-        print("no message bus: the app can't connect (start nats-server, then proki again)", flush=True)
+        print("no message bus: the app can't connect (start nats-server, then Proki again)", flush=True)
     Channels.bus = bus
     await channels.jev.serve(bus, config.jev)  # as they're set in the app, from then on
     await channels.llm.serve(bus, config.llm)
@@ -106,7 +106,7 @@ async def running(config: settings.Settings) -> None:
             loop.add_signal_handler(sig, stopping.set)
         except NotImplementedError:  # Windows: a plain handler, handed to the loop
             signal.signal(sig, lambda *_: loop.call_soon_threadsafe(stopping.set))
-    print("proki is running", flush=True)
+    print("Proki is running", flush=True)
     purged = loop.time()
     while not stopping.is_set():
         try:  # a cycle, and the tray's line: the focus of the last 5 minutes, and the running session's minutes

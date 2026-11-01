@@ -45,7 +45,7 @@ export function TablesView() {
   const columns = useMemo<Column[]>(() => {
     if (!read) return []
     const fields = read.fields.map((f) => ({ key: f.key, desc: f.desc, type: f.worked }))
-    const worked = read.own.filter((k) => k !== "id" && !STAMPS.includes(k)).map((key) => ({ key, desc: "worked out by proki", type: undefined }))
+    const worked = read.own.filter((k) => k !== "id" && !STAMPS.includes(k)).map((key) => ({ key, desc: "worked out by Proki", type: undefined }))
     return [{ key: "id", desc: "", type: "integer" }, ...fields, ...worked, ...STAMPS.map((key) => ({ key, desc: key === "created_at" ? "made" : "last changed", type: "time" }))]
   }, [read])
 

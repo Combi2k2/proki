@@ -380,7 +380,7 @@ function Tasks({ today, onWork, onGo }: { today: Today | null; onWork: (id: numb
           </div>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">Nothing to start yet. Write down what you need to do, and proki plans it into tasks.</p>
+        <p className="text-sm text-muted-foreground">Nothing to start yet. Write down what you need to do, and Proki plans it into tasks.</p>
       )}
       {today && today.after.length > 0 && (
         <ul className="flex flex-col">
@@ -426,7 +426,7 @@ function Capture({ onGo }: { onGo: Go }) {
            go={{ label: "All notes", onClick: () => onGo("notes") }} className="overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         <Textarea value={text} onChange={(e) => setText(e.target.value)} aria-label="A note"
-                  placeholder="Call the dentist, an idea for the talk… (⌘ Enter: proki sorts it for you)"
+                  placeholder="Call the dentist, an idea for the talk… (⌘ Enter: Proki sorts it for you)"
                   className="min-h-12 flex-1 resize-none overflow-y-auto field-sizing-fixed [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && keep("Unsorted")} />
         <div role="group" aria-label="Keep it as" className="flex shrink-0 flex-wrap items-center gap-1.5">

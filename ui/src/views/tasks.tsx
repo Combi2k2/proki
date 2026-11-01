@@ -138,7 +138,7 @@ export function TasksView({ open, onOpen }: { open: number | null; onOpen: (grou
             <EmptyHeader>
               <EmptyMedia variant="icon"><LayoutGrid /></EmptyMedia>
               <EmptyTitle>No groups yet</EmptyTitle>
-              <EmptyDescription>Add one below, or write down what you need to do with “New note”: proki plans it into tasks.</EmptyDescription>
+              <EmptyDescription>Add one below, or write down what you need to do with “New note”: Proki plans it into tasks.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}
@@ -397,7 +397,7 @@ function Suggestions({ ops, tasks, onChange }: { ops: TaskOp[]; tasks: Task[]; o
   }
 
   return (
-    <Section icon={<Sparkles />} title={`Suggested by proki (${ops.length})`} action={
+    <Section icon={<Sparkles />} title={`Suggested by Proki (${ops.length})`} action={
       <Button variant="ghost" size="xs" onClick={() => accept(ops)}>Accept all</Button>
     }>
       <ItemGroup className="gap-2">

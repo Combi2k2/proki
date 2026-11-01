@@ -50,7 +50,7 @@ def main() -> int:
     Stream.storage   = Replayed(storage.HistoryDB(db))
 
     if (specs := storage.SpecDB(db).load()) is None:
-        raise SystemExit("start proki once first: it keeps your programs")
+        raise SystemExit("start Proki once first: it keeps your programs")
     persisted  = [s.name for s in Builder(specs).build().signals if s.persist]
     now        = datetime.now(timezone.utc)
     start      = now - timedelta(days=days)

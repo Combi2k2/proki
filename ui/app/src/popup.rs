@@ -34,7 +34,7 @@ pub struct Queue {
 
 pub fn make(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     WebviewWindowBuilder::new(app, "popup", WebviewUrl::App("popup.html".into()))
-        .title("proki question")
+        .title("Proki question")
         .inner_size(400.0, 160.0)
         .visible(false)
         .focused(false)

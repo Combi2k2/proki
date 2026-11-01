@@ -24,7 +24,7 @@ const STEPS: { title: string; about: string; icon: typeof Timer; label: string; 
 ]
 
 const ANSWERS: [string, string][] = [
-  ["What does proki watch?", "Only which app or website is in front, and whether you're at the computer. It never reads what you type or what's on the screen, and everything stays on this computer."],
+  ["What does Proki watch?", "Only which app or website is in front, and whether you're at the computer. It never reads what you type or what's on the screen, and everything stays on this computer."],
   ["Why did a little window pop up?", "One of your automations had something to ask or say, like a break reminder or a question about a note. Answer it, or choose Later; you can turn any automation off on the Automations page."],
   ["How is my focus worked out?", "From the apps you used in the last few minutes: work apps count towards focus, chat and browsing less. On Apps & time you can say which apps are work for you."],
   ["What happens to a note I write down?", "It lands in your notes as unsorted. The note sorter files it as a todo, an idea or a thought, and checks with you when it isn't sure."],

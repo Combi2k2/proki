@@ -259,7 +259,7 @@ class Records(Variable):
 
     def rename(self, key: str, to: str) -> None:
         """A field of yours named `to`: its values with it, and every formula that reads it changed to match."""
-        if key in self.shipped:     raise ValueError(f"{key} came with proki: it can't be renamed")
+        if key in self.shipped:     raise ValueError(f"{key} came with Proki: it can't be renamed")
         if to in self.fields:       raise ValueError(f"there's a field {to} already")
         if to in self.code:         raise ValueError(f"there's a field {to} already")
         if to in STAMPS:            raise ValueError(f"there's a field {to} already")

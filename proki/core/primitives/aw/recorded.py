@@ -16,7 +16,7 @@ class Recorded(Primitive):
 
     _typed = "boolean"
     name   = "running"
-    desc   = "whether your activity is recorded now: false while proki is off, or the computer asleep"
+    desc   = "whether your activity is recorded now: false while Proki is off, or the computer asleep"
 
     buckets = (aw.WINDOW, aw.INPUT)
 

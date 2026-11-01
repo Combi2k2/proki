@@ -116,6 +116,7 @@ def test_prokis_windows_and_the_systems_are_never_in_focus():
     assert watching("proki", "proki question") is None and watching("proki", "proki") is None
     assert watching("proki.exe", "proki question") is None
     assert watching("proki-ui.exe", "proki") is None
+    assert watching("Proki", "Proki") is None
     assert watching("Krita", "proki") == ("Krita", None)  # another app's window of that name
 
 

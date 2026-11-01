@@ -315,7 +315,7 @@ async def test_a_fields_sources_in_order_the_context_every_question_reads_and_wh
     tasks.rename("minutes", "length")  # its values, and what reads it, with it
     assert dict.get(tasks.get_row(forms), "length") == 15 and tasks.get_row(forms)["hours"] == 0.25
     assert [f.srcs[0]["expr"] for f in tasks.defined.read() if f.key == "hours"] == ["me.length / 60"]
-    with pytest.raises(ValueError, match="came with proki"):
+    with pytest.raises(ValueError, match="came with Proki"):
         tasks.rename("spent", "worked")
 
 

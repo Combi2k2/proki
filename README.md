@@ -116,7 +116,7 @@ Proki is an early build. macOS (Apple silicon) is tested; Windows is not yet tes
 
 The current macOS and Windows preview installers are linked at the top of this README. They are temporary GitHub Actions artifacts, not a versioned release. ActivityWatch is included in setup and its browser extension is offered on first launch.
 
-- **macOS:** Open the `.dmg` and drag Proki to Applications. If macOS blocks the unsigned app, run `xattr -cr /Applications/proki.app` once.
+- **macOS:** Open the `.dmg` and drag Proki to Applications. If macOS blocks the unsigned app, run `xattr -cr /Applications/Proki.app` once.
 - **Windows:** Run the installer. If SmartScreen appears, choose **More info → Run anyway**.
 
 ### [⬆️ Back to installer downloads](#download)

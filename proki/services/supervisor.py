@@ -80,7 +80,7 @@ class Supervisor:
         if self.clean() and not self.start_when_healthy:  wait_while(self.healthy, self.timeout)
         if self.healthy() and not self.start_when_healthy:
             self.external = True
-            return f"{self.name} already running (not managed by proki)"
+            return f"{self.name} already running (not managed by Proki)"
 
         server = next(iter(self.commands))
         for module in self.commands:
@@ -92,7 +92,7 @@ class Supervisor:
                     return f"{self.name} server failed to start"
 
         self._save_pids()
-        return f"{self.name} started by proki"
+        return f"{self.name} started by Proki"
 
     def check(self) -> list[str]:
         """Start again the ones that stopped: their names."""

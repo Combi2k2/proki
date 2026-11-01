@@ -1,4 +1,4 @@
-"""What proki can do, as tools: the same ones for the app and for an AI agent.
+"""What Proki can do, as tools: the same ones for the app and for an AI agent.
 
     reference                           what a program can use, its values now, and the programs that run
     evaluate                            an expression's value now, and its type
@@ -28,7 +28,7 @@
     get_settings, set_settings          the LLM and jev: each one's provider, key and model, asked from then on
     test_connection, list_models        whether one answers at a provider, and the models there
 
-    suggest, send_suggestions           a suggestion for proki's developer, kept until you're online
+    suggest, send_suggestions           a suggestion for Proki's developer, kept until you're online
 
 A poke's or a question's pictures and sounds are chosen in the media library, by its action's
 id, not in its program.

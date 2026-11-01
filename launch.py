@@ -67,8 +67,8 @@ def services(app: bool) -> dict[str, Supervisor]:
     built   = next((path for path in ([
         inside.parent / "MacOS" / "proki",
         inside / f"proki{here.EXE}"] if FROZEN else [
-        release / "bundle" / "macos" / "proki.app" / "Contents" / "MacOS" / "proki-ui",
-        release / "bundle" / "macos" / "proki.app" / "Contents" / "MacOS" / "proki",
+        release / "bundle" / "macos" / "Proki.app" / "Contents" / "MacOS" / "proki-ui",
+        release / "bundle" / "macos" / "Proki.app" / "Contents" / "MacOS" / "proki",
         release / f"proki-ui{here.EXE}"
     ]) if path.exists()), None)
     nats      = find_commands(NATS,  [Path(sys.executable).parent, *here.NATS_DIRS] if FROZEN else here.NATS_DIRS, here.EXE)  # shipped, its own first

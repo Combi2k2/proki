@@ -39,7 +39,7 @@ from proki.storage import Table, record_tables
 from proki.utils import minutes, slugify
 
 BROWSERS = platforms.current().BROWSER_APPS
-IGNORED  = {"proki", "proki.exe", "proki-ui", "proki-ui.exe", *platforms.current().SYSTEM_APPS}  # proki's windows and the system's: never in focus
+IGNORED  = {"Proki", "proki", "proki.exe", "proki-ui", "proki-ui.exe", *platforms.current().SYSTEM_APPS}  # Proki's windows and the system's: never in focus
 SIMILAR  = 0.5                                          # cosine similarity that settles a label without asking
 
 
@@ -276,7 +276,7 @@ class Track(Linked):
         fields = {
             "labels" : self.apps.labels,
             "all"    : Linked("track.all", self.all, None, "every app seen, tracked or not", {"type": "array", "items": APP}),
-            "now"    : Linked("track.now", lambda: self.app(self.focus), _set, "the app in focus (None: none, you're away, or it's proki's or the system's)", APP),
+            "now"    : Linked("track.now", lambda: self.app(self.focus), _set, "the app in focus (None: none, you're away, or it's Proki's or the system's)", APP),
             "pin"    : Linked("track.pin", lambda: self.app(self.pinned), _pin, "the app asked about, whatever's in focus: set it to pin one (None: none)", APP),
             "since"  : Linked("track.since", self.dwell, None, "minutes the one in focus has been", "number"),
             "depth"  : Linked("track.depth", self.depth, None, "how deep the one in focus is, by its label (or a similar one's)", "number"),
