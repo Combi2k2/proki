@@ -22,6 +22,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       UV_PYTHON: "3.12"   # the Python proki is tested on
+      PYTHONUTF8: "1"     # files read as UTF-8, as the shipped engine reads them (not Windows' code page)
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
