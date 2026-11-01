@@ -14,6 +14,7 @@ from proki.core.programs import Program
 from proki.engine import Engine
 from proki.programs.shipped import Shipped
 from proki.tools.server import Tools
+from proki.tools import stdio
 from proki.tools.stdio import Bridge
 
 
@@ -143,6 +144,29 @@ def test_stdio_bridge_rejoins_after_the_http_server_restarts(tmp_path, monkeypat
     assert json.loads(bridge.forward(listed)[0])["id"] == 2
     assert requests[-4:] == [("tools/list", "session-1"), ("initialize", None),
                              ("notifications/initialized", "session-2"), ("tools/list", "session-2")]
+
+
+@pytest.mark.parametrize("frozen", [False, True])
+def test_mcp_starts_proki_with_its_app_to_see_and_quit_it(monkeypatch, frozen):
+    launched = []
+
+    class Stdio:
+        def reconfigure(self, **kwargs):
+            pass
+
+        def __iter__(self):
+            return iter(())
+
+    monkeypatch.setattr(stdio.settings, "configure_ports", lambda: None)
+    monkeypatch.setattr(stdio.NatsBus, "is_up", lambda *args: False)
+    monkeypatch.setattr(stdio, "wait_until", lambda *args: None)
+    monkeypatch.setattr(stdio.subprocess, "Popen", lambda argv, **kwargs: launched.append(argv))
+    monkeypatch.setattr(stdio.sys, "frozen", frozen, raising=False)
+    monkeypatch.setattr(stdio.sys, "stdin", Stdio())
+    monkeypatch.setattr(stdio.sys, "stdout", Stdio())
+
+    assert stdio.main() == 0
+    assert launched == [[stdio.sys.executable] if frozen else [stdio.sys.executable, str(stdio.settings.ROOT_DIR / "launch.py")]]
 
 
 def test_a_signal_of_a_program(tools):

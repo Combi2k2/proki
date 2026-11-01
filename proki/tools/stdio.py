@@ -1,4 +1,5 @@
-"""Bridge a stdio MCP client to Proki's authenticated local HTTP server."""
+"""The tools for an agent that starts its servers as commands (`proki mcp`): Proki started if it isn't
+running, then each of the agent's messages passed to it and its answers back, the token sent for you."""
 
 from __future__ import annotations
 
@@ -12,12 +13,12 @@ from proki import settings
 from proki.services.nats import NatsBus
 from proki.utils import wait_until
 
-START = 300   # Proki may wait on a keychain prompt while starting.
-CALL = 600    # A tool may take a while to answer.
+START = 300   # seconds Proki may take to start
+CALL  = 600   # seconds a tool may take to answer
 
 
 class Bridge:
-    """Keep one HTTP session for the stdio client, and rejoin after a server restart."""
+    """The agent's session with Proki's tools at `url`: started again for you if Proki restarts."""
 
     def __init__(self, url: str):
         self.url = url
@@ -45,6 +46,7 @@ class Bridge:
         return messages
 
     def forward(self, message: dict) -> list[str]:
+        """`message` sent, and Proki's answers, each a JSON text (none for a notification)."""
         if message.get("method") == "initialize":
             self.initialize = message
         try:
@@ -65,12 +67,12 @@ class Bridge:
 
 
 def main() -> int:
-    """Forward one JSON-RPC message per stdin line and write replies to stdout."""
+    """Pass the agent's messages, a line each on stdin, to Proki's tools, and their answers to stdout, until stdin closes."""
     settings.configure_ports()
     url = f"http://{settings.HOST}:{settings.PORTS.tools}/mcp"
     up = lambda: NatsBus.is_up(settings.HOST, settings.PORTS.tools)
     if not up():
-        launcher = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, str(settings.ROOT_DIR / "launch.py")]
+        launcher = [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, str(settings.ROOT_DIR / "launch.py")]  # the app too: its tray to see and quit it
         subprocess.Popen(launcher, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         wait_until(up, START)
