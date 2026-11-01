@@ -45,6 +45,11 @@
         "name": "todos",
         "expr": "where(open, open.bucket, 'Todo')",
         "desc": "the todos not made tasks yet"
+      },
+      {
+        "name": "fresh",
+        "expr": "where(todos, todos.plan_after, None)",
+        "desc": "the todos never put off"
       }
     ],
     "states": {
@@ -54,10 +59,10 @@
         "do": [
           {
             "name": "take",
-            "desc": "takes the first todo",
+            "desc": "takes the first todo never put off, else the one put off the earliest",
             "set": {
               "name": "todo",
-              "expr": "where(todos, todos.plan_after, None)[0] if len(where(todos, todos.plan_after, None)) > 0 else sort(todos, todos.plan_after)[0]"
+              "expr": "fresh[0] if len(fresh) > 0 else sort(todos, todos.plan_after)[0]"
             }
           },
           {
