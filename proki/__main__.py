@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import signal
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from proki import channels, platforms, settings, storage
 from proki.channels import Channels, Popup
@@ -34,7 +34,7 @@ from proki.programs.code.base import Live, popup_open
 from proki.programs.code.classify import AppDB, Apps, Track
 from proki.programs.code.work import Work
 from proki.programs.shipped import Shipped
-from proki.serve import PAUSED, READS, current, serve
+from proki.serve import PAUSED, READS, current, held, serve
 from proki.services import activitywatch as aw, nats
 from proki.services.media import Library
 from proki.tools.server import Tools
@@ -117,8 +117,8 @@ async def running(config: settings.Settings) -> None:
                 await engine.cycle(now)
             except (OSError, RuntimeError) as e:  # ActivityWatch not running, or not ready yet
                 waiting = e.__class__.__name__
-        elif Stream.now:  # the streams kept at now, so what was recorded meanwhile isn't read as it's on again
-            Stream.now = now - timedelta(seconds=now.timestamp() % Stream.cycle.total_seconds())
+        else:
+            held(now)
         focus, minutes = current("focus"), current("session.minutes") if current("session.active") else None
         Popup.send({"type": "status", "text": "paused" if paused else f"waiting for ActivityWatch ({waiting})" if waiting else
                                               "focus –" if focus is None else f"focus {focus:.2f}",

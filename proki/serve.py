@@ -321,6 +321,12 @@ def today(work: Work, now: Callable[[], datetime] = lambda: datetime.now().astim
     }
 
 
+def held(now: datetime) -> None:
+    """The streams kept at `now` while you've paused Proki, after a restart too: what's recorded
+    meanwhile is never read, as it's on again."""
+    Stream.now = now - timedelta(seconds=now.timestamp() % Stream.cycle.total_seconds())
+
+
 def current(name: str) -> Any:
     """What the config's `name` is now (None: there's no such name)."""
     return Stream.registry[name].current() if name in Stream.registry else None

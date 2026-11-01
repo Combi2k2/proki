@@ -278,3 +278,21 @@ def test_todays_focus_each_five_minutes_you_were_active_and_the_lines_between_it
         Stream.storage = kept
     assert made["samples"] == [0.8, 0.8, 0.4, 0.4, 0.1, 0.1]  # away from 30 on: not counted
     assert (made["lines"], made["focused"], made["goal"]) == ([0.2, 0.35, 0.5], 10, 240)  # low to high; above the highest
+
+
+def test_a_pause_through_a_restart_reads_nothing_recorded_meanwhile():
+    from datetime import datetime, timedelta, timezone
+
+    from proki.core.primitives import Primitive
+    from proki.serve import held
+
+    fetched = []  # (start, end) of each run's fetch: what it reads of what was recorded
+    Primitive.sources.append(lambda start, end: fetched.append((start, end)))
+    try:
+        Primitive.kinds["app_name"](backfill=True, window=timedelta(days=1))  # a day's table: a first run reads a day back
+        paused = datetime(2026, 10, 31, 9, 0, tzinfo=timezone.utc)
+        held(paused + timedelta(minutes=30))  # restarted while paused: the loop keeps the streams at now
+        Primitive.run(paused + timedelta(hours=1))  # on again
+        assert fetched[0][0] == paused + timedelta(minutes=30)
+    finally:
+        Primitive.sources.pop()
