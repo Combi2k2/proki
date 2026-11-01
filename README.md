@@ -172,7 +172,7 @@ codex mcp add proki -- proki mcp
 openclaw mcp set proki '{"command":"proki","args":["mcp"]}'
 ```
 
-See the [feature review](docs/F-002-feature-review.md), [architecture notes](docs/components.md), and [demo script](docs/personal-ai-hackathon-demo.md).
+Each feature has a one-minute page in [docs](docs/README.md), starting with the [architecture](docs/NF-001-architecture.md).
 
 ## 📄 License
 
