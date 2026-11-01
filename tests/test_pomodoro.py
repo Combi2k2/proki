@@ -1,6 +1,7 @@
 """The pomodoro: the focus session, a program of the config (programs/config/pomodoro.json)."""
 
 import shutil
+from pathlib import Path
 
 from proki import settings
 from proki.core.programs import Program
@@ -68,7 +69,7 @@ async def test_away_pokes_with_a_sound_and_ten_minutes_end_it(tmp_path, ui):
     await run(local(5, 10, 7, 20))
     away = ui.sent[-1]
     assert program.current == "away" and away["title"] == "You've been away"
-    assert away["media"].endswith("bugcat/what.gif") and away["sound"].endswith("alarm-clock.mp3")  # it rings until you close it
+    assert Path(away["media"]).match("bugcat/what.gif") and Path(away["sound"]).match("alarm-clock.mp3")  # it rings until you close it
     await run(local(5, 10, 8), typing=True)
     assert program.current == "focusing" and ui.sent[-1] == away  # nothing more to say
 

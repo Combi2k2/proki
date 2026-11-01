@@ -2,6 +2,7 @@
 written in code (classify, the planner)."""
 import asyncio
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -171,7 +172,7 @@ async def test_bedtime_from_the_config_pokes_then_rings(tmp_path, ui):
     asked = ui.questions()[-1]
     rings = lambda: [m for m in ui.sent if m.get("title") == "Past your stop time"]
     [ringing] = rings()
-    assert ringing["sound"].endswith("alarm-clock.mp3") and ringing["media"].endswith("bugcat/good_night.gif")
+    assert Path(ringing["sound"]).match("alarm-clock.mp3") and Path(ringing["media"]).match("bugcat/good_night.gif")
     assert bedtime.current == "past_midnight"  # it rings until you close it
     assert asked["context"] == "Lock the screen and go to sleep?"
     await ui.click(None, asked)  # no answer: asked again
@@ -685,6 +686,7 @@ async def test_a_todo_is_talked_through_and_planned_into_a_new_group(tmp_path, u
     assert "a new group." in breaking.prompts[0] and "a 3-page draft" in breaking.prompts[0]
     asked_in = breaking.schema["properties"]  # the plan's type: not its group, nor a change's id or key
     assert "group" not in asked_in and {"id", "key"}.isdisjoint(asked_in["changes"]["items"]["properties"]) and asked_in["tags"]["maxItems"] == 3
+    await go(lambda: ui.sent and ui.sent[-1].get("type") == "open")  # the group made once jev's said its tags, then its card opened
 
     board = store.board
     [group] = board.groups.current()
@@ -694,7 +696,6 @@ async def test_a_todo_is_talked_through_and_planned_into_a_new_group(tmp_path, u
     assert board.tasks.current() == [] and (first.op, first.group) == ("add", group["id"])  # suggested, for you to accept
     assert first.fields == {"name": "List the key papers", "estimate": 30, "done_when": ["10 papers listed"], "key": "list_the_key_papers"}
     assert (check.after, check.fields["checkpoint"]) == (["list_the_key_papers"], True)  # unknown keys left out
-    await go(lambda: ui.sent and ui.sent[-1].get("type") == "open")
     assert ui.sent[-1] == {"type": "open", "path": f"tasks/{group['id']}"}  # its card, to edit
     [todo] = read("Todo")  # kept, with where it went: no longer the planner's
     assert todo["link"] == f"tasks/{group['id']}" and Stream.registry["task_planner.todos"].current() == []
@@ -725,6 +726,7 @@ async def test_a_todo_for_a_group_you_have_is_planned_with_it(tmp_path, ui, stor
     assert len(ui.questions()) == 1
     assert "group of tasks “Thesis”: my master's thesis" in breaking.prompts[0] and "- [x] outline_the_chapters: Outline the chapters" in breaking.prompts[0]
     assert "(tags: papers)" in breaking.prompts[0]
+    await go(lambda: ui.sent and ui.sent[-1].get("type") == "open")  # the group refined once jev's said its tags, then its card opened
 
     board = store.board
     assert [p["name"] for p in board.groups.current()] == ["Thesis"] and board.groups.current()[0]["questions"] == ["Which venue is it for?"]
