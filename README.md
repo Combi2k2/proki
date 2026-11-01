@@ -100,6 +100,20 @@ With MCP, a connected AI assistant can help you design, explain, or revise those
 
 *Status: ✅ ready · 🟡 needs polish · ⚪ not reviewed.*
 
+### 📋 Planned and exploring
+
+These ideas are not available yet. The planned items are the next product foundations; the rest need more thought before they become commitments.
+
+| Idea | How it could work | Status |
+| --- | --- | --- |
+| Bring automations with you | Import and export automation formulas so you can back them up or share them. | 📌 Planned |
+| Keep media in sets | Group stickers and other media into smaller packs you can organize and switch between. | 📌 Planned |
+| Share community-made patches | Explore a catalog for automation and media packs after import/export and safe review are in place. | 🔍 Exploring |
+| Choose how AI is paid for | Keep bring-your-own-key as an option; explore an account plan for using Proki-hosted LLM and Jev services. | 🔍 Exploring |
+| Move your data between devices | Start with a portable local backup and restore. Decide whether any later sync should use a file, nearby transfer, or a server. | 🔍 Exploring |
+
+*📌 Planned means intended, not released. 🔍 Exploring means the approach is still open.*
+
 <a id="your-day-stays-yours"></a>
 ## 🔒 Your day stays yours
 
