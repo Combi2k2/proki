@@ -20,6 +20,9 @@ import requests
 
 from proki.errors import LlmError
 
+BRIEF = ("Think less. Keep reasoning brief and focus on useful, concrete results. "  # some models think long, then say nothing
+         "Answer directly, without a long analysis. Follow the requested output format.")
+
 
 class Llm:
     """An OpenAI-compatible service, and the model to ask there."""
@@ -37,11 +40,6 @@ class Llm:
             "messages": _messages(prompt, context),
             "temperature": temperature,
         }
-        body["messages"].insert(0, {
-            "role": "system",
-            "content": "Think less. Keep reasoning brief and focus on useful, concrete results. "
-                        "Answer directly, without a long analysis. Follow the requested output format.",
-        })
         if schema is not None:
             body["response_format"] = {
                 "type": "json_schema",
@@ -50,10 +48,7 @@ class Llm:
 
         try:
             response = self._post(body)
-            if schema is not None and (response.status_code == 400 or
-                                       response.status_code == 500 and self.api_url == "https://api.tokenfactory.nebius.com/v1"):
-                # Nebius can return 500 for a schema a model cannot enforce, even when
-                # the same model accepts a simpler schema and answers the prompt.
+            if schema is not None and response.status_code in (400, 500):  # no structured output there, or not for this schema
                 response = self._post(_schema_in_prompt(body, schema))
             if response.status_code != 200:
                 raise LlmError(f"{self.model}: HTTP {response.status_code}")
@@ -71,12 +66,9 @@ class Llm:
 
 
 def _messages(prompt: str, context: Any) -> list[dict]:
-    """What's sent: the context (if any), then the question."""
-    messages = []
-    if context is not None:
-        text = context if isinstance(context, str) else json.dumps(context, ensure_ascii=False, indent=1, default=str)
-        messages.append({"role": "system", "content": text})
-    return messages + [{"role": "user", "content": prompt}]
+    """What's sent: how to answer and the context (if any), then the question."""
+    text = "" if context is None else context if isinstance(context, str) else json.dumps(context, ensure_ascii=False, indent=1, default=str)
+    return [{"role": "system", "content": f"{BRIEF}\n\n{text}" if text else BRIEF}, {"role": "user", "content": prompt}]
 
 
 def _schema_in_prompt(body: dict, schema: dict) -> dict:
