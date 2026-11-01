@@ -2,7 +2,8 @@
 
     proki.app.note     {"text": ...}         a new note, unsorted
     proki.app.quit     {}                    stop proki
-    proki.app.session  {"op": "start" or "stop"}   a focus session: the session program takes it
+    proki.app.session  {"op": "start" or "stop"}   a focus session: the session program takes it (none while paused)
+    proki.app.tracking {"paused": true}      paused (false: on again): no cycle meanwhile, nothing seen, a session over. {} reads it
     proki.app.tasks    {"op": ..., ...}      the board: groups, their tasks and the ops suggested
     proki.app.notes    {"op": ..., ...}      the notes' buckets
     proki.app.fields   {"op": ..., ...}      the fields of yours, and the open tasks' values
@@ -82,10 +83,11 @@ from proki.programs.code.base import find_variable
 from proki.programs.code.classify import Apps
 from proki.programs.code.work import ROWS, TaskOp, Work
 from proki.services.nats import Bus
-from proki.storage import plain
+from proki.storage import StateDB, plain
 from proki.tools import records
 from proki.utils import minutes, moment
 
+PAUSED  = "tracking_paused"                        # whether you paused Proki, kept as the state
 BUCKETS = ["Unsorted", "Todo", "Idea", "Thought"]  # where a note is, the unsorted first, as the notes say
 
 READS = {  # what the app reads of the config, each of its type: checked as it's built
@@ -95,7 +97,6 @@ READS = {  # what the app reads of the config, each of its type: checked as it's
     "session.minutes":        "number",
     "focus":                  "number",
     "focus_lines":            {"type": "array", "items": {"type": "number"}},
-    "focus_5m":               "number",
     "focus_goal":             "number",
     "focused_today":          "number",
     "focused_week":           "number",
@@ -110,7 +111,7 @@ READS = {  # what the app reads of the config, each of its type: checked as it's
 
 async def serve(bus: Bus, work: Work, quit: Callable[[], None],
                 metrics: Metrics | None = None, signals: Callable[[], list[Signal]] = list, apps: Apps | None = None,
-                reload: Callable[[], None] = lambda: None, model: Model | None = None) -> None:
+                reload: Callable[[], None] = lambda: None, model: Model | None = None, state: StateDB | None = None) -> None:
     """What the app asks for, answered on `bus` from now on.
 
         quit        proki stopped
@@ -119,6 +120,7 @@ async def serve(bus: Bus, work: Work, quit: Callable[[], None],
         apps        the apps and websites, what the app's changes count in from the next cycle
         reload      everything built again, as a field's changed
         model       your programs, changed as a metric keeps more or less
+        state       where a pause is kept
     """
     async def note(request: dict) -> dict:
         text = request.get("text")
@@ -133,7 +135,8 @@ async def serve(bus: Bus, work: Work, quit: Callable[[], None],
 
     await bus.subscribe("proki.app.note", note)
     await bus.subscribe("proki.app.quit", stop)
-    await bus.subscribe("proki.app.session", answering(on_session))
+    await bus.subscribe("proki.app.session", answering(lambda request: on_session(request, state)))
+    await bus.subscribe("proki.app.tracking", answering(lambda request: on_tracking(request, state)))
     await bus.subscribe("proki.app.tasks", answering(lambda request: on_tasks(request, work)))
     await bus.subscribe("proki.app.notes", answering(on_notes))
     await bus.subscribe("proki.app.fields", answering(lambda request: on_fields(request, work, reload)))
@@ -152,13 +155,29 @@ def answering(handle: Callable[[dict], dict]) -> Callable[[dict], Any]:
     return answer
 
 
-def on_session(request: dict) -> dict:
-    """A focus session asked to start or stop: the session program takes it."""
+def on_session(request: dict, state: StateDB | None) -> dict:
+    """A focus session asked to start or stop: the session program takes it. ValueError to start one while paused."""
     op = request.get("op")
-    if op not in ("start", "stop"):
-        raise ValueError(f"op is start or stop ({op!r})")
+    if op not in ("start", "stop"):                         raise ValueError(f"op is start or stop ({op!r})")
+    if op == "start" and state and state.get(PAUSED, False): raise ValueError("Proki's paused: turn it on again to start a session")
     find_variable("session.requested" if op == "start" else "session.stop_requested").set(True)
     return {}
+
+
+def on_tracking(request: dict, state: StateDB | None) -> dict:
+    """Proki paused (a session running ends) or on again, as `paused` says, or read: whether it's paused."""
+    if not state:
+        raise ValueError("there's nowhere to keep a pause")
+    if "paused" in request:
+        if not isinstance(request["paused"], bool):
+            raise ValueError(f"paused is true or false ({request['paused']!r})")
+        state.set(PAUSED, request["paused"])
+        if request["paused"] and current("session.active"):  # nothing's seen meanwhile: the session's over (its program ends it as it's on again)
+            find_variable("session.active").set(False)
+            find_variable("session.stop_requested").set(True)
+        if request["paused"] and current("session.requested"):  # nor does one start then
+            find_variable("session.requested").set(False)
+    return {"paused": state.get(PAUSED, False)}
 
 
 def on_tasks(request: dict, work: Work) -> dict:

@@ -42,7 +42,7 @@ pub async fn connect(app: AppHandle) {
             }
         });
     }
-    proki(&app).tray.lock().unwrap().0 = "proki: connected".into();
+    proki(&app).tray.lock().unwrap().text = "Connected · waiting for activity…".into();
     update_tray(&app);
 }
 
@@ -76,7 +76,12 @@ fn on_shown(app: &AppHandle, message: async_nats::Message) {
                 Some(minutes) => format!("{minutes}m"), // 12 as "12m", as JS says it
                 None => String::new(),
             };
-            *proki(app).tray.lock().unwrap() = (m["text"].as_str().unwrap_or_default().into(), session);
+            *proki(app).tray.lock().unwrap() = crate::tray::State {
+                text: m["text"].as_str().unwrap_or_default().into(), session,
+                focus: m["focus"].as_f64(),
+                focus_lines: m["focus_lines"].as_array().map(|lines| lines.iter().filter_map(Value::as_f64).collect()),
+                paused: m["paused"].as_bool(), available: m["available"].as_bool().unwrap_or(false),
+            };
             update_tray(app);
         }
         "open" => {

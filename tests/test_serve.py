@@ -91,6 +91,38 @@ async def test_a_note_goes_into_the_inbox_and_quit_stops(tmp_path):
     assert bus.stopped == [True]
 
 
+async def test_a_pause_is_kept_and_read():
+    from proki.storage import StateDB
+
+    db = sqlite3.connect(":memory:")
+    db.executescript(SCHEMA)
+    bus = LocalBus()
+    await serve(bus, Work(db), quit=lambda: None, state=StateDB(db))
+    assert await bus.request("proki.app.tracking", {}, 1) == {"paused": False}
+    assert await bus.request("proki.app.tracking", {"paused": True}, 1) == {"paused": True}
+    assert StateDB(db).get("tracking_paused")  # kept, through a restart too
+    assert "true or false" in (await bus.request("proki.app.tracking", {"paused": "no"}, 1))["error"]
+    assert await bus.request("proki.app.tracking", {"paused": False}, 1) == {"paused": False}
+
+
+async def test_a_pause_ends_the_session_and_starts_none():
+    from proki.programs.code.base import find_variable, make_variable
+    from proki.storage import StateDB
+
+    for name in ("session.active", "session.requested", "session.stop_requested"):
+        make_variable(name, False)
+
+    db = sqlite3.connect(":memory:")
+    db.executescript(SCHEMA)
+    bus = LocalBus()
+    await serve(bus, Work(db), quit=lambda: None, state=StateDB(db))
+    find_variable("session.active").set(True)
+    await bus.request("proki.app.tracking", {"paused": True}, 1)
+    assert not find_variable("session.active").value and find_variable("session.stop_requested").value
+    assert "paused" in (await bus.request("proki.app.session", {"op": "start"}, 1))["error"]
+    assert not find_variable("session.requested").value
+
+
 async def test_metrics_and_today_through_the_bus():
     from datetime import datetime, timedelta, timezone
     from proki.storage import HistoryDB

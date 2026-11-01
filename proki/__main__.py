@@ -9,8 +9,9 @@ What it does, once:
 2. builds your programs, takes in the defaults proki ships, and serves them as tools, for
    the app and for an AI agent
 
-Then, every cycle: the inputs and signals move on, the programs whose wait is over wake up,
-and the tray's line shows the focus. Every hour, the media deleted a week ago is gone for good.
+Then, every cycle (none while you've paused it): the inputs and signals move on, the programs
+whose wait is over wake up, and the tray's line shows the focus. Every hour, the media deleted a
+week ago is gone for good.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from proki import channels, platforms, settings, storage
 from proki.channels import Channels, Popup
@@ -33,7 +34,7 @@ from proki.programs.code.base import Live, popup_open
 from proki.programs.code.classify import AppDB, Apps, Track
 from proki.programs.code.work import Work
 from proki.programs.shipped import Shipped
-from proki.serve import READS, current, serve
+from proki.serve import PAUSED, READS, current, serve
 from proki.services import activitywatch as aw, nats
 from proki.services.media import Library
 from proki.tools.server import Tools
@@ -93,9 +94,10 @@ async def running(config: settings.Settings) -> None:
                          work.make,
                          lambda: Live("asking", popup_open, "whether a question waits for you", "boolean"),
                      ])
+    state   = storage.StateDB(db)
     await serve(bus, work, quit=stopping.set, metrics=Metrics(db, history), signals=lambda: engine.compiled.signals,
-                apps=apps, reload=engine.reload, model=engine.model)
-    shipped = Shipped(settings.SHIPPED_DIR, storage.StateDB(db))
+                apps=apps, reload=engine.reload, model=engine.model, state=state)
+    shipped = Shipped(settings.SHIPPED_DIR, state)
     shipped.update(engine.model)
     tools   = Tools(engine, shipped, library, stores=[work], config=config).http(settings.PORTS.tools, Tools.token(settings.TOOLS_TOKEN))
     serving = asyncio.create_task(tools.serve())
@@ -109,14 +111,19 @@ async def running(config: settings.Settings) -> None:
     print("Proki is running", flush=True)
     purged = loop.time()
     while not stopping.is_set():
-        try:  # a cycle, and the tray's line: the focus of the last 5 minutes, and the running session's minutes
-            await engine.cycle(datetime.now(timezone.utc))
-        except (OSError, RuntimeError) as e:  # ActivityWatch not running, or not ready yet
-            Popup.send({"type": "status", "text": f"waiting for ActivityWatch ({e.__class__.__name__})"})
-        else:
-            focus, minutes = current("focus_5m"), current("session.minutes") if current("session.active") else None
-            Popup.send({"type": "status", "text": "focus –" if focus is None else f"focus {focus:.2f} (5 min)",
-                        "session": None if minutes is None else int(minutes)})
+        paused, waiting, now = state.get(PAUSED, False), None, datetime.now(timezone.utc)
+        if not paused:  # a cycle, unless you paused Proki: nothing's seen meanwhile
+            try:
+                await engine.cycle(now)
+            except (OSError, RuntimeError) as e:  # ActivityWatch not running, or not ready yet
+                waiting = e.__class__.__name__
+        elif Stream.now:  # the streams kept at now, so what was recorded meanwhile isn't read as it's on again
+            Stream.now = now - timedelta(seconds=now.timestamp() % Stream.cycle.total_seconds())
+        focus, minutes = current("focus"), current("session.minutes") if current("session.active") else None
+        Popup.send({"type": "status", "text": "paused" if paused else f"waiting for ActivityWatch ({waiting})" if waiting else
+                                              "focus –" if focus is None else f"focus {focus:.2f}",
+                    "session": None if minutes is None else int(minutes), "focus": focus, "focus_lines": current("focus_lines"),
+                    "paused": paused, "available": not waiting})
         if loop.time() - purged >= PURGE:
             purged = loop.time()
             library.purge()

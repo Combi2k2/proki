@@ -20,6 +20,7 @@ export default defineConfig({
       input: {
         popup: path.resolve(__dirname, "popup.html"),
         main: path.resolve(__dirname, "main.html"),
+        tray: path.resolve(__dirname, "tray.html"),
       },
     },
   },

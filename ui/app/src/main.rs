@@ -10,6 +10,7 @@
 mod bus;
 mod popup;
 mod tools;
+mod tray;
 
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -20,7 +21,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
@@ -112,7 +113,7 @@ pub struct Proki {
     pub args: Args,
     pub bus: tokio::sync::OnceCell<async_nats::Client>,
     pub queue: Mutex<popup::Queue>,
-    pub tray: Mutex<(String, String)>, // the tray's first line, and the running session next to its icon
+    pub tray: Mutex<tray::State>,
     pub tools: tools::Tools,
     pub quitting: AtomicBool, // the engine asked to stop already
 }
@@ -185,11 +186,12 @@ async fn watching(app: AppHandle) -> bool {
 
 // --- the tray and the windows -----------------------------------------------------------------
 
-const VIEWS: [&str; 7] = ["today", "tasks", "notes", "apps", "metrics", "programs", "media"];
+const VIEWS: [&str; 8] = ["today", "tasks", "notes", "apps", "metrics", "programs", "media", "settings"];
 
 pub fn update_tray(app: &AppHandle) {
     let Some(tray) = app.tray_by_id("proki") else { return };
-    let (status, session) = proki(app).tray.lock().unwrap().clone();
+    let state = proki(app).tray.lock().unwrap().clone();
+    let (status, session) = (&state.text, &state.session);
     let menu = || -> tauri::Result<Menu<tauri::Wry>> {
         let item = |id: &str, label: &str| MenuItem::with_id(app, id, label, true, None::<&str>);
         let separator = || PredefinedMenuItem::separator(app);
@@ -204,11 +206,7 @@ pub fn update_tray(app: &AppHandle) {
             menu.append(&item("session:stop", &format!("Stop focus session ({session})"))?)?;
         }
         menu.append(&separator()?)?;
-        for (view, label) in [("tasks", "Tasks"), ("notes", "Notes"), ("apps", "Apps"), ("metrics", "Metrics"),
-                              ("programs", "Programs"), ("media", "Media")] {
-            menu.append(&item(&format!("view:{view}"), label)?)?;
-        }
-        menu.append(&separator()?)?;
+        menu.append(&item("view:settings", "Settings")?)?;
         if shipped(app).is_some() {
             menu.append(&item("command", "Install command-line tool…")?)?;
         }
@@ -219,10 +217,11 @@ pub fn update_tray(app: &AppHandle) {
         let _ = tray.set_menu(Some(menu));
     }
     let _ = tray.set_tooltip(Some(&status));
-    let _ = tray.set_title(Some(&session));
+    let _ = tray.set_title(Some("")); // the session's in the panel: a title would widen the icon the panel opens under
+    let _ = app.emit_to("tray", "tray-status", &state);
 }
 
-fn on_menu(app: &AppHandle, id: &str) {
+pub fn on_menu(app: &AppHandle, id: &str) {
     match id {
         "note" => popup::new_note(app),
         "quit" => quit(app),
@@ -295,20 +294,75 @@ fn shipped(app: &AppHandle) -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
-/// The shipped engine started, and what it needs with it, unless proki's running already: it
-/// stops as the app quits.
+/// What starts the services: the engine inside the app (`bundled`), else the launcher in the
+/// repository at `root` (None: neither is there).
+fn engine_command(bundled: Option<PathBuf>, root: &std::path::Path) -> Option<std::process::Command> {
+    let mut command = if let Some(engine) = bundled {
+        std::process::Command::new(engine)
+    } else {
+        let python = root.join(if cfg!(windows) { ".venv/Scripts/python.exe" } else { ".venv/bin/python" });
+        let launcher = root.join("launch.py");
+        if !python.is_file() || !launcher.is_file() { return None; }
+        let mut command = std::process::Command::new(python);
+        command.arg(launcher).current_dir(root);
+        command
+    };
+    command.arg("--from-app");
+    Some(command)
+}
+
+/// What starts the services for this app, from where it was built if it ships no engine.
+fn launcher(app: &AppHandle) -> Option<std::process::Command> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent()?.parent()?;
+    engine_command(shipped(app), root)
+}
+
+/// Start the services unless Proki is already running, said if they can't be. They stop as the app quits.
 fn start_engine(app: &AppHandle) {
-    let Some(engine) = shipped(app) else { return };
     let tools = proki(app).args.tools.parse();
     if tools.is_ok_and(|at| TcpStream::connect_timeout(&at, Duration::from_millis(500)).is_ok()) {
         return;
     }
-    let mut command = std::process::Command::new(engine);
-    command.arg("--from-app").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    #[cfg(target_os = "windows")]
-    std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000); // CREATE_NO_WINDOW
-    if let Err(e) = command.spawn() {
-        eprintln!("the engine couldn't start: {e}");
+    let started = match launcher(app) {
+        None => Err("it isn't inside the app, nor in the folder the app was built in".to_string()),
+        Some(mut command) => {
+            command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+            #[cfg(target_os = "windows")]
+            std::os::windows::process::CommandExt::creation_flags(&mut command, 0x0800_0000); // CREATE_NO_WINDOW
+            command.spawn().map(|_| ()).map_err(|e| e.to_string())
+        }
+    };
+    if let Err(e) = started {
+        app.dialog().message(format!("Proki's engine couldn't start ({e}). Install Proki again from its installer."))
+            .title("Proki").show(|_| {});
+    }
+}
+
+#[cfg(test)]
+mod launcher_tests {
+    use super::*;
+
+    #[test]
+    fn packaged_launch_uses_its_engine_without_a_repository() {
+        let command = engine_command(Some(PathBuf::from("bundled-engine")), std::path::Path::new("missing")).unwrap();
+        assert_eq!(command.get_program(), "bundled-engine");
+        assert_eq!(command.get_args().collect::<Vec<_>>(), ["--from-app"]);
+    }
+
+    #[test]
+    fn local_login_launch_uses_python_and_starts_services_without_another_ui() {
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!("proki-login-{}-{unique}", std::process::id()));
+        let python = root.join(if cfg!(windows) { ".venv/Scripts/python.exe" } else { ".venv/bin/python" });
+        std::fs::create_dir_all(python.parent().unwrap()).unwrap();
+        std::fs::write(&python, "").unwrap();
+        assert!(engine_command(None, &root).is_none());
+        std::fs::write(root.join("launch.py"), "").unwrap();
+        let command = engine_command(None, &root).unwrap();
+        assert_eq!(command.get_program(), python);
+        assert_eq!(command.get_current_dir(), Some(root.as_path()));
+        assert_eq!(command.get_args().collect::<Vec<_>>(), [root.join("launch.py").as_os_str(), std::ffi::OsStr::new("--from-app")]);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
 
@@ -365,7 +419,7 @@ fn main() {
         args,
         bus: tokio::sync::OnceCell::new(),
         queue: Mutex::new(popup::Queue::default()),
-        tray: Mutex::new(("proki".into(), String::new())),
+        tray: Mutex::new(tray::State::default()),
         tools,
         quitting: AtomicBool::new(false),
     };
@@ -373,6 +427,7 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {})) // one proki: a second one quits
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             engine,
@@ -381,6 +436,10 @@ fn main() {
             note,
             link,
             watching,
+            tray::tray_state,
+            tray::tray_tracking,
+            tray::tray_autostart,
+            tray::tray_action,
             popup::popup_ready,
             popup::answer,
             popup::resize,
@@ -390,7 +449,12 @@ fn main() {
             TrayIconBuilder::with_id("proki")
                 .icon(icon)
                 .icon_as_template(true)
-                .show_menu_on_left_click(true)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|icon, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, rect, position, .. } = event {
+                        tray::toggle(icon.app_handle(), rect, position);
+                    }
+                })
                 .on_menu_event(|app, event| on_menu(app, event.id().as_ref()))
                 .build(app)?;
             update_tray(app.handle());
@@ -400,6 +464,7 @@ fn main() {
                     .title("Local connections").show(|_| {});
             }
             popup::make(app.handle())?;
+            tray::make(app.handle())?;
             start_engine(app.handle());
             tauri::async_runtime::spawn(bus::connect(app.handle().clone()));
             Ok(())
