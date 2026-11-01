@@ -47,7 +47,7 @@ HOST         = "127.0.0.1"                               # where ActivityWatch, 
 
 @dataclass(frozen=True)
 class Ports:
-    """Local service ports, applied together when Proki starts."""
+    """Where ActivityWatch, the message bus and the tools are, on this machine: read as Proki starts."""
 
     activitywatch : int = 5600
     nats          : int = 4222
@@ -57,29 +57,34 @@ class Ports:
         values = asdict(self)
         for name, value in values.items():
             if type(value) is not int or not 1 <= value <= 65535:
-                raise ValueError(f"{name}: choose a whole-number port from 1 to 65535")
+                raise ValueError(f"{name}: a port is a whole number from 1 to 65535 ({value!r})")
         if len(set(values.values())) != len(values):
-            raise ValueError("Each service needs a different port")
+            raise ValueError(f"each service needs a port of its own ({values})")
 
 
 PORTS = Ports()
 
 
 def document(path: Path) -> dict:
-    """Read the shared configuration, including Windows UTF-8 BOM files."""
+    """What's set at `path` (none if it's missing), as written by hand on Windows too."""
     return tomllib.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else {}
 
 
 def read_ports(path: Path = CONFIG_PATH) -> Ports:
+    """The ports set at `path` (the usual ones for those not set). ValueError for ones that can't be."""
     values = document(path).get("ports", {})
     if not isinstance(values, dict):  raise ValueError("ports must be a table")
     return Ports(**{name: values[name] for name in Ports.__dataclass_fields__ if name in values})
 
 
 def configure_ports(path: Path = CONFIG_PATH) -> None:
-    """Load ports once at startup; saving settings does not disconnect this process."""
+    """The ports set at `path`, from now on in this process: the usual ones, said why, if they can't be."""
     global PORTS
-    PORTS = read_ports(path)
+    try:
+        PORTS = read_ports(path)
+    except (ValueError, tomllib.TOMLDecodeError) as e:
+        PORTS = Ports()
+        print(f"the ports set can't be used ({e}): the usual ones instead", flush=True)
 
 
 PROVIDERS = {  # each service's, by id: its name, its url (custom: yours), and its models if it can't list them, or where it does
@@ -130,12 +135,10 @@ def read(path: Path) -> dict[str, Connection]:
 
 
 def write(path: Path, connections: dict[str, Connection], *, ports: Ports | None = None) -> None:
-    """The services kept at `path`, with the ports preserved unless given."""
-    if ports is None and "ports" in document(path):  ports = read_ports(path)
-    sections = [f"[{service}]\n" + "".join(f"{name} = {json.dumps(value)}\n" for name, value in asdict(connection).items())
-                for service, connection in connections.items()]
-    if ports is not None:
-        sections.append("[ports]\n" + "".join(f"{name} = {value}\n" for name, value in asdict(ports).items()))
+    """The services kept at `path`, and the ports: `ports`, else the ones there were, as they were (none if they weren't a table)."""
+    kept     = asdict(ports) if ports else document(path).get("ports")
+    tables   = {service: asdict(made) for service, made in connections.items()} | ({"ports": kept} if isinstance(kept, dict) else {})
+    sections = [f"[{name}]\n" + "".join(f"{key} = {json.dumps(value)}\n" for key, value in values.items()) for name, values in tables.items()]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(sections), encoding="utf-8")
 

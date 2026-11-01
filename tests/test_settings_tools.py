@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import tomllib
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 import pytest
@@ -139,3 +140,14 @@ def test_startup_loads_ports_and_launcher_forwards_them(tmp_path, monkeypatch):
     for command in services["ActivityWatch"].commands.values():
         assert command[-4:] == ["--host", "127.0.0.1", "--port", "5612"]
     assert services["ActivityWatch Input"].commands["aw-watcher-input"][-1] == "5612"
+
+
+def test_ports_that_cant_be_used_give_way_to_the_usual_ones(tmp_path, monkeypatch):
+    path = tmp_path / "config.toml"
+    path.write_text('[llm]\nprovider = "google"\nurl = ""\nmodel = "gemini"\n\n[ports]\nnats = 5600\n')
+    monkeypatch.setattr(config, "PORTS", config.Ports(tools=9150))
+    config.configure_ports(path)
+    assert config.PORTS == config.Ports()  # Proki still starts
+    assert settings.read(path)["ports"] == asdict(config.Ports())  # and Settings still opens, to fix them
+    settings.save(config.Settings(), path, "llm", "google", "gemini-2")
+    assert "nats = 5600" in path.read_text()  # yours, kept as they were

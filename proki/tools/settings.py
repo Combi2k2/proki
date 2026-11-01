@@ -12,6 +12,7 @@ A key left out is the one kept for that provider.
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -58,11 +59,15 @@ def tools(config: Settings, path: Path = settings.CONFIG_PATH) -> list[Tool]:
 def read(path: Path) -> dict[str, Any]:
     """The services set at `path` (None: not set), and each one's providers, with whether a key is kept for each."""
     said = settings.read(path)
+    try:
+        ports = settings.read_ports(path)
+    except (ValueError, tomllib.TOMLDecodeError):  # ones that can't be: the ones in use, to change
+        ports = settings.PORTS
     return {
         "services" : {service: asdict(said[service]) if service in said else None for service in settings.PROVIDERS},
         "providers": {service: {provider: {**known, "key": settings.key(service, provider) is not None} for provider, known in providers.items()}
                       for service, providers in settings.PROVIDERS.items()},
-        "ports"       : asdict(settings.read_ports(path)),
+        "ports"       : asdict(ports),
         "active_ports": asdict(settings.PORTS),
     }
 

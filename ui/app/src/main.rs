@@ -67,7 +67,8 @@ mod port_tests {
     use super::*;
 
     fn parse(text: &str) -> Result<Ports, String> {
-        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        static MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0); // a file each, the tests running at once
+        let unique = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!("proki-ports-{}-{unique}.toml", std::process::id()));
         std::fs::write(&path, text).unwrap();
         let result = read_ports(&path);
@@ -348,8 +349,10 @@ fn install_command(app: &AppHandle) {
 // --- start ------------------------------------------------------------------------------------
 
 fn main() {
-    let ports = read_ports(&PathBuf::from(token()).with_file_name("config.toml"))
-        .expect("Proki's local port settings are invalid");
+    let (ports, unusable) = match read_ports(&PathBuf::from(token()).with_file_name("config.toml")) {
+        Ok(ports) => (ports, None),
+        Err(e) => (Ports::default(), Some(e)), // the engine does the same: Proki still starts
+    };
     let args = Args {
         nats: option("nats", &format!("127.0.0.1:{}", ports.nats)),
         tools: option("tools", &format!("127.0.0.1:{}", ports.tools)),
@@ -381,7 +384,7 @@ fn main() {
             popup::answer,
             popup::resize,
         ])
-        .setup(|app| {
+        .setup(move |app| {
             let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
             TrayIconBuilder::with_id("proki")
                 .icon(icon)
@@ -391,6 +394,10 @@ fn main() {
                 .build(app)?;
             update_tray(app.handle());
 
+            if let Some(e) = &unusable {
+                app.dialog().message(format!("The ports in Settings can't be used ({e}), so Proki uses the usual ones. Change them in Settings."))
+                    .title("Local connections").show(|_| {});
+            }
             popup::make(app.handle())?;
             start_engine(app.handle());
             tauri::async_runtime::spawn(bus::connect(app.handle().clone()));
