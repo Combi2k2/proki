@@ -13,14 +13,14 @@ const fromFiles: Plugin = {
 export default defineConfig({
   base: "./",  // loaded from files, not a server
   plugins: [react(), tailwindcss(), fromFiles],
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
   build: {
     outDir: "dist",
     rollupOptions: {
       input: {
-        popup: path.resolve(__dirname, "popup.html"),
-        main: path.resolve(__dirname, "main.html"),
-        tray: path.resolve(__dirname, "tray.html"),
+        popup: path.resolve(import.meta.dirname, "popup.html"),
+        main: path.resolve(import.meta.dirname, "main.html"),
+        tray: path.resolve(import.meta.dirname, "tray.html"),
       },
     },
   },
