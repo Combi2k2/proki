@@ -29,10 +29,6 @@ const SERVICES: Record<Service, { title: string; about: string }> = {
   jev: { title: "Jev", about: "Helps me make sense of your tasks and apps." },
 }
 const LOGOS: Record<string, string> = { openai, anthropic, google, openrouter, nebius, nvidia }
-const PROVIDER_ORDER: Record<Service, string[]> = {
-  llm: ["openai", "anthropic", "google", "nvidia", "openrouter", "nebius", "custom"],
-  jev: ["openjev", "openrouter", "custom"],
-}
 
 type Result = { ok: boolean; text: string } | null
 
@@ -183,7 +179,7 @@ function ServiceSetup({ service, services, onSaved, onUnsaved }: {
 }) {
   const current   = services.services[service]
   const providers = services.providers[service]
-  const order     = PROVIDER_ORDER[service].filter((id) => id in providers)
+  const order     = Object.keys(providers)  // as the engine lists them
   const { title, about } = SERVICES[service]
 
   const [provider, setProvider] = useState(current?.provider ?? order[0])
