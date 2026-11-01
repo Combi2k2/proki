@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tomllib
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -31,7 +32,7 @@ def test_a_service_set_is_kept_its_key_apart_and_asked_at_once(tmp_path, keys):
     shown = settings.save(live, path, "llm", "google", " gemini-2.5-flash ", key="k")
     google = config.PROVIDERS["llm"]["google"]["url"]
     assert tomllib.loads(path.read_text()) == {"llm": {"provider": "google", "url": google, "model": "gemini-2.5-flash"}}
-    assert json.loads(keys.read_text()) == {"llm.google": "k"} and keys.stat().st_mode & 0o077 == 0  # yours only
+    assert json.loads(keys.read_text()) == {"llm.google": "k"} and (sys.platform == "win32" or keys.stat().st_mode & 0o077 == 0)  # yours only (Windows: by your folder's permissions)
     assert (live.llm.api_url, live.llm.api_key, live.llm.model) == (google, "k", "gemini-2.5-flash")  # asked from now on
     assert shown["services"] == {"llm": {"provider": "google", "url": google, "model": "gemini-2.5-flash"}, "jev": None}
     assert shown["providers"]["llm"]["google"]["key"] and not shown["providers"]["llm"]["openai"]["key"]

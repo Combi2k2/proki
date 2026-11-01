@@ -1,6 +1,7 @@
 import asyncio
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -607,7 +608,7 @@ async def test_a_poke_draws_from_its_picks(tmp_path, ui):
     compiled(tmp_path, config)
     await step(0, program="p")
     picked, plain = [m for m in ui.sent if m["type"] == "poke"]
-    assert picked["media"].endswith("bugcat/sad.gif") and picked["sound"].endswith("alarm-clock.mp3")
+    assert Path(picked["media"]).match("bugcat/sad.gif") and Path(picked["sound"]).match("alarm-clock.mp3")
     assert "media" not in plain and "sound" not in plain  # no picks: none
 
 
@@ -619,8 +620,8 @@ async def test_a_question_has_its_own_pictures_and_sounds_along_with_the_pool(tm
     compiled(tmp_path, config)
     await step(0, program="p")
     [asked] = ui.questions()
-    assert asked["show"]["title"] == "Up" and asked["show"]["media"].endswith("bugcat/sad.gif")
-    assert asked["show"]["sound"].endswith("alarm-clock.mp3") and "immediate" not in asked["show"]  # "Later" too
+    assert asked["show"]["title"] == "Up" and Path(asked["show"]["media"]).match("bugcat/sad.gif")
+    assert Path(asked["show"]["sound"]).match("alarm-clock.mp3") and "immediate" not in asked["show"]  # "Later" too
     Program.registry["p"].switch(False)
     await settle()
 

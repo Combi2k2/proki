@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from proki import settings
+from proki import platforms, settings
 from proki.channels import Channels, Popup
 from proki.channels.base import Question
 from proki.core.actions import Lock, Open, Poke
@@ -17,6 +17,8 @@ from proki.core.rules import Rule
 from proki.core.primitives import Depth, Label, Primitive, Recording
 from proki.core.signals import Stream, Variable
 from proki.engine import Engine
+
+platforms.current().BROWSER_APPS.add("Google Chrome")  # the tests' browser, as macOS names it, a browser on every OS
 
 
 @pytest.fixture(autouse=True)

@@ -6,7 +6,8 @@ import pytest
 from proki.services.supervisor import Supervisor
 from proki.utils import find_commands
 
-SLEEPER = [sys.executable, "-c", "import time; time.sleep(60)"]
+SLEEPER = ([sys.executable, "-c", "import time; time.sleep(60)"] if sys.platform == "win32" else
+           ["/bin/sleep", "60"])  # not Python there: a framework build (macOS) runs as another path than it's started by
 
 
 def supervisor(tmp_path, server_up=None):
