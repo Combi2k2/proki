@@ -18,11 +18,11 @@
 
 <a id="download"></a>
 <p align="center">
-  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.1/proki_0.1.0_aarch64.dmg">
+  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.2/proki_0.1.2_aarch64.dmg">
     <img src="https://img.shields.io/badge/Download-macOS-24292F?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" />
   </a>
   &nbsp;
-  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.1/proki_0.1.0_x64-setup.exe">
+  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.2/proki_0.1.2_x64-setup.exe">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" />
   </a>
 </p>
@@ -114,7 +114,7 @@ Proki is an early build. macOS (Apple silicon) is tested; Windows is not yet tes
 
 ### 📦 From installer
 
-The current macOS and Windows preview installers are linked at the top of this README. They are temporary GitHub Actions artifacts, not a versioned release. ActivityWatch is included in setup and its browser extension is offered on first launch.
+The current macOS and Windows preview installers are linked at the top of this README. They come from the latest release (v0.1.2); every release is on the Releases page. ActivityWatch is included in setup and its browser extension is offered on first launch.
 
 - **macOS:** Open the `.dmg` and drag Proki to Applications. If macOS blocks the unsigned app, run `xattr -cr /Applications/Proki.app` once.
 - **Windows:** Run the installer. If SmartScreen appears, choose **More info → Run anyway**.
