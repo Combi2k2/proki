@@ -4,6 +4,7 @@ token. Each client is told what they are as it connects."""
 from __future__ import annotations
 
 import contextlib
+import hmac
 import json
 import secrets
 from collections.abc import Callable, Iterable
@@ -118,7 +119,7 @@ class Bearer:
         self.app, self.expected = app, f"Bearer {token}".encode()
 
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
-        if scope["type"] == "http" and dict(scope["headers"]).get(b"authorization") != self.expected:
+        if scope["type"] == "http" and not hmac.compare_digest(dict(scope["headers"]).get(b"authorization", b""), self.expected):
             await send({"type": "http.response.start", "status": 401, "headers": [(b"content-type", b"text/plain")]})
             await send({"type": "http.response.body", "body": b"Proki: a token is needed"})
             return
