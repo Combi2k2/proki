@@ -48,3 +48,6 @@ cp build/nats/"$name"/nats-server* build/engine/proki-engine/
 cd ui
 npm ci
 CI=true npx tauri build --config app/tauri.release.json --bundles "$bundles"   # CI: the .dmg without asking Finder to lay out its window
+if [ "$os" = darwin ]; then
+  codesign --verify --deep --strict --verbose=2 app/target/release/bundle/macos/Proki.app
+fi
