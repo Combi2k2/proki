@@ -169,7 +169,8 @@ fn link(to: String) {
     }
 }
 
-/// The server and the three recording sources required by onboarding are available.
+/// Whether ActivityWatch sees which app you're in and whether you're away: what the welcome waits for.
+/// Taps and clicks come later, as their watcher starts.
 #[tauri::command]
 async fn watching(app: AppHandle) -> bool {
     let client = reqwest::Client::new();
@@ -178,7 +179,7 @@ async fn watching(app: AppHandle) -> bool {
         .timeout(Duration::from_secs(1)).send().await else { return false };
     if !response.status().is_success() { return false; }
     let Ok(Value::Object(buckets)) = response.json::<Value>().await else { return false };
-    ["currentwindow", "afkstatus", "os.hid.input"].iter().all(|kind|
+    ["currentwindow", "afkstatus"].iter().all(|kind|
         buckets.values().any(|bucket| bucket.get("type").and_then(Value::as_str) == Some(*kind)))
 }
 
