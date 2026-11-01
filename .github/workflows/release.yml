@@ -30,6 +30,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: ui/app }
+      - run: uv run pytest -q   # installers only from code that passes its tests, on each OS
+      - run: npm ci && npx tsc -b
+        working-directory: ui
       - run: bash packaging/build.sh
         shell: bash
       - uses: actions/upload-artifact@v7
