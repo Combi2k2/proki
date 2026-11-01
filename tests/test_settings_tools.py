@@ -136,7 +136,8 @@ def test_startup_loads_ports_and_launcher_forwards_them(tmp_path, monkeypatch):
     monkeypatch.setattr(launcher, "find_commands", lambda names, *args: {name: [name] for name in names})
     monkeypatch.setattr(launcher.ActivityWatchClient, "buckets", lambda self: {})
     services = launcher.services(app=True)
-    assert services["NATS"].commands["nats-server"][-1] == "4232"
+    nats = services["NATS"].commands["nats-server"]
+    assert nats[nats.index("-p") + 1] == "4232" and nats[nats.index("-c") + 1] == str(launcher.NATS_CONF)
     for command in services["ActivityWatch"].commands.values():
         assert command[-4:] == ["--host", "127.0.0.1", "--port", "5612"]
     assert services["ActivityWatch Input"].commands["aw-watcher-input"][-1] == "5612"

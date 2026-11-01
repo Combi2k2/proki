@@ -69,7 +69,7 @@ async def running(config: settings.Settings) -> None:
     up = lambda: nats.NatsBus.is_up(settings.HOST, settings.PORTS.nats)
     wait_until(up, BUS)  # its server, if it's starting too
     try:
-        bus = await nats.NatsBus.connect(settings.HOST, settings.PORTS.nats) if up() else nats.LocalBus()
+        bus = await nats.NatsBus.connect(settings.HOST, settings.PORTS.nats, token=Tools.token(settings.TOOLS_TOKEN)) if up() else nats.LocalBus()
     except Exception:
         bus = nats.LocalBus()
     if isinstance(bus, nats.LocalBus):  # one in this process: the app can't reach it

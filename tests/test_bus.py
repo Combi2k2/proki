@@ -1,5 +1,6 @@
 """The message bus (services/nats.py): the in-process one, and NATS when nats-server is installed."""
 import asyncio
+import socket
 
 import pytest
 
@@ -8,7 +9,7 @@ from proki.services.nats import LocalBus, NatsBus
 from proki.services.supervisor import Supervisor
 from proki.utils import find_commands
 
-HOST, PORT = "127.0.0.1", 14223
+HOST = "127.0.0.1"
 FOUND = find_commands(["nats-server"], platforms.current().NATS_DIRS, platforms.current().EXE)
 
 
@@ -57,13 +58,22 @@ async def test_the_local_bus():
 
 
 @pytest.mark.skipif(FOUND is None, reason="nats-server isn't installed")
-async def test_nats(tmp_path):
-    FOUND["nats-server"] += ["-a", HOST, "-p", str(PORT)]
-    server = Supervisor("NATS", FOUND, lambda: NatsBus.is_up(HOST, PORT), tmp_path)
-    assert server.start() == "NATS started by Proki"
-    bus = await NatsBus.connect(HOST, PORT)
+async def test_nats_takes_only_who_has_its_token(tmp_path):
+    with socket.socket() as s:  # a free port: a server an earlier run left can't answer for this one
+        s.bind((HOST, 0))
+        port = s.getsockname()[1]
+    conf = tmp_path / "nats.conf"
+    conf.write_text('authorization { token: "secret" }\n')
+    server = Supervisor("NATS", {"nats-server": [*FOUND["nats-server"], "-a", HOST, "-p", str(port), "-c", str(conf)]},
+                        lambda: NatsBus.is_up(HOST, port), tmp_path)
     try:
-        await exercise(bus)
+        assert server.start() == "NATS started by Proki"
+        with pytest.raises(Exception):
+            await asyncio.wait_for(NatsBus.connect(HOST, port, timeout=1), 3)
+        bus = await NatsBus.connect(HOST, port, token="secret")
+        try:
+            await exercise(bus)
+        finally:
+            await bus.close()
     finally:
-        await bus.close()
         server.stop()

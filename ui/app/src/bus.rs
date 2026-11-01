@@ -16,9 +16,10 @@ use crate::popup::{self, Item, Reply};
 use crate::{open_main, proki, update_tray};
 
 pub async fn connect(app: AppHandle) {
-    let address = proki(&app).args.nats.clone();
+    let (address, token) = (proki(&app).args.nats.clone(), proki(&app).args.tools_token.clone());
     let bus = loop {
-        match async_nats::connect(&address).await {
+        let said = tokio::fs::read_to_string(&token).await.unwrap_or_default(); // the tools' token: the bus asks for it too
+        match async_nats::ConnectOptions::with_token(said.trim().into()).connect(&address).await {
             Ok(bus) => break bus,
             Err(_) => tokio::time::sleep(Duration::from_secs(1)).await, // the engine may still be starting it
         }

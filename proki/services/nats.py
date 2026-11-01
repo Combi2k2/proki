@@ -72,10 +72,11 @@ class NatsBus(Bus):
         self.client = client  # nats-py's connection (`NatsBus.connect`)
 
     @classmethod
-    async def connect(cls, host: str, port: int, timeout: float = 2) -> NatsBus:
-        """Connect to the server at `host`:`port`."""
+    async def connect(cls, host: str, port: int, timeout: float = 2, token: str | None = None) -> NatsBus:
+        """Connect to the server at `host`:`port`, with `token` if it asks for one."""
         client = await nats.connect(
             f"nats://{host}:{port}",
+            token=token,
             connect_timeout=timeout,
             allow_reconnect=True,
             max_reconnect_attempts=-1,  # a restarted server is found again

@@ -5,7 +5,7 @@
     proki-engine engine             the engine alone, as the launcher starts it there
     proki-engine mcp                the tools, for an AI agent that starts them as a command
 
-    NATS            the message bus the engine and the app talk over
+    NATS            the message bus the engine and the app talk over, theirs only (the tools' token)
     ActivityWatch   what records the windows you're in
     engine          proki itself: your programs, and their tools
     UI              the app: the tray, the popups, the windows
@@ -35,6 +35,7 @@ from proki import platforms, settings
 from proki.services.activitywatch import ActivityWatchClient
 from proki.services.nats import NatsBus
 from proki.services.supervisor import Supervisor
+from proki.tools.server import Tools
 from proki.utils import find_commands
 
 CYCLE  = 60                                     # seconds between checks of the services
@@ -49,6 +50,8 @@ AW   = [                    # the modules included in ActivityWatch's standard d
     "aw-watcher-afk",       # aw.AFK
 ]                           # aw.WEBTAB comes from the browser extension
 INPUT = ["aw-watcher-input"]  # discovered separately: a missing input watcher must not hide an installed AW
+
+NATS_CONF = settings.CONFIG_DIR / "nats.conf"  # the bus asks for the tools' token: readable by you only
 
 AW_HOME = settings.DATA_DIR / "activitywatch"   # where it's installed for you, if it was nowhere
 AW_URL  = "https://github.com/ActivityWatch/activitywatch/releases/download/v0.14.1/activitywatch-v0.14.1-{}.zip"
@@ -77,7 +80,7 @@ def services(app: bool) -> dict[str, Supervisor]:
     watched = on_aw(find_commands(AW, [*here.AW_DIRS, AW_HOME], here.EXE))
     typing  = on_aw(find_commands(INPUT, [Path(sys.executable).parent, settings.ROOT_DIR / "build" / "engine" / "proki-engine", *here.AW_DIRS, AW_HOME], here.EXE))  # shipped, else built
     nats    = find_commands(NATS, [Path(sys.executable).parent, *here.NATS_DIRS] if FROZEN else here.NATS_DIRS, here.EXE)  # shipped, its own first
-    at      = ["-a", settings.HOST, "-p", str(settings.PORTS.nats)]
+    at      = ["-a", settings.HOST, "-p", str(settings.PORTS.nats), "-c", str(NATS_CONF)]
     flags   = [f"--nats={settings.HOST}:{settings.PORTS.nats}", f"--tools={settings.HOST}:{settings.PORTS.tools}", f"--tools-token={settings.TOOLS_TOKEN}"]
     engine  = [sys.executable, *(["engine"] if FROZEN else ["-m", "proki"])]   # shipped, it's this program again
     made    = {}
@@ -143,6 +146,11 @@ def main() -> int:
     """Start each service, keep them running, and stop them all as the engine quits, or as
     you stop this."""
     settings.configure_ports()
+    token = Tools.token(settings.TOOLS_TOKEN)   # made the first time, its folder with it
+    NATS_CONF.touch(mode=0o600)                 # yours only before the token's in it
+    NATS_CONF.chmod(0o600)
+    NATS_CONF.write_text(f'authorization {{ token: "{token}" }}\n')
+
     app        = "--from-app" in sys.argv
     started    = services(app)
     engine     = started["engine"]
