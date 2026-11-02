@@ -69,7 +69,7 @@ export function NotesView({ onGo }: { onGo: (to: View, card?: number) => void })
   const waiting = buckets.Todo.filter((n) => !n.link).length
 
   return (
-    <div className="mx-auto max-w-2xl px-8 pt-7 pb-8">
+    <div className="mx-auto max-w-5xl px-8 pt-7 pb-8 *:mx-auto *:max-w-[38rem]">
       <PageHeader title="Notes & ideas" className="mb-5"
                   sub={waiting > 0 ? `${waiting} todo${waiting > 1 ? "s" : ""} waiting for the planner` : "Write it down, sort it later."} />
 

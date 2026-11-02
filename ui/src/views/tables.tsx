@@ -65,7 +65,7 @@ export function TablesView() {
   const sort = (key: string) => setOrder((o) => (o?.key === key ? (o.down ? null : { key, down: true }) : { key, down: false }))
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 px-8 pt-7 pb-6">
+    <div className="flex h-full flex-col gap-4 px-8 pt-7 pb-6">
       <PageHeader title="Tables" beside={kinds.length > 0 && (
           <Tabs value={kind} onValueChange={pick}>
             <TabsList>{kinds.map((k) => <TabsTrigger key={k} value={k} className="font-mono text-xs">{k}</TabsTrigger>)}</TabsList>

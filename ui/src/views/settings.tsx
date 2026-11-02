@@ -62,7 +62,7 @@ export function SettingsView({ onWelcome }: {
   }, [retry])
 
   return (
-    <div className="mx-auto max-w-2xl px-8 pt-7 pb-24">
+    <div className="mx-auto max-w-5xl px-8 pt-7 pb-24 *:mx-auto *:max-w-[38rem]">
       <PageHeader title="Settings" sub="A few things to help me help you." className="mb-6" />
 
       <section aria-labelledby="welcome" className="mb-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-5 py-3.5">

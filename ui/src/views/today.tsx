@@ -97,7 +97,7 @@ export function TodayView({ onGo }: { onGo: Go }) {
   )
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-5 px-8 pt-7 pb-6">
+    <div className="mx-auto flex h-full max-w-5xl flex-col gap-5 px-8 pt-7 pb-6">
       <PageHeader className="shrink-0" title={new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
                   sub={today?.in_session && <span className="font-medium text-focused">You're in a focus session</span>}>
         {today?.in_session

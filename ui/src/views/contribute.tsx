@@ -34,7 +34,7 @@ export function ContributeView() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-8 pt-7 pb-24">
+    <div className="mx-auto max-w-5xl px-8 pt-7 pb-24 *:mx-auto *:max-w-[38rem]">
       <PageHeader title="Contribute" sub="Proki is open source, and made by one person. Any of these helps it get better." className="mb-6" />
 
       <div className="mb-10 grid gap-3 sm:grid-cols-2">
