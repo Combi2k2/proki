@@ -4,24 +4,25 @@
 // bound to the boxes' edges, the side nearest the other box, as a drawing app binds them:
 // curved, elbow (right angles, rounded) or straight. Or springs: the boxes laid out live, each
 // way a spring and each box pushing the others off, the arrows arcs; a box you drag pulls the
-// others, a double-click fixes it where it is (its border bolder), or frees it. Each capsule is
+// others, a double-click fixes it where it is (its border bolder), or frees it. Until you move the
+// view, it fits the boxes as they settle and as the window's room changes. Each capsule is
 // one size, its way's number, lying along its arrow. While the program checks the ways out of
 // the state it's in, and a moment after, each one tried is tinted by whether it holds (green,
 // red), the ones after the first that does aren't tried, and the one it takes flows. The state
 // the program is in is lit: a ring running round it while it does its actions, the time left
-// when it waits. The start is marked, the one open (`picked`) ringed. A box opens the state, a
-// capsule the way out (`onInspect`); a click on nothing, `onPane`.
+// when it waits. The start is marked, the one open (`picked`) ringed. A box opens the state (a
+// click, or Enter or Space on it), a capsule the way out (`onInspect`); a click on nothing, `onPane`.
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Background, BackgroundVariant, BaseEdge, Controls, EdgeLabelRenderer, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider,
-  getBezierPath, getSmoothStepPath, getStraightPath, useInternalNode, useNodesState,
+  getBezierPath, getSmoothStepPath, getStraightPath, useInternalNode, useNodesState, useReactFlow,
   type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps, type Viewport,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import dagre from "@dagrejs/dagre"
 import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type Simulation, type SimulationNodeDatum } from "d3-force"
-import { CornerDownRight, Hourglass, Loader2, Minus, Orbit, Spline } from "lucide-react"
+import { Check, CornerDownRight, Hourglass, Loader2, Minus, Orbit, Spline, X } from "lucide-react"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { ProgramDetail } from "@/lib/proki"
 import { cn } from "@/lib/utils"
@@ -30,6 +31,7 @@ import { isElse, minutes, summary, type Inspected } from "@/views/program-inspec
 
 const H = 64  // a box's height
 const GAP = 6  // between a box's edge and the arrow bound to it
+const FIT = { padding: { top: "104px", right: "48px", bottom: "64px", left: "48px" } as const, maxZoom: 1.1 }  // room for the card over its top
 const STYLES = ["curved", "elbow", "straight", "springs"] as const  // springs: laid out live, its arrows arcs
 type Style = (typeof STYLES)[number]
 type XY = { x: number; y: number }
@@ -100,6 +102,12 @@ function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
   const [places, setPlaces] = useState<Record<string, XY>>(() => kept(placesKey) ?? {})  // the boxes you moved
   const [style, setStyle] = useState<Style>(() => recall("graph.style", STYLES, "springs"))
   const [view] = useState(() => kept<Viewport>(viewKey))
+  const flow  = useReactFlow()
+  const moved = useRef(!!view)  // you moved the view: it's left where you put it
+  const hand  = useRef(false)   // the zoom buttons moving it: yours too
+  const click = useRef(0)       // in springs, a click waits 150ms for a second one: a double-click fixes the box
+  const box   = useRef<HTMLDivElement>(null)
+  const refit = () => !moved.current && flow.fitView({ ...FIT, duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 300 })
   const [fixed, setFixed] = useState<string[]>(() => kept(fixedKey) ?? [])  // in springs, the boxes you fixed where they are
   const live = style === "springs"
   const now = detail.on ? detail.state : null
@@ -164,7 +172,6 @@ function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
   const sim  = useRef<Simulation<Box, undefined> | null>(null)  // in springs: the springs, live
   const held = useRef(new Set<string>())  // the boxes you drag
   const at   = useRef(nodes)
-  const opening = useRef<number>(undefined)  // a click's opening, held while it may be a double-click
   at.current = nodes
   const settle = (s: Simulation<Box, undefined>) => setPlaces(() => {  // every box kept where it is
     const next = Object.fromEntries(s.nodes().map((b) => [b.id, corner(b)]))
@@ -183,7 +190,7 @@ function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
       const b = by.get(n.id)
       return held.current.has(n.id) || !b || !Number.isFinite(b.x) || !Number.isFinite(b.y) ? n : { ...n, position: corner(b) }
     })))
-    s.on("end", () => settle(s))
+    s.on("end", () => (settle(s), refit()))  // fitted each time it settles, a box you dragged too
     s.alpha(0.5).restart()
     return () => void (s.stop(), sim.current = null)
   }, [live, auto])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -213,8 +220,18 @@ function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
     sim.current?.alpha(0.3).restart()
   }
 
+  useEffect(() => {  // the room it has changes (the window resized)
+    const watched = new ResizeObserver(() => refit())
+    watched.observe(box.current!)
+    return () => watched.disconnect()
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div className="relative min-h-0 flex-1">
+    <div ref={box} className="relative min-h-0 flex-1"
+         onKeyDown={(e) => {  // a box opens on Enter or Space, as on a click
+           const id = (e.key === "Enter" || e.key === " ") && (e.target as HTMLElement).closest<HTMLElement>(".react-flow__node")?.dataset.id
+           if (id) (e.preventDefault(), onInspect({ kind: "state", state: id }))
+         }}>
       <ReactFlow<StateNode, WayEdge>
         nodes={nodes} edges={edges} onNodesChange={onNodesChange} nodeTypes={NODES} edgeTypes={EDGES}
         onNodeDragStart={(_, __, moved) => live && (moved.forEach((n) => held.current.add(n.id)), hold(moved), sim.current?.alphaTarget(0.3).restart())}
@@ -224,21 +241,18 @@ function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
           keep(placesKey, next)
           return next
         })}
-        onNodeDoubleClick={(_, n) => live && (clearTimeout(opening.current), fix(n))}
+        onNodeDoubleClick={(_, n) => live && (clearTimeout(click.current), fix(n))}
         zoomOnDoubleClick={!live}
-        onNodeClick={(e, n) => {  // in springs, a moment after, unless it's a double-click
-          clearTimeout(opening.current)
-          if (!live) n.data.onOpen()
-          else if (e.detail === 1) opening.current = window.setTimeout(n.data.onOpen, 250)
-        }}
+        onNodeClick={(e, n) => !live ? n.data.onOpen() : e.detail < 2 && (click.current = window.setTimeout(n.data.onOpen, 150))}
         onPaneClick={onPane}
-        onMoveEnd={(_, v) => keep(viewKey, v)}
-        defaultViewport={view ?? undefined} fitView={!view} fitViewOptions={{ padding: 0.2, maxZoom: 1.1 }}
+        onMoveEnd={(e, v) => (e || hand.current) && ((hand.current = false), (moved.current = true), keep(viewKey, v))}
+        defaultViewport={view ?? undefined} fitView={!view} fitViewOptions={FIT}
         minZoom={0.3} maxZoom={2.5} nodesConnectable={false} edgesFocusable={false} deleteKeyCode={null}
         colorMode={dark ? "dark" : "light"} proOptions={{ hideAttribution: true }}
         aria-label={`${detail.name}: its states and the ways between them`}>
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} />
-        <Controls showInteractive={false} position="bottom-right" />
+        <Controls showInteractive={false} position="top-right" onZoomIn={() => void (hand.current = true)} onZoomOut={() => void (hand.current = true)}
+                  onFitView={() => ((moved.current = false), keep(viewKey, null))} />  {/* the corner below: the bubbles' */}
         <Panel position="bottom-left">
           <div className="flex items-center gap-1 rounded-xl border bg-background/90 p-1 shadow-sm backdrop-blur">
             <ToggleGroup type="single" size="sm" spacing={1} value={style} onValueChange={(s) => s && pick(s as typeof style)} aria-label="The view">
@@ -376,12 +390,16 @@ function WayArrow({ id, source, target, data, markerEnd }: EdgeProps<WayEdge>) {
         <button onClick={data.onOpen} title={[`${data.number}`, data.label, data.hint].filter(Boolean).join(" · ")}
                 aria-label={`way out ${data.number}: ${data.label}${data.tried === true ? ", holds now" : data.tried === false ? ", doesn't hold now" : ""}`}
                 style={{ transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px) rotate(${mid.angle}deg)` }}
-                className={cn("nodrag nopan pointer-events-auto absolute flex h-[18px] w-8 items-center justify-center rounded-full border-[1.5px] bg-background font-mono text-[11px] font-medium",
+                className={cn("nodrag nopan pointer-events-auto absolute flex h-5 min-w-8 items-center justify-center rounded-full border-[1.5px] bg-background px-1 font-mono text-[11px] font-medium",
+                              "before:absolute before:-inset-0.5 before:content-['']",  // a 24px target
                               "transition-colors", data.dashed && "border-dashed",
                               data.tried === true ? "border-emerald-500/70 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
                                 : data.tried === false ? "border-destructive/60 bg-red-50 text-destructive hover:bg-red-100 dark:bg-red-950 dark:hover:bg-red-900"
                                 : cn("hover:border-foreground/50 hover:bg-accent", data.dashed ? "text-muted-foreground" : "text-foreground"))}>
-          <span style={{ transform: `rotate(${-mid.angle}deg)` }}>{data.number}</span>
+          <span style={{ transform: `rotate(${-mid.angle}deg)` }} className="flex items-center gap-0.5">
+            {data.tried === true ? <Check aria-hidden strokeWidth={3} className="size-2.5" /> : data.tried === false && <X aria-hidden strokeWidth={3} className="size-2.5" />}
+            {data.number}
+          </span>
         </button>
       </EdgeLabelRenderer>
     </>
