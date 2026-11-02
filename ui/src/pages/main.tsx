@@ -1,29 +1,34 @@
 // The main window: everyday views first, then the advanced ones (automations, time reports and every kind of record);
 // Help, Settings and Contribute at the foot. The tray opens it on one of them ("navigate"), the engine on a
 // group's card too (#tasks/12), or an automation (#programs/bedtime), and remembers nothing else: each view loads
-// what it shows. At its right edge, on every view, a drawer: what the automations can use, for the one you're in.
+// what it shows. In its corner, on every view, bubbles, each opening a panel over the window and over the dialogs
+// in it: what the automations can use, for the one you're in, else everywhere.
 // The first time it opens, the welcome over it (Settings shows it again).
 
-import { Fragment, useEffect, useState } from "react"
-import { AppWindow, ChartLine, CircleHelp, Image, HeartHandshake, Lightbulb, ListTodo, PanelRightClose, PanelRightOpen, Settings, Sun, Table2, Workflow } from "lucide-react"
+import { Fragment, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
+import { AppWindow, Blocks, ChartLine, CircleHelp, Image, HeartHandshake, Lightbulb, ListTodo, Settings, Sun, Table2, Workflow, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Welcome } from "@/components/welcome"
 import prokiMark from "../../logo/proki.svg"
-import { mount, type View } from "@/lib/proki"
+import { GLOBAL, mount, type View, type Where } from "@/lib/proki"
 import { recall, remember } from "@/lib/remember"
 import { cn } from "@/lib/utils"
-import { AppsView } from "@/views/apps"
-import { ContributeView } from "@/views/contribute"
-import { ManualView } from "@/views/manual"
-import { MediaView } from "@/views/media"
-import { MetricsView } from "@/views/metrics"
-import { NotesView } from "@/views/notes"
-import { friendly } from "@/lib/friendly"
-import { GLOBAL, ProgramsView, Resources, type Where } from "@/views/programs"
-import { SettingsView } from "@/views/settings"
-import { TablesView } from "@/views/tables"
-import { TasksView } from "@/views/tasks"
-import { TodayView } from "@/views/today"
+
+// each view loaded when first opened: the charts, graphs and editors only by the views that show them
+const AppsView       = lazy(() => import("@/views/apps").then((m)       => ({ default: m.AppsView })))
+const ContributeView = lazy(() => import("@/views/contribute").then((m) => ({ default: m.ContributeView })))
+const ManualView     = lazy(() => import("@/views/manual").then((m)     => ({ default: m.ManualView })))
+const MediaView      = lazy(() => import("@/views/media").then((m)      => ({ default: m.MediaView })))
+const MetricsView    = lazy(() => import("@/views/metrics").then((m)    => ({ default: m.MetricsView })))
+const NotesView      = lazy(() => import("@/views/notes").then((m)      => ({ default: m.NotesView })))
+const ProgramsView   = lazy(() => import("@/views/programs").then((m)   => ({ default: m.ProgramsView })))
+const Resources      = lazy(() => import("@/views/programs").then((m)   => ({ default: m.Resources })))
+const Scope          = lazy(() => import("@/views/programs").then((m)   => ({ default: m.Scope })))
+const SettingsView   = lazy(() => import("@/views/settings").then((m)   => ({ default: m.SettingsView })))
+const TablesView     = lazy(() => import("@/views/tables").then((m)     => ({ default: m.TablesView })))
+const TasksView      = lazy(() => import("@/views/tasks").then((m)      => ({ default: m.TasksView })))
+const TodayView      = lazy(() => import("@/views/today").then((m)      => ({ default: m.TodayView })))
 
 type Entry = { view: View; title: string; icon: typeof Sun; tint: string }  // tint: its icon's colour
 const SECTIONS: { head?: string; items: Entry[] }[] = [
@@ -66,34 +71,44 @@ function Item({ view: v, title, icon: Icon, tint, at, onGo }: Entry & { at: View
   )
 }
 
-/** What the automations can use, at the window's edge: for the scope you're in, in the editor,
- * else the global one's. Shut, a handle to open it; kept as you left it. */
-function Drawer({ where, open, onOpen }: { where: Where; open: boolean; onOpen: (open: boolean) => void }) {
-  const [names, setNames] = useState<Record<string, string>>({})
-  useEffect(() => {
-    if (open) window.proki.tool("reference").then((r) => !r.error && setNames(Object.fromEntries(r.programs.map((p) => [p.name, friendly(p).title]))))
-  }, [open])
-  if (!open) return (
-    <Button size="icon-sm" variant="ghost" onClick={() => onOpen(true)} aria-label="Show what automations can use" title="Signals, variables, rules and inputs"
-            className="absolute top-3 right-3 z-10 text-muted-foreground [-webkit-app-region:no-drag]">
-      <PanelRightOpen />
-    </Button>
-  )
-  const at = where.program === null ? "Everywhere" : [names[where.program] ?? where.program, where.state].filter(Boolean).join(" › ")
-  return (
-    <aside aria-label="What automations can use" className="ml-2 flex w-[20rem] shrink-0 flex-col rounded-[14px] border border-black/[0.07] bg-background motion-safe:animate-in motion-safe:slide-in-from-right-4 motion-safe:fade-in-0 max-[900px]:w-[16rem]">
-      <header className="flex items-center gap-2 border-b px-3 py-2.5">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-medium">What automations use</h2>
-          <p className="truncate text-xs text-muted-foreground">{at}</p>
-        </div>
-        <Button size="icon-sm" variant="ghost" aria-label="Hide" onClick={() => onOpen(false)}><PanelRightClose /></Button>
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]">
-        <Resources where={where} />
-      </div>
-    </aside>
-  )
+type Bubble = { id: string; title: string; icon: typeof Sun; about: ReactNode; panel: ReactNode }  // about: under its title
+
+/** The bubbles at the window's corner, each opening its panel above them, over the window and its
+ * dialogs: one open at a time, none when the app opens. Escape in it closes it. */
+function Bubbles({ bubbles }: { bubbles: Bubble[] }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const buttons = useRef<Record<string, HTMLButtonElement | null>>({})
+  const it      = bubbles.find((b) => b.id === open)
+  useEffect(() => {  // a dialog open makes room for it
+    if (!it) return
+    document.documentElement.dataset.bubble = it.id
+    return () => void delete document.documentElement.dataset.bubble
+  }, [it?.id])
+  return createPortal(<>
+    <div className="fixed right-4 bottom-4 z-50 flex items-center gap-2">
+      {bubbles.map(({ id, title, icon: Icon }) => (
+        <button key={id} ref={(b) => void (buttons.current[id] = b)} onClick={() => setOpen(open === id ? null : id)}
+                aria-label={title} title={title} aria-expanded={open === id} aria-controls={`bubble-${id}`}
+                className="grid size-11 place-items-center rounded-full border bg-background text-muted-foreground shadow-lg transition-[scale,background-color,color] duration-150 ease-out hover:bg-muted hover:text-foreground active:scale-[0.96] aria-expanded:bg-foreground aria-expanded:text-background">
+          <Icon aria-hidden className="size-5" />
+        </button>
+      ))}
+    </div>
+    {it && (
+      <section id={`bubble-${it.id}`} aria-labelledby={`bubble-${it.id}-title`} tabIndex={-1}
+               onKeyDown={(e) => e.key === "Escape" && !e.defaultPrevented && (e.preventDefault(), setOpen(null), buttons.current[it.id]?.focus())}
+               className="fixed right-4 bottom-[4.5rem] z-50 flex h-[min(38rem,calc(100dvh-6rem))] w-[min(23rem,calc(100vw-2rem))] origin-bottom-right flex-col rounded-2xl border bg-background shadow-2xl outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-[0.96] motion-safe:duration-200">
+        <header className="flex items-center gap-1 border-b py-2.5 pr-2 pl-4">
+          <div className="min-w-0 flex-1">
+            <h2 id={`bubble-${it.id}-title`} className="text-sm font-medium">{it.title}</h2>
+            <p className="truncate text-xs text-muted-foreground">{it.about}</p>
+          </div>
+          <Button size="icon-sm" variant="ghost" aria-label={`Close ${it.title.toLowerCase()}`} title="Close (Esc)" onClick={() => setOpen(null)}><X /></Button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-color:var(--border)_transparent] [scrollbar-width:thin]">{it.panel}</div>
+      </section>
+    )}
+  </>, document.body)
 }
 
 /** What a view opens at: a group's card (a number), or an automation (its name). */
@@ -104,7 +119,6 @@ function Main() {
   const [view, setView] = useState<View>((first as View) || "today")
   const [opened, setOpened] = useState<number | string | null>(opening(card))  // a card, or an automation, to open
   const [where, setWhere] = useState<Where>(GLOBAL)
-  const [drawer, setDrawer] = useState(() => recall("proki-drawer", ["open", "shut"] as const, "shut") === "open")
   const [welcome, setWelcome] = useState(() => recall("proki-welcomed", ["yes", "no"] as const, "no") === "no")  // the welcome, not seen through yet
   useEffect(() => {
     window.proki.onNavigate((path) => {
@@ -113,11 +127,7 @@ function Main() {
       setOpened(opening(card))
     })
   }, [])
-  const go = (to: View, card: number | string | null = null) => {
-    setView(to)
-    setOpened(card)
-    if (to !== "programs") setWhere(GLOBAL)
-  }
+  const go = (to: View, card: number | string | null = null) => (setView(to), setOpened(card))
   useEffect(() => {  // your suggestions waiting, sent: now, when you're back online, and every ten minutes
     const send = () => void window.proki.tool("send_suggestions")
     send()
@@ -125,7 +135,10 @@ function Main() {
     window.addEventListener("online", send)
     return () => (clearInterval(every), window.removeEventListener("online", send))
   }, [])
-  const keep = (open: boolean) => (setDrawer(open), remember("proki-drawer", open ? "open" : "shut"))
+  const scope = view === "programs" ? where : GLOBAL  // what the automations can use, where you are; out of them, everywhere
+  const bubbles: Bubble[] = [
+    { id: "resources", title: "Resources", icon: Blocks, about: <Suspense><Scope where={scope} /></Suspense>, panel: <Suspense><Resources where={scope} /></Suspense> },
+  ]
 
   return (
     <div className="proki-frame flex h-screen gap-0 bg-muted p-2">
@@ -146,6 +159,7 @@ function Main() {
         </div>
       </nav>
       <div className={cn("proki-sheet relative min-w-0 flex-1 rounded-[14px] border border-black/[0.07] bg-background", view === "programs" || view === "tasks" || view === "today" || view === "tables" ? "overflow-hidden" : "overflow-y-auto")}>
+        <Suspense>
         {view === "today" && <TodayView onGo={(to, card) => go(to, card ?? null)} />}
         {view === "tasks" && <TasksView open={typeof opened === "number" ? opened : null} onOpen={setOpened} />}
         {view === "notes" && <NotesView onGo={(to, card) => go(to, card ?? null)} />}
@@ -157,9 +171,9 @@ function Main() {
         {view === "manual" && <ManualView onGo={go} />}
         {view === "contribute" && <ContributeView />}
         {view === "settings" && <SettingsView onWelcome={() => setWelcome(true)} />}
-        {!drawer && view === "programs" && <Drawer where={where} open={false} onOpen={keep} />}
+        </Suspense>
       </div>
-      {drawer && view === "programs" && <Drawer where={where} open onOpen={keep} />}
+      {!welcome && <Bubbles bubbles={bubbles} />}  {/* the welcome over them, none; after it, shut */}
       {welcome && <Welcome onDone={(settings) => {
         setWelcome(false)
         remember("proki-welcomed", "yes")

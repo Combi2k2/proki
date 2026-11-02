@@ -1,9 +1,10 @@
 // The forms that edit your programs, one per kind: a variable, a signal, a rule, a program, a
 // state, a way out, an action. Save sends the draft; a mistake shows under the form, which
 // stays open. A poke's or a question's pictures and sounds are the media library's, set as
-// the action is saved.
+// the action is saved. A form you've changed is marked so (`data-dirty`), so what would close it
+// can ask first; Escape cancels one you haven't.
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { AppWindow, Bell, Bot, Equal, KeySquare, ListMinus, ListPlus, Loader2, Lock, MessageCircleQuestionMark, Minus, Music, Plus, X, type LucideIcon } from "lucide-react"
 import { DynamicIcon, type IconName } from "lucide-react/dynamic"
 import { Button } from "@/components/ui/button"
@@ -11,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import type { MediaItem, RuleSpec, Scope, SignalSpec, StateSpec, Type, VariableSpec } from "@/lib/proki"
+import type { MediaItem, RuleSpec, SignalSpec, StateSpec, Type, VariableSpec, Where } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { CodeInput } from "@/views/code"
 import { Criteria, TypeField } from "@/views/fields"
@@ -21,6 +22,22 @@ import { SYMBOL } from "@/views/program-inspect"
 
 export const NAMES = "proki-names"  // the names a field suggests: a <datalist> the page fills
 const ASKS = ["ask_usr", "ask_jev", "ask_llm"]
+
+let aimed: HTMLInputElement | null = null  // the names field you were in last, while its form is open
+const hearing = new Set<() => void>()
+const aim = (field: HTMLInputElement | null) => void (aimed !== field && ((aimed = field), hearing.forEach((heard) => heard())))
+
+/** The names field a name picked elsewhere goes into, while there is one. */
+export const useAimed = () => useSyncExternalStore((heard) => (hearing.add(heard), () => void hearing.delete(heard)), () => aimed)
+
+/** `name` typed into that field, where its caret was. */
+export function insert(name: string) {
+  const field = aimed
+  if (!field?.isConnected) return aim(null)
+  field.focus()
+  field.setRangeText(name, field.selectionStart ?? field.value.length, field.selectionEnd ?? field.value.length, "end")
+  field.dispatchEvent(new Event("input", { bubbles: true }))
+}
 const TIMEOUT: Record<string, number> = { ask_usr: 120, ask_jev: 10, ask_llm: 10 }  // seconds, unless it says
 export const ACTIONS: Record<string, [string, LucideIcon, string]> = {  // each action's name, its icon, and the tint behind it
   poke:    ["Poke",   Bell,                      "bg-sky-500/15 text-sky-700 dark:text-sky-300"],
@@ -72,14 +89,25 @@ function Form({ children, onSave, onCancel, saveLabel = "Save", plain }: {
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
+  const form = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    const held = form.current
+    return () => void (aimed && held?.contains(aimed) && aim(null))
+  }, [])
   const save = async () => {
+    const was = form.current!.dataset.dirty
+    delete form.current!.dataset.dirty  // what a save moves on to needn't ask
     setBusy(true)
     const mistake = await onSave()
     setBusy(false)
     setError(mistake ?? "")
+    if (mistake && was && form.current) form.current.dataset.dirty = was
   }
   return (
-    <form className={cn("flex flex-col gap-3", !plain && "rounded-lg border bg-muted/30 p-3")} onSubmit={(e) => { e.preventDefault(); save() }}>
+    <form ref={form} className={cn("flex flex-col gap-3", !plain && "rounded-lg border bg-muted/30 p-3")} onSubmit={(e) => { e.preventDefault(); save() }}
+          onChange={(e) => void (e.currentTarget.dataset.dirty = "yes")}
+          onFocus={(e) => aim(e.target instanceof HTMLInputElement && e.target.getAttribute("list") === NAMES ? e.target : null)}
+          onKeyDown={(e) => e.key === "Escape" && !e.defaultPrevented && (e.preventDefault(), !e.currentTarget.dataset.dirty && onCancel())}>
       {children}
       {error && <p className="text-xs break-words text-destructive">{error}</p>}
       <div className="flex justify-end gap-2">
@@ -129,7 +157,6 @@ const Row = ({ children }: { children: ReactNode }) => <div className="grid grid
 
 // --- a variable, a signal, a rule -----------------------------------------------------------
 
-type Where = { scope: Scope; program: string | null; state: string | null }
 /** A name, a description and a type given from outside the form (a panel's title, the line
  *  under it, and the type beside its name). */
 type Named = { name: string; desc: string; type: Type }
@@ -376,8 +403,16 @@ export function ActionForm({ spec, at, about, taken, onSave, onCancel }: {
     const answer = await window.proki.tool("set_picks", { id, keys: [...picks.image, ...picks.sound] })
     return answer.error ? `Saved, but its pictures and sounds weren't: ${answer.error}` : null
   }
+  const [said, Icon, tint] = ACTIONS[kind] ?? [kind, Bot, "bg-muted text-muted-foreground"]
   return (
     <Form onCancel={onCancel} onSave={save}>
+      {spec && (
+        <p className="flex items-center gap-2 text-xs">
+          <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", tint)}><Icon aria-hidden className="size-3" /></span>
+          <span className="font-medium">{said}</span>
+          {does && <span className="min-w-0 text-muted-foreground first-letter:uppercase">{does}.</span>}
+        </p>
+      )}
       {!spec && (
         <Field label="Kind">
           <Choice value={kind} onChange={(k) => { if (name === free(kind, taken)) setName(free(k, taken)); setKind(k); setParams({}) }} options={Object.entries(ACTIONS).map(([k, [said]]) => [k, said])} />

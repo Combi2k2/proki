@@ -1,9 +1,11 @@
 // Programs, as scopes: Global › a program › a state. Each scope shows what's in it (the
 // programs, each a card in the part of your day it belongs to; a program's states; a state's
 // actions and transitions); what it can use (its signals, variables or rules, from one scope at
-// a time, and the inputs) is in the drawer at the window's edge, for the scope you're in.
-// Click into a program to go in, the path above goes back out; a state opens over the window, as
-// a dialog does, back to the one you came from, closed by a click outside it (back to the graph).
+// a time, and the inputs) is in a bubble at the window's corner, for the scope you're in.
+// Click into a program to go in, the path above goes back out; a state opens in a dialog over
+// the window, back to the one you came from, closed by ✕, Escape or a click around it, the
+// bubble still in reach: a name picked there goes into the field you were in. Leaving a form
+// you've changed asks first.
 //
 // Each change goes to the engine as one (`apply_changes`): checked, and kept only if every
 // program still runs. A state renamed takes its new name in the transitions to it, and as the
@@ -14,10 +16,13 @@ import { createPortal } from "react-dom"
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ArrowLeft, ArrowRight, Check, ChevronRight, Code, GripVertical, Eye, EyeOff, Lock, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react"
+import { ArrowLeft, ArrowLeftToLine, ArrowRight, Check, ChevronRight, Code, GripVertical, Eye, EyeOff, Lock, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react"
 import { Confirm } from "@/components/confirm"
 import { PageHeader } from "@/components/page"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,12 +31,13 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import type {
-  ActionSpec, BranchSpec, Change, GlobalSpecs, ProgramDetail, ProgramSpecs, Reference, RuleSpec, Scope, SignalSpec, Type, VarDetail, VariableSpec,
+import {
+  GLOBAL, type ActionSpec, type BranchSpec, type Change, type GlobalSpecs, type ProgramDetail, type ProgramSpecs, type Reference, type RuleSpec, type Scope,
+  type SignalSpec, type Type, type VarDetail, type VariableSpec, type Where,
 } from "@/lib/proki"
 import { recall, recallJson, remember, rememberJson } from "@/lib/remember"
 import { cn } from "@/lib/utils"
-import { ACTIONS, ActionForm, BranchForm, NAMES, ProgramForm, RuleForm, SignalForm, StateForm, VariableForm, type Save } from "@/views/program-forms"
+import { ACTIONS, ActionForm, BranchForm, insert, NAMES, ProgramForm, RuleForm, SignalForm, StateForm, useAimed, VariableForm, type Save } from "@/views/program-forms"
 import { Expr } from "@/views/code"
 import { RecordFields, said, TypeField, TypeIcon, TypeInside } from "@/views/fields"
 import { GraphView } from "@/views/program-graph"
@@ -42,7 +48,6 @@ import { useDrag } from "@/views/tasks"
 import { AREAS, doing, friendly, humane, type Area } from "@/lib/friendly"
 
 type Path = { program: string | null; state: string | null }
-export type Where = { scope: Scope; program: string | null; state: string | null }
 type Kind = "variable" | "signal" | "rule"
 type Spec = VariableSpec | SignalSpec | RuleSpec
 type Apply = (changes: Change[]) => Promise<string | null>
@@ -50,7 +55,26 @@ type Running = Reference["programs"][number]
 
 const depth = (p: Path) => (p.program === null ? 0 : p.state === null ? 1 : 2)
 const CHANGED = "proki:changed"  // a change kept: each part showing one reads it again
-export const GLOBAL: Where = { scope: "global", program: null, state: null }
+const GO      = "proki:go"       // the bubble's way to a scope: its detail, the path
+
+/** An automation's title, as its card says it, else its name. */
+const titled = (reference: Reference | null, name: string) => {
+  const found = reference?.programs.find((p) => p.name === name)
+  return found ? friendly(found).title : name
+}
+
+/** The scope you're in, said: "Global", else the automation's title, and its state. */
+export function Scope({ where }: { where: Where }) {
+  const [reference, setReference] = useState<Reference | null>(null)
+  useEffect(() => {
+    if (where.program === null) return
+    const load = () => void window.proki.tool("reference").then((r) => !r.error && setReference(r))
+    load()
+    window.addEventListener(CHANGED, load)
+    return () => window.removeEventListener(CHANGED, load)
+  }, [where.program])
+  return where.program === null ? "Global" : [titled(reference, where.program), where.state && humane(where.state)].filter(Boolean).join(" › ")
+}
 
 /** The programs, from `open`'s if given; `onWhere` hears the scope you're in. */
 export function ProgramsView({ open = null, onWhere }: { open?: string | null; onWhere?: (where: Where) => void }) {
@@ -59,6 +83,7 @@ export function ProgramsView({ open = null, onWhere }: { open?: string | null; o
   const [trail, setTrail] = useState<string[]>([])  // the states you came through to this one, in this program
   const [reference, setReference] = useState<Reference | null>(null)
   const [error, setError] = useState("")
+  const [pending, setPending] = useState<(() => void) | null>(null)  // a move that would lose what you changed, asked first
 
   const load = useCallback(async () => {
     const answer = await window.proki.tool("reference")
@@ -75,30 +100,47 @@ export function ProgramsView({ open = null, onWhere }: { open?: string | null; o
   }, [load])
   useEffect(() => onWhere?.(path.program === null ? GLOBAL : { scope: path.state === null ? "program" : "state", ...path }), [path, onWhere])
 
-  const title = (name: string) => {  // as the cards say it, else its name
-    const found = reference?.programs.find((p) => p.name === name)
-    return found ? friendly(found).title : name
+  const title = (name: string) => titled(reference, name)
+  const asked = (next: Path, move: () => void) => {  // a form you've changed, in what's left, asks first
+    const losing = next.program !== path.program ? "form[data-dirty]" : next.state !== path.state ? "[data-panel] form[data-dirty]" : ""
+    if (losing && document.querySelector(losing)) setPending(() => move)
+    else move()
   }
-  const go = (next: Path, replace = false) => {  // replace: the same state, under another name
+  const go = (next: Path, replace = false) => asked(next, () => {  // replace: the same state, under another name
     const within = next.program === path.program && next.state !== null
     setTrail(!within ? [] : path.state && next.state !== path.state && !replace ? [...trail, path.state] : trail)
     setDeeper(depth(next) >= depth(path))
     setPath(next)
-  }
-  const back = () => (setTrail(trail.slice(0, -1)), setPath({ ...path, state: trail.at(-1) ?? null }))
+  })
+  const back = () => asked({ ...path, state: trail.at(-1) ?? null }, () => (setTrail(trail.slice(0, -1)), setPath({ ...path, state: trail.at(-1) ?? null })))
+  const going = useRef(go)
+  going.current = go
+  useEffect(() => {
+    const heard = (e: Event) => going.current((e as CustomEvent<Path>).detail)
+    window.addEventListener(GO, heard)
+    return () => window.removeEventListener(GO, heard)
+  }, [])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {path.program !== null && <nav className="flex items-center gap-1 px-8 pt-6 pb-3 text-sm">
-        <Crumb active={path.program === null} onClick={() => go({ program: null, state: null })}>Automations</Crumb>
-        {path.program !== null && (
-          <>
-            <ChevronRight className="size-4 text-muted-foreground" />
-            <Crumb active>{title(path.program)}</Crumb>
-          </>
-        )}
+      {path.program !== null && <nav aria-label="Where you are" className="flex items-center gap-1 px-8 pt-6 pb-3 text-sm">
+        <Crumb onClick={() => go({ program: null, state: null })}>Automations</Crumb>
+        <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
+        <Crumb>{title(path.program)}</Crumb>
       </nav>}
-      {error && <p className="px-8 pb-2 text-sm text-destructive">{error}</p>}
+      {error && <div className="px-8 pb-2"><Mistake text={error} /></div>}
+      <AlertDialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
+            <AlertDialogDescription>What you changed in the form you're editing isn't saved yet.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => (pending?.(), setPending(null))}>Discard</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div key={path.program ?? ""}
            className={cn("min-h-0 flex-1 overflow-y-auto px-8 pb-10 animate-in fade-in-0 duration-200", path.program === null && "pt-7", deeper ? "zoom-in-95" : "zoom-in-105")}>
         {reference && (path.program === null
@@ -109,14 +151,10 @@ export function ProgramsView({ open = null, onWhere }: { open?: string | null; o
   )
 }
 
-function Crumb({ active, mono, onClick, children }: { active?: boolean; mono?: boolean; onClick?: () => void; children: ReactNode }) {
-  return (
-    <button onClick={onClick} disabled={!onClick || active}
-            className={cn("max-w-[24rem] truncate rounded-md px-1.5 py-0.5", mono && "font-mono", active ? "font-heading text-xl font-semibold tracking-tight"
-                                                                                    : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
-      {children}
-    </button>
-  )
+/** A step of the path: one to go back to, or (no `onClick`) the page you're on, its heading. */
+function Crumb({ onClick, children }: { onClick?: () => void; children: ReactNode }) {
+  if (!onClick) return <h1 aria-current="page" className="max-w-[24rem] truncate px-1.5 py-0.5 font-heading text-xl font-semibold tracking-tight">{children}</h1>
+  return <button onClick={onClick} className="max-w-[24rem] truncate rounded-md px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">{children}</button>
 }
 
 /** A scope's page: what's in it; `back`, if given, behind it, and `over` over both. */
@@ -131,27 +169,45 @@ function Layout({ main, back, over }: { main: ReactNode; back?: ReactNode; over?
   )
 }
 
-/** A state, in the middle of the window: back to the one you came from (`before`), closed by ✕,
- * Escape or a click outside it. */
+/** A state, in a dialog over the window: back to the one you came from (`before`), closed by ✕,
+ * Escape or a click around it. The window behind is out of reach while it's open; the bubbles in
+ * the corner aren't, and a bubble's panel open beside it moves it aside. Your focus goes to it as it
+ * opens, and back as it closes. */
 function Over({ state, before, onBack, onClose, children }: { state: string; before?: string; onBack: () => void; onClose: () => void; children: ReactNode }) {
+  const heading = useRef<HTMLHeadingElement>(null)
+  const last    = useRef(state)
+  const closing = useRef(onClose)
+  last.current    = state
+  closing.current = onClose
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && !document.querySelector("[role=dialog], [role=alertdialog]") && onClose()
+    const key = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && !document.querySelector("[role=dialog]:not([data-panel]), [role=alertdialog]") && closing.current()
     window.addEventListener("keydown", key)
     return () => window.removeEventListener("keydown", key)
-  }, [onClose])
+  }, [])
+  useEffect(() => {
+    const from   = document.activeElement as HTMLElement | null
+    const behind = document.querySelector(".proki-frame")  // the window's views; what's put over it stays in reach
+    behind?.setAttribute("inert", "")
+    return () => {  // back where you were, else to the state's box
+      behind?.removeAttribute("inert")
+      const box = document.querySelector<HTMLElement>(`.react-flow__node[data-id="${window.CSS.escape(last.current)}"]`)
+      ;(from?.isConnected && from !== document.body ? from : box)?.focus({ preventScroll: true })
+    }
+  }, [])
+  useEffect(() => heading.current?.focus({ preventScroll: true }), [state])
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 p-6 supports-backdrop-filter:backdrop-blur-xs animate-in fade-in-0 duration-150 motion-reduce:animate-none"
-         onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <aside aria-label={`the state ${state}`}
-             className="flex max-h-[88vh] w-full max-w-2xl flex-col rounded-xl border bg-background shadow-lg animate-in fade-in-0 slide-in-from-top-2 duration-200 motion-reduce:animate-none">
+    <div onClick={(e) => e.target === e.currentTarget && onClose()}
+         className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-6 supports-backdrop-filter:backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150 min-[1100px]:[[data-bubble]_&]:pr-[25rem]">
+      <section data-panel role="dialog" aria-modal="true" aria-labelledby="state-heading"
+               className="flex max-h-[min(88vh,52rem)] w-full max-w-2xl flex-col rounded-2xl border bg-background shadow-2xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-[0.98] motion-safe:duration-200">
         <header className="flex items-center gap-1 border-b py-2 pr-2 pl-4">
           {before && <Button size="sm" variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={onBack} title={`Back to ${humane(before)}`}><ArrowLeft /> {humane(before)}</Button>}
-          {before && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
-          <h2 title={state} className="min-w-0 flex-1 truncate px-1 font-heading text-base font-semibold">{humane(state)}</h2>
-          <Button size="icon-sm" variant="ghost" aria-label="Close" onClick={onClose}><X /></Button>
+          {before && <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
+          <h2 id="state-heading" ref={heading} tabIndex={-1} title={state} className="min-w-0 flex-1 truncate px-1 font-heading text-base font-semibold outline-none">{humane(state)}</h2>
+          <Button size="icon-sm" variant="ghost" aria-label="Close the state" title="Close (Esc)" onClick={onClose}><X /></Button>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">{children}</div>
-      </aside>
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4">{children}</div>
+      </section>
     </div>,
     document.body,
   )
@@ -259,9 +315,7 @@ function ProgramCard({ program, onOpen, onSwitch }: { program: Running; onOpen: 
   const { title, icon: Icon, about } = friendly(program)
   const now = doing(program)
   return (
-    <Card size="sm" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.target === e.currentTarget && e.key === "Enter" && onOpen()}
-          aria-label={`${title}: see how it works`}
-          className={cn("w-full max-w-[360px] cursor-pointer transition-[box-shadow,opacity] hover:ring-foreground/20 focus-visible:ring-ring", !program.on && "opacity-75")}>
+    <Card size="sm" className="relative w-full max-w-[360px] cursor-pointer transition-shadow hover:ring-foreground/20 has-[[data-opens]:focus-visible]:ring-2 has-[[data-opens]:focus-visible]:ring-ring">
       <CardHeader>
         <div className="flex items-start gap-3">
           <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", program.on ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground")}>
@@ -269,14 +323,15 @@ function ProgramCard({ program, onOpen, onSwitch }: { program: Running; onOpen: 
           </span>
           <div className="min-w-0">
             <CardTitle className="flex items-center gap-1.5">
-              {title}
+              <button data-opens onClick={onOpen} aria-label={`${title}: see how it works`}
+                      className="text-left outline-none after:absolute after:inset-0 after:rounded-xl after:content-['']">{title}</button>
               {program.kind === "code" && <Code className="size-3.5 shrink-0 text-muted-foreground" aria-label="built in, read only" />}
             </CardTitle>
             <CardDescription className="mt-0.5 line-clamp-2 min-h-[2lh]">{about}</CardDescription>
           </div>
         </div>
         <CardAction>
-          <Switch checked={program.on} onClick={(e) => e.stopPropagation()} onCheckedChange={onSwitch} aria-label={`${title}: ${program.on ? "on" : "off"}`} />
+          <Switch checked={program.on} onCheckedChange={onSwitch} aria-label={`${title} on`} className="relative z-10" />
         </CardAction>
       </CardHeader>
       <CardFooter className="mt-auto justify-between gap-2 border-t pt-3 text-xs">
@@ -355,7 +410,7 @@ type ScopeProps = {
 function ProgramMain({ name, specs, detail, reference, change, act, setError, onGo, after }: ScopeProps) {
   const [editing, setEditing] = useState(false)
   const running = reference.programs.find((p) => p.name === name)
-  const { icon: Icon } = friendly(running ?? { ...detail, name })
+  const { icon: Icon, title } = friendly(running ?? { ...detail, name })
 
   const switchOn = async (on: boolean) => {
     const answer = await window.proki.tool("switch_program", { name, on })
@@ -393,29 +448,28 @@ function ProgramMain({ name, specs, detail, reference, change, act, setError, on
               {!specs && <> · <Code className="inline size-3 align-[-2px]" /> in code, read only</>}
             </p>
           </div>
-          <Switch checked={detail.on} onCheckedChange={switchOn} aria-label="on" />
+          <Switch checked={detail.on} onCheckedChange={switchOn} aria-label={`${title} on`} />
           {specs && (
             <>
-              <Button size="icon-sm" variant="ghost" aria-label="Edit" onClick={() => setEditing(true)}><Pencil /></Button>
+              <Button size="icon-sm" variant="ghost" aria-label={`Edit ${title}`} title="Edit" onClick={() => setEditing(true)}><Pencil /></Button>
               {specs.default && specs.changed && (
-                <Confirm title={`Reset ${friendly(running ?? { ...detail, name }).title}?`} description="Your changes to it go back to how it came." action="Reset"
+                <Confirm title={`Reset “${title}”?`} description="Your changes to it go back to how it came." action="Reset"
                          onConfirm={async () => { setError((await revert(name)) ?? ""); act([]) }}>
-                  <Button size="icon-sm" variant="ghost" aria-label="Reset"><RotateCcw /></Button>
+                  <Button size="icon-sm" variant="ghost" aria-label={`Reset ${title}`} title="Reset"><RotateCcw /></Button>
                 </Confirm>
               )}
-              <Confirm title={`Delete ${friendly(running ?? { ...detail, name }).title}?`} description="The automation and its steps are deleted. This can't be undone."
+              <Confirm title={`Delete “${title}”?`} description="The automation and its steps are deleted. This can't be undone." action="Delete automation"
                        onConfirm={async () => {
                          const mistake = await change([{ op: "remove", kind: "program", data: { name } }])
                          if (mistake) setError(mistake)
                          else onGo({ program: null, state: null })
                        }}>
-                <Button size="icon-sm" variant="ghost" aria-label="Delete"><Trash2 /></Button>
+                <Button size="icon-sm" variant="ghost" aria-label={`Delete ${title}`} title="Delete"><Trash2 /></Button>
               </Confirm>
             </>
           )}
         </div>
       )}
-
     </>
   )
 }
@@ -466,14 +520,14 @@ function StateMain({ name, state, specs, detail, reference, change, act, setErro
           </div>
           {specs && (
             <>
-              <Button size="icon-sm" variant="ghost" aria-label="Edit" onClick={() => setEditing(true)}><Pencil /></Button>
-              <Confirm title={`Delete the state ${state}?`} description="It and what it does are deleted. This can't be undone."
+              <Button size="icon-sm" variant="ghost" aria-label={`Edit the state ${humane(state)}`} title="Edit" onClick={() => setEditing(true)}><Pencil /></Button>
+              <Confirm title={`Delete the state “${humane(state)}”?`} description="It, its actions and its transitions are deleted. This can't be undone." action="Delete state"
                        onConfirm={async () => {
                          const mistake = await change([{ op: "remove", kind: "state", data: { program: name, name: state } }])
                          if (mistake) setError(mistake)
                          else onGo({ program: name, state: null })
                        }}>
-                <Button size="icon-sm" variant="ghost" aria-label="Delete"><Trash2 /></Button>
+                <Button size="icon-sm" variant="ghost" aria-label={`Delete the state ${humane(state)}`} title="Delete"><Trash2 /></Button>
               </Confirm>
             </>
           )}
@@ -488,7 +542,7 @@ function StateMain({ name, state, specs, detail, reference, change, act, setErro
                      const [said, Icon, tint] = ACTIONS[a.kind] ?? [a.kind, Code, "bg-muted text-muted-foreground"]
                      return (
                        <>
-                         <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", tint)}><Icon className="size-3" /></span>
+                         <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", tint)}><Icon aria-hidden className="size-3" /></span>
                          <span className="w-12 shrink-0 font-medium">{said}</span>
                          {a.desc ? <span className="truncate text-muted-foreground">{a.desc}</span> : <Expr className="truncate">{text}</Expr>}
                        </>
@@ -526,39 +580,39 @@ function StateMain({ name, state, specs, detail, reference, change, act, setErro
 
 /** A transition: what it's for, then each condition under it, marked whether it holds now (a
  * rule: more likely than not to fire), the rules with what they're for; and where it goes (click:
- * go there). What doesn't hold is greyed; `alone`, the state's only one, isn't called the else. */
+ * go there). What doesn't hold is greyed; `alone`, the state's only one, with no conditions: always. */
 function Way({ branch, live, alone, onGo }: { branch: BranchSpec; live?: ProgramDetail["states"][number]["next"][number]; alone?: boolean; onGo: (state: string) => void }) {
   return (
     <>
       <span className="grid min-w-0 flex-1 grid-cols-[0.875rem_minmax(0,10rem)_minmax(0,1fr)] items-center gap-x-2 gap-y-1 pl-1">
         {branch.desc && <span className="col-span-2 col-start-2 text-foreground">{branch.desc}</span>}
-        {branch.when.length === 0 && !alone && <span className="col-start-2 text-muted-foreground">else</span>}
+        {branch.when.length === 0 && <span className="col-start-2 text-muted-foreground">{alone ? "always" : "else"}</span>}
         {branch.when.map((w) => {
           const rule  = live?.rules.find((r) => r.name === w)
           const holds = rule ? (rule.chance == null ? null : rule.chance >= 0.5) : live?.conds.find((c) => c.expr === w)?.value
           return (
             <span key={w} className={cn("contents", holds !== true && "text-muted-foreground")}>
               <Truth value={holds} />
-              <Expr className={cn("truncate", holds !== true && "opacity-60")} title={w}>{w}</Expr>
+              <Expr className="truncate" title={w}>{w}</Expr>
               <span className="min-w-0 text-muted-foreground">{rule?.desc}</span>
             </span>
           )
         })}
       </span>
       <span className="flex w-28 shrink-0">
-        <span role="button" tabIndex={0} onClick={(e) => (e.stopPropagation(), onGo(branch.goto))} onKeyDown={(e) => e.key === "Enter" && onGo(branch.goto)}
-              title={branch.goto} className="flex min-w-0 items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11px] hover:border-foreground/30">
-          <ArrowRight className="size-3 shrink-0" /><span className="truncate">{branch.goto}</span>
-        </span>
+        <button type="button" onClick={(e) => (e.stopPropagation(), onGo(branch.goto))} aria-label={`Go to the state ${humane(branch.goto)}`} title={branch.goto}
+                className="flex min-h-6 min-w-0 items-center gap-1 rounded-full border bg-background px-2 font-mono text-[11px] hover:border-foreground/30 hover:bg-muted">
+          <ArrowRight aria-hidden className="size-3 shrink-0" /><span className="truncate">{branch.goto}</span>
+        </button>
       </span>
     </>
   )
 }
 
-/** Whether something holds now: a green tick, a red cross, a dash when it isn't known. */
+/** Whether something holds now: a green tick, a grey cross, a dash when it isn't known. */
 function Truth({ value }: { value: unknown }) {
   if (value === true)  return <Check className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="true now" />
-  if (value === false) return <X className="size-3.5 shrink-0 text-destructive" aria-label="false now" />
+  if (value === false) return <X className="size-3.5 shrink-0 text-muted-foreground" aria-label="false now" />
   return <span className="w-3.5 shrink-0 text-center text-muted-foreground" aria-label="not known now">–</span>
 }
 
@@ -607,7 +661,8 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
           {shown.map((i) => open === i ? (
             <div key={i}>{form(items[i], (data) => saved(data, [{ op: "update", kind, data: { ...at, at: i, changes: data } }])(), close)}</div>
           ) : (
-            <Line key={i} id={i} refused={refused?.at === i} onEdit={() => setOpen(i)} onDelete={() => act([{ op: "remove", kind, data: { ...at, at: i } }])}>
+            <Line key={i} id={i} refused={refused?.at === i} named={kind === "action" ? `the action “${(items[i] as ActionSpec).name}”` : `transition ${i + 1}`}
+                  onEdit={() => setOpen(i)} onDelete={() => act([{ op: "remove", kind, data: { ...at, at: i } }])}>
               {line(items[i], i)}
             </Line>
           ))}
@@ -705,7 +760,7 @@ function Kept({ own, where, reference, change, act }: {
       <Names reference={reference} own={all.map((s) => s.name)} />
       <div className="flex gap-1 rounded-lg bg-muted p-1">
         {TABS.map(([k, title]) => (
-          <button key={k} onClick={() => (setTab(k), setAdding(null), remember("programs.kind", k))}
+          <button key={k} aria-pressed={tab === k} onClick={() => (setTab(k), setAdding(null), remember("programs.kind", k))}
                   className={cn("flex-1 rounded-md py-0.5 text-xs text-muted-foreground", tab === k && "bg-background font-medium text-foreground shadow-xs")}>
             {title}
           </button>
@@ -725,16 +780,7 @@ function Kept({ own, where, reference, change, act }: {
           )),
           ...outer.map((r) => (r as ObjectRow).fields
             ? <ObjectLine key={r.name} object={r as ObjectRow} label={r.name} hidden={hidden} veiled={veiled(r.name)} onVeil={() => veil(r.name)} />
-            : (
-              <div key={r.name} className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs">
-                <span className={cn("flex min-w-0 flex-1 items-center gap-2", veiled(r.name) && "opacity-50")}>
-                  {kind !== "rule" && <TypeIcon type={(r as { type?: Type }).type} />}
-                  <span title={[r.name, hover(r)].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{r.name}</span>
-                  <Value value={kind === "rule" ? (r as Reference["rules"][number]).chance : (r as { value: unknown }).value} rule={kind === "rule"} name={r.name} />
-                </span>
-                <Veil name={r.name} veiled={veiled(r.name)} onClick={() => veil(r.name)} />
-              </div>
-            )),
+            : <Outer key={r.name} kind={kind} row={r} scope={scope} program={where.program} veiled={veiled(r.name)} onVeil={() => veil(r.name)} />),
         ]
         return (
           <div key={scope} className="flex flex-col gap-0.5">
@@ -825,16 +871,18 @@ function ObjectLine({ object, label, hidden, veiled, onVeil }: { object: ObjectR
   return (
     <div className="flex flex-col gap-0.5">
       <div className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
-        <button onClick={() => setViewing(true)} className={cn("flex min-w-0 flex-1 items-center gap-2 text-left", veiled && "opacity-50")}>
+        <button onClick={() => setViewing(true)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <TypeIcon type={object.type ?? "object"} />
-          <span title={[object.name, hover({ desc: object.desc, type: object.type ?? "object" })].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate font-mono font-medium">{label}</span>
+          <span title={[object.name, hover({ desc: object.desc, type: object.type ?? "object" })].filter(Boolean).join(" · ")}
+                className={cn("min-w-0 flex-1 truncate font-mono", veiled ? "text-muted-foreground" : "font-medium")}>{label}</span>
         </button>
-        <span className={cn("flex w-20 shrink-0 justify-end font-mono", veiled && "opacity-50")}>
+        <span className="flex w-20 shrink-0 justify-end font-mono">
           <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
                   className="-mx-1 inline-flex items-center gap-0.5 rounded px-1 whitespace-nowrap text-muted-foreground underline decoration-dotted underline-offset-2 hover:bg-muted hover:text-foreground">
             {fields.length} fields<ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} />
           </button>
         </span>
+        <Into name={object.name} />
         <Veil name={object.name} veiled={veiled} onClick={onVeil} />
       </div>
       {open && (
@@ -843,11 +891,12 @@ function ObjectLine({ object, label, hidden, veiled, onVeil }: { object: ObjectR
             ? <ObjectLine key={f.name} object={{ ...f, fields: inside(f) }} label={short(f)} hidden={hidden} veiled={!sees(f)} onVeil={() => veil(f)} />
             : (
             <div key={f.name} className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
-              <span className={cn("flex min-w-0 flex-1 items-center gap-2", !sees(f) && "opacity-50")}>
+              <span className="flex min-w-0 flex-1 items-center gap-2">
                 <TypeIcon type={f.type} />
                 <span title={[f.name, hover(f)].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{short(f)}</span>
                 <Value value={f.value} name={f.name} />
               </span>
+              <Into name={f.name} />
               <Veil name={f.name} veiled={!sees(f)} onClick={() => veil(f)} />
             </div>
           ))}
@@ -905,16 +954,79 @@ function KeptLine({ kind, spec, where, value, full, type, app, veiled, onVeil, o
   return (
     <>
       <div className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
-        <button onClick={() => setOpen(true)} className={cn("flex min-w-0 flex-1 items-center gap-2 text-left", veiled && "opacity-50")}>
+        <button onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           {kind !== "rule" && <TypeIcon type={type} />}
-          <span title={[spec.name, hover({ desc: spec.desc, type })].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate font-mono font-medium">{spec.name}</span>
+          <span title={[spec.name, hover({ desc: spec.desc, type })].filter(Boolean).join(" · ")}
+                className={cn("min-w-0 flex-1 truncate font-mono", veiled ? "text-muted-foreground" : "font-medium")}>{spec.name}</span>
           {app && <Lock className="size-3 shrink-0 text-muted-foreground" aria-label="the app reads it: kept" />}
         </button>
-        <span className={cn("flex", veiled && "opacity-50")}><Value value={value} rule={kind === "rule"} name={full} /></span>
+        <span className="flex"><Value value={value} rule={kind === "rule"} name={full} /></span>
+        <Into name={spec.name} />
         <Veil name={full} veiled={veiled} onClick={onVeil} />
       </div>
       {open && <Defining kind={kind} spec={spec} where={where} full={full} type={type} onSave={onSave} onDelete={app ? undefined : onDelete} onClose={() => setOpen(false)} />}
     </>
+  )
+}
+
+/** A name's button that types it into the field you were in, while there's one. */
+function Into({ name }: { name: string }) {
+  if (!useAimed()) return null
+  return (
+    <Button size="icon-xs" variant="ghost" aria-label={`Insert ${name} into the field`} title={`Insert ${name}`} onClick={() => insert(name)}
+            className="size-5 shrink-0 text-muted-foreground [&_svg]:size-3.5">
+      <ArrowLeftToLine />
+    </Button>
+  )
+}
+
+type Row = Reference["variables"][number] | Reference["signals"][number] | Reference["rules"][number]
+
+/** One of a wider scope's, read here: click it to see what it is, its value, and where it's
+ * changed (the app's own: nowhere; a global one another automation made: in that one). */
+function Outer({ kind, row, scope, program, veiled, onVeil }: { kind: Kind; row: Row; scope: Scope; program: string | null; veiled: boolean; onVeil: () => void }) {
+  const [open, setOpen] = useState(false)
+  const type  = (row as { type?: Type }).type
+  const value = kind === "rule" ? (row as Reference["rules"][number]).chance : (row as { value: unknown }).value
+  const short = scope === "global" || scope === "special" ? row.name : row.name.split(".").at(-1)!  // as an expression here says it
+  const code  = (row as { from?: string }).from === "code" || scope === "special"
+  const there = scope === "program" ? { program, state: null } : null
+  const from  = code ? "kept by the app" : { special: "", global: "global, made by another automation", program: "this automation", state: "this state" }[scope]
+  return (
+    <div className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
+      <button onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        {kind !== "rule" && <TypeIcon type={type} />}
+        <span title={[row.name, hover({ desc: row.desc, type })].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{row.name}</span>
+      </button>
+      <Value value={value} rule={kind === "rule"} name={row.name} />
+      <Into name={short} />
+      <Veil name={row.name} veiled={veiled} onClick={onVeil} />
+      {open && (
+        <Dialog open onOpenChange={(open) => !open && setOpen(false)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader className="pr-8">
+              <DialogTitle className="flex min-w-0 items-center gap-2 font-mono">
+                {kind !== "rule" && <TypeIcon type={type} className="size-4" />}<span className="truncate">{row.name}</span>
+              </DialogTitle>
+              <DialogDescription className="break-words">{row.desc || "No description"}</DialogDescription>
+            </DialogHeader>
+            <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-2 border-t pt-3 text-xs">
+              {kind !== "rule" && <><dt className="text-muted-foreground">Type</dt><dd>{type && type !== "any" ? said(type) : "any"}</dd></>}
+              <dt className="text-muted-foreground">{kind === "rule" ? "Chance now" : "Now"}</dt>
+              <dd className="flex *:w-auto *:justify-start"><Value value={value} rule={kind === "rule"} name={row.name} /></dd>
+              <dt className="text-muted-foreground">From</dt><dd className="first-letter:uppercase">{from}</dd>
+            </dl>
+            {there && (
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => (setOpen(false), window.dispatchEvent(new CustomEvent(GO, { detail: there })))}>
+                  Edit it in the automation <ArrowRight data-icon="inline-end" />
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   )
 }
 
@@ -944,25 +1056,29 @@ function Defining({ kind, spec, where, full, type: worked, onSave, onDelete, onC
   const [desc, setDesc] = useState(spec?.desc ?? "")
   const [type, setType] = useState<Type>((spec as { type?: Type } | undefined)?.type ?? "any")
   const named = { name, desc, type }
+  const was   = useRef(named)  // as it opened: Escape or a click outside closes it only unchanged
+  const box   = useRef<HTMLDivElement>(null)
+  const kept  = (e: Event) => (box.current?.querySelector("form[data-dirty]") || name !== was.current.name || desc !== was.current.desc || type !== was.current.type) && e.preventDefault()
   const save: Save = async (data) => { const mistake = await onSave(data); if (!mistake) onClose(); return mistake }
   const props = { where, named, onSave: save, onCancel: onClose }
   const deep  = typeof type === "object" && (type.type === "object" || type.type === "array")  // its fields want the room
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={cn("max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg", deep && "sm:max-w-2xl")}>
+      <DialogContent ref={box} onEscapeKeyDown={kept} onInteractOutside={kept}
+                     className={cn("max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg", deep && "sm:max-w-2xl")}>
         <DialogHeader className="pr-14">
           <div className="flex items-start gap-3">
             <DialogTitle className="flex min-w-0 flex-1 items-center gap-2 font-mono">
               {kind !== "rule" && <TypeIcon type={type === "any" ? worked : type} className="size-4" />}
-              <InPlace value={name} onChange={setName} code placeholder={`new ${kind}`} editing={!spec} />
+              <InPlace label="Name" value={name} onChange={setName} code placeholder={`new ${kind}`} editing={!spec} />
             </DialogTitle>
             {kind !== "rule" && <TypeField label="" value={type} alone onChange={(t) => setType(t ?? "any")} />}
           </div>
-          <DialogDescription asChild><div><InPlace value={desc} onChange={setDesc} placeholder="No description" /></div></DialogDescription>
+          <DialogDescription asChild><div><InPlace label="Description" value={desc} onChange={setDesc} placeholder="No description" /></div></DialogDescription>
         </DialogHeader>
         {onDelete && (
-          <Confirm title="Delete it?" description="This can't be undone." onConfirm={() => (onDelete(), onClose())}>
-            <Button size="icon-xs" variant="ghost" aria-label="Delete" className="absolute top-3.5 right-11"><Trash2 /></Button>
+          <Confirm title={`Delete the ${kind} “${spec?.name}”?`} description="This can't be undone." action={`Delete ${kind}`} onConfirm={() => (onDelete(), onClose())}>
+            <Button size="icon-xs" variant="ghost" aria-label={`Delete the ${kind} ${spec?.name}`} title="Delete" className="absolute top-3.5 right-11"><Trash2 /></Button>
           </Confirm>
         )}
         {kind !== "rule" && <TypeInside value={type} onChange={setType} />}
@@ -976,7 +1092,8 @@ function Defining({ kind, spec, where, full, type: worked, onSave, onDelete, onC
 }
 
 /** Text that's read as it is, and edited where it is: a pencil on hover, then a field. */
-function InPlace({ value, onChange, code, placeholder, editing: start = false }: {
+function InPlace({ label, value, onChange, code, placeholder, editing: start = false }: {
+  label: string
   value: string
   onChange: (value: string) => void
   code?: boolean
@@ -986,65 +1103,104 @@ function InPlace({ value, onChange, code, placeholder, editing: start = false }:
   const [editing, setEditing] = useState(start)
   const done = (e: React.KeyboardEvent) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), setEditing(false))
   if (editing && code) {
-    return <Input value={value} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={placeholder} onBlur={() => setEditing(false)}
+    return <Input aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={placeholder} onBlur={() => setEditing(false)}
                   onKeyDown={done} autoCapitalize="off" autoCorrect="off" spellCheck={false} className="h-8 font-mono" />
   }
   if (editing) {
-    return <Textarea value={value} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={placeholder} onBlur={() => setEditing(false)}
+    return <Textarea aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={placeholder} onBlur={() => setEditing(false)}
                      onKeyDown={done} className="field-sizing-content min-h-0 resize-none text-sm" />
   }
   return (
-    <span role="button" tabIndex={0} onClick={() => setEditing(true)} onKeyDown={(e) => e.key === "Enter" && setEditing(true)}
-          className="group/edit inline-flex max-w-full cursor-text items-center gap-1.5">
+    <button type="button" onClick={() => setEditing(true)} aria-label={`${label}: ${value || placeholder}, edit`}
+            className="group/edit inline-flex max-w-full cursor-text items-center gap-1.5 rounded-sm text-left">
       <span className={cn(code ? "truncate" : "min-w-0 break-words", !value && "text-muted-foreground italic")}>{value || placeholder}</span>
-      <Pencil className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover/edit:opacity-100" />
-    </span>
+      <Pencil aria-hidden className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100" />
+    </button>
   )
 }
 
 /** The inputs: what's measured, the same everywhere. One that's on can be read by name; its
  * history (minutes) is kept as a table, for what reads its past. */
 function Inputs({ reference }: { reference: Reference }) {
-  const { specs, error, act } = useSpecs<GlobalSpecs>(null)
+  const { specs, error, change } = useSpecs<GlobalSpecs>(null)
   const used = Object.fromEntries((specs?.inputs ?? []).map((i) => [i.name, i]))
   if (!specs) return <p className="px-1 text-xs text-muted-foreground">{error || "Loading…"}</p>
   return (
     <div className="flex flex-col">
       {error && <Mistake text={error} />}
-      <div className="flex gap-2 px-1 pb-1 text-[11px] text-muted-foreground">
-        <span className="flex-1" /><span className="w-20 text-right">Now</span><span className="w-16 text-right" title="minutes of history kept">History</span>
-      </div>
       {reference.inputs.map((input) => (
-        <InputLine key={input.name} name={input.name} desc={input.desc} type={input.type} value={input.value} spec={used[input.name]}
-                   onBackfill={(backfill) => act([used[input.name] ? { op: "update", kind: "input", data: { name: input.name, changes: { backfill } } }
-                                                                   : { op: "add", kind: "input", data: { name: input.name, backfill } }])} />
+        <InputLine key={input.name} {...input} spec={used[input.name]}
+                   onBackfill={(backfill) => change([used[input.name] ? { op: "update", kind: "input", data: { name: input.name, changes: { backfill } } }
+                                                                      : { op: "add", kind: "input", data: { name: input.name, backfill } }])} />
       ))}
     </div>
   )
 }
 
+/** An input, a line: its name, opening what it is, and its value now; one that's on goes into
+ * the field you were in. */
 function InputLine({ name, desc, type, value, spec, onBackfill }: {
   name: string
   desc: string
   type?: Type
   value: unknown
-  spec?: { backfill: number | string | null }  // none: not read yet
-  onBackfill: (backfill: number | string | null) => void
+  spec?: { backfill: number | string | null }  // none: no automation reads it yet
+  onBackfill: (backfill: number | string | null) => Promise<string | null>
 }) {
-  const [backfill, setBackfill] = useState(spec?.backfill == null ? "" : String(spec.backfill))
-  useEffect(() => setBackfill(spec?.backfill == null ? "" : String(spec.backfill)), [spec?.backfill])
-  const keep = () => {
-    const next = backfill.trim() === "" ? null : /^\d+(\.\d+)?$/.test(backfill.trim()) ? Number(backfill) : backfill.trim()
-    if (next !== (spec?.backfill ?? null)) onBackfill(next)
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
+      <button onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <TypeIcon type={type} />
+        <span title={[name, hover({ desc, type })].filter(Boolean).join(" · ")}
+              className={cn("min-w-0 flex-1 truncate font-mono", spec ? "font-medium" : "text-muted-foreground")}>{name}</span>
+      </button>
+      <Value value={value} name={name} />
+      {spec && <Into name={name} />}
+      {open && <Measured name={name} desc={desc} type={type} value={value} spec={spec} onBackfill={onBackfill} onClose={() => setOpen(false)} />}
+    </div>
+  )
+}
+
+/** An input, over the page: what it is, its value now, whether it's read, and how much of its
+ * history is kept, to change. Escape or a click outside closes it only unchanged. */
+function Measured({ name, desc, type, value, spec, onBackfill, onClose }: Parameters<typeof InputLine>[0] & { onClose: () => void }) {
+  const was = spec?.backfill == null ? "" : String(spec.backfill)
+  const [backfill, setBackfill] = useState(was)
+  const [error, setError] = useState("")
+  const kept = (e: Event) => backfill !== was && e.preventDefault()
+  const save = async () => {
+    const t    = backfill.trim()
+    const next = t === "" ? null : /^\d+(\.\d+)?$/.test(t) ? Number(t) : t
+    const mistake = next === (spec?.backfill ?? null) ? null : await onBackfill(next)
+    if (mistake) return setError(mistake)
+    onClose()
   }
   return (
-    <div className={cn("flex items-center gap-2 px-1 py-1 text-xs", !spec && "text-muted-foreground")} title={hover({ desc, type })}>
-      <TypeIcon type={type} />
-      <span title={name} className="min-w-0 flex-1 truncate font-mono">{name}</span>
-      <Value value={value} name={name} />
-      <Input value={backfill} onChange={(e) => setBackfill(e.target.value)} onBlur={keep} onKeyDown={(e) => e.key === "Enter" && keep()}
-             placeholder="–" title="how much history is kept: 1d, 12h, or minutes" className="h-6 w-16 shrink-0 px-1.5 text-[11px]" />
-    </div>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md" onEscapeKeyDown={kept} onInteractOutside={kept}>
+        <DialogHeader className="pr-8">
+          <DialogTitle className="flex min-w-0 items-center gap-2 font-mono"><TypeIcon type={type} className="size-4" /><span className="truncate">{name}</span></DialogTitle>
+          <DialogDescription className="break-words">{desc || "No description"}</DialogDescription>
+        </DialogHeader>
+        <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-2 border-t pt-3 text-xs">
+          <dt className="text-muted-foreground">Type</dt><dd>{type && type !== "any" ? said(type) : "any"}</dd>
+          <dt className="text-muted-foreground">Now</dt><dd className="flex *:w-auto *:justify-start"><Value value={value} name={name} /></dd>
+          <dt className="text-muted-foreground">Read</dt><dd>{spec ? "by the automations, by its name" : "by no automation yet"}</dd>
+        </dl>
+        <form className="flex flex-col gap-3 border-t pt-3" onSubmit={(e) => { e.preventDefault(); save() }}>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium">History kept<span className="ml-1.5 font-normal text-muted-foreground">for what reads its past: 1d, 12h, or minutes</span></span>
+            <Input value={backfill} onChange={(e) => setBackfill(e.target.value)} placeholder="none" className="h-8 w-40 text-sm" />
+          </label>
+          {error && <p className="text-xs break-words text-destructive">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" size="sm">Save</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1131,23 +1287,22 @@ function Block({ title, add, children }: { title: string; add?: () => void; chil
   )
 }
 
-/** A line of a list, carried by its grip: what it says, then its pencil and its bin; `refused`:
- * shaken, as a drop that wasn't kept. */
-function Line({ id, refused, children, onEdit, onDelete }: { id: number; refused?: boolean; children: ReactNode; onEdit: () => void; onDelete: () => void }) {
+/** A line of a list, carried by its grip: what it says (click it to edit), then its pencil and its
+ * bin; `named`, what it is, as its buttons say it; `refused`: shaken, as a drop that wasn't kept. */
+function Line({ id, named, refused, children, onEdit, onDelete }: { id: number; named: string; refused?: boolean; children: ReactNode; onEdit: () => void; onDelete: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: id + 1 })  // ids from 1: 0 isn't one
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }}
          className={cn("group flex items-center gap-2 rounded-lg border bg-card py-1.5 pr-3 pl-1 text-xs hover:bg-muted/50",
                        isDragging && "relative z-10 shadow-lg ring-1 ring-foreground/10", refused && "animate-shake ring-2 ring-destructive/50")}>
-      <button {...attributes} {...listeners} aria-label="Move" className="cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground">
+      <button {...attributes} {...listeners} aria-label={`Move ${named}`} className="cursor-grab touch-none text-muted-foreground hover:text-foreground">
         <GripVertical className="size-3.5" />
       </button>
-      <div role="button" tabIndex={0} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left" onClick={onEdit}
-           onKeyDown={(e) => e.key === "Enter" && onEdit()}>{children}</div>
+      <div className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left" onClick={onEdit}>{children}</div>
       <div className="flex shrink-0 items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100">
-        <Button size="icon-xs" variant="ghost" aria-label="Edit" onClick={onEdit}><Pencil /></Button>
-        <Confirm title="Delete it?" description="This can't be undone." onConfirm={onDelete}>
-          <Button size="icon-xs" variant="ghost" aria-label="Delete"><Trash2 /></Button>
+        <Button size="icon-xs" variant="ghost" aria-label={`Edit ${named}`} title="Edit" onClick={onEdit}><Pencil /></Button>
+        <Confirm title={`Delete ${named}?`} description="This can't be undone." action="Delete" onConfirm={onDelete}>
+          <Button size="icon-xs" variant="ghost" aria-label={`Delete ${named}`} title="Delete"><Trash2 /></Button>
         </Confirm>
       </div>
     </div>

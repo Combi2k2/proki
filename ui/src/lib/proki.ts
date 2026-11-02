@@ -149,6 +149,9 @@ export type Buckets = { size: number; method: Method; buckets: [string, number |
 /** Where a variable or a rule is declared: its full name says (suggest.left: a program's).
  * Special: an object whose fields are variables of their own (track, work). */
 export type Scope = "special" | "global" | "program" | "state"
+/** Where you are in the automations: a scope, and its program and state if any. */
+export type Where = { scope: Scope; program: string | null; state: string | null }
+export const GLOBAL: Where = { scope: "global", program: null, state: null }
 
 /** What a program can use, with its value now (proki/editor.py: `reference`). Each input,
  * signal, variable, rule and program says what it's for (`desc`, "" if it doesn't); a signal or
