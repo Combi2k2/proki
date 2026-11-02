@@ -1,4 +1,4 @@
-// Settings: Proki's two reasoning services and the local connections used at startup.
+// Settings: Proki's two reasoning services, how often it looks, and the local connections used at startup.
 //
 // A service is set by its provider: pick one, give its key (and a custom one's URL) and try
 // it, pick one of the models there, then save. The key is kept on this computer, readable by you only,
@@ -103,6 +103,7 @@ export function SettingsView({ onWelcome }: {
         <PortSetup services={services} onSaved={setServices} />
         </>
       )}
+      <CycleSetup />
     </div>
   )
 }
@@ -166,6 +167,51 @@ function PortSetup({ services, onSaved }: { services: Services; onSaved: (servic
             : restart ? "New ports saved. Restart Proki when you're ready." : "Changes stay on this computer."}
         </div>
       </form>
+    </section>
+  )
+}
+
+/** How often Proki looks and runs your automations, in seconds: from the next cycle once saved. */
+function CycleSetup() {
+  const [kept, setKept]     = useState<number | null>(null)
+  const [given, setGiven]   = useState("")
+  const [busy, setBusy]     = useState(false)
+  const [result, setResult] = useState<Result>(null)
+  const told = (answer: { seconds?: number; error?: string }) =>
+    answer.error ? setResult({ ok: false, text: answer.error }) : (setKept(answer.seconds!), setGiven(String(answer.seconds)))
+  useEffect(() => void window.proki.tool("cycle").then(told).catch((error: unknown) => setResult({ ok: false, text: failed(error) })), [])
+  const seconds = Number(given)
+  const valid   = Number.isInteger(seconds) && seconds >= 1 && seconds <= 60  // empty: 0
+  const save = async () => {
+    setBusy(true)
+    try {
+      const answer = await window.proki.tool("cycle", { seconds })
+      told(answer)
+      if (!answer.error) setResult({ ok: true, text: "Saved. Proki uses it from the next cycle." })
+    } catch (error) {
+      setResult({ ok: false, text: failed(error) })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section aria-labelledby="cycle" className="mt-8 border-t pt-5">
+      <h2 id="cycle" className="text-sm font-semibold">How often Proki looks</h2>
+      <p id="cycle-help" className="mt-0.5 mb-3 text-xs text-muted-foreground">Each cycle, Proki reads your activity and runs your automations, so a session you start begins within one. Shorter answers sooner and works your computer harder. Proki ships with 10 seconds.</p>
+      <form onSubmit={(event) => { event.preventDefault(); if (valid && seconds !== kept) void save() }} className="flex flex-wrap items-end gap-3">
+        <Field className="w-32">
+          <FieldLabel htmlFor="cycle-seconds" className="text-xs">Every (seconds)</FieldLabel>
+          <Input id="cycle-seconds" type="number" inputMode="numeric" min={1} max={60} step={1} disabled={kept === null}
+                 aria-describedby="cycle-help cycle-status" aria-invalid={kept !== null && !valid} className="h-8 font-mono text-xs tabular-nums"
+                 value={given} onChange={(event) => (setGiven(event.target.value), setResult(null))} />
+        </Field>
+        <Button type="submit" size="sm" variant="outline" disabled={busy || !valid || seconds === kept}>
+          {busy && <Spinner data-icon="inline-start" />}Save
+        </Button>
+      </form>
+      <div id="cycle-status" className="mt-2 min-h-4 text-xs text-muted-foreground" role="status">
+        {kept !== null && !valid ? "Choose a whole number of seconds from 1 to 60." : <Outcome result={result} />}
+      </div>
     </section>
   )
 }

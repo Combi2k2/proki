@@ -70,11 +70,24 @@ def tools(engine: Engine, shipped: Shipped) -> list[Tool]:
         Tool("set_value", "A variable's value, set now, as an action would set it. Its full name: suggest.left, a "
                           "program's.", {"name": {"type": "string"}, "value": {}},
              lambda args: editor.set_value(args["name"], args.get("value")), ("name",)),
+        Tool("cycle", "How often Proki looks and its programs run, in seconds; with `seconds`, set first (from "
+                      "the next cycle). Shorter answers sooner, and works the computer harder.",
+             {"seconds": {"type": "number", "exclusiveMinimum": 0}},
+             lambda args: cycle(model, args.get("seconds"))),
         Tool("reset_program", "A program back to its default, and what it brings (name null: the global "
                               "scope).", {"name": NAME},
              lambda args: shipped.revert(model, args["name"]), ("name",)),
     ]
     return made + [tool for kind, cls in Spec.kinds.items() for tool in of(model, kind, cls)]
+
+
+def cycle(model: Model, seconds: float | None) -> dict:
+    """{"seconds": between cycles}, set first to `seconds` when given. ConfigError for none more than 0."""
+    if seconds is not None:
+        specs = model.specs.copy()
+        specs.cycle = seconds
+        model.keep(specs)
+    return {"seconds": model.specs.cycle}
 
 
 def of(model: Model, kind: str, cls: type) -> list[Tool]:

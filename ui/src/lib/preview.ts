@@ -110,6 +110,7 @@ function operated(expr: string): unknown[] {
   })
 }
 let previewPorts: Ports = { activitywatch: 5600, nats: 4222, tools: 9144 }
+let previewCycle = 10
 const activePorts = { ...previewPorts }
 
 const tools: Record<string, (args: Record<string, unknown>) => unknown> = {
@@ -192,6 +193,7 @@ const tools: Record<string, (args: Record<string, unknown>) => unknown> = {
     previewPorts = { activitywatch: Number(args.activitywatch), nats: Number(args.nats), tools: Number(args.tools) }
     return tools.get_settings({})
   },
+  cycle: ({ seconds }) => ({ seconds: (previewCycle = Number(seconds ?? previewCycle)) }),
   get_media: ({ kind }) => {
     const media = media_.filter((m) => !kind || m.kind === kind)
     return { media, total: media.length }

@@ -11,6 +11,7 @@ import pytest
 
 from proki import settings, storage
 from proki.core.programs import Program
+from proki.core.signals import Stream
 from proki.engine import Engine
 from proki.programs.shipped import Shipped
 from proki.tools.server import Tools
@@ -57,6 +58,14 @@ def test_several_changes_are_kept_together(tools):
         {"op": "add", "kind": "program", "data": {"name": "p"}},
         {"op": "add", "kind": "branch", "data": {"program": "p", "state": "idle", "goto": "b"}}])
     assert error and "no state 'b'" in said and "p" not in Program.registry
+
+
+def test_the_cycle_read_set_and_its_mistake(tools):
+    assert call(tools, "cycle") == (False, {"seconds": 10})
+    assert call(tools, "cycle", seconds=3) == (False, {"seconds": 3}) and Stream.cycle.total_seconds() == 3
+    error, said = call(tools, "cycle", seconds=0)
+    assert error and "more than 0" in said and Stream.cycle.total_seconds() == 3  # kept as it was
+    call(tools, "cycle", seconds=10)  # as shipped again: the cycle is every test's
 
 
 async def test_off_and_back_to_default(tools):

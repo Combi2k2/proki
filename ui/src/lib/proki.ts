@@ -272,6 +272,7 @@ type Tools = {
   reset_program: Done
   switch_program: Done
   set_value: Done  // a variable's value, set now, as an action would
+  cycle: { seconds: number }  // how often Proki looks: set first, given `seconds`
   get_media: { media: MediaItem[]; total: number }
   add_media: { key?: string; keys?: string[] }  // a file's key, a folder's keys
   rename_media: Done  // its name, what you see: its key stays
