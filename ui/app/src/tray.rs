@@ -6,13 +6,13 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, PhysicalPosition, Rect, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, LogicalPosition, Manager, PhysicalPosition, Rect, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::{bus, launcher, on_menu, proki};
 
-const WIDTH: f64 = 300.0;
-const HEIGHT: f64 = 252.0;
+const WIDTH: f64 = 280.0;
+const HEIGHT: f64 = 230.0;
 
 static HIDDEN: Mutex<Option<Instant>> = Mutex::new(None); // when the panel last hid as it lost focus
 
@@ -65,21 +65,36 @@ pub fn toggle(app: &AppHandle, rect: Rect, position: PhysicalPosition<f64>) {
     // A click on the icon takes the focus from the open panel first, which hides it: that click closes it.
     let closed = HIDDEN.lock().unwrap().take().is_some_and(|at| at.elapsed() < Duration::from_millis(300));
     if closed || panel.is_visible().unwrap_or(false) { hide(app); return; }
-    if let Ok(Some(monitor)) = app.monitor_from_point(position.x, position.y) {
-        let scale = monitor.scale_factor();
-        let anchor = rect.position.to_physical::<f64>(scale);
-        let icon = rect.size.to_physical::<f64>(scale);
-        let area = monitor.work_area();
-        let width = WIDTH * scale;
-        let height = HEIGHT * scale;
-        let left = area.position.x as f64;
-        let top = area.position.y as f64;
-        let right = left + area.size.width as f64;
-        let bottom = top + area.size.height as f64;
-        let x = anchor.x.clamp(left, (right - width).max(left));
+    // On macOS the icon's rect is in pixels at its own screen's scale while screens are laid out in
+    // points: find the screen by the cursor in points, so a monitor plugged in or out never sends the
+    // panel astray. Elsewhere it's all pixels.
+    let primary = app.primary_monitor().ok().flatten();
+    #[cfg(target_os = "macos")]
+    let found = {
+        let cursor = app.cursor_position().unwrap_or(position).to_logical::<f64>(primary.as_ref().map_or(1.0, |m| m.scale_factor()));
+        app.available_monitors().unwrap_or_default().into_iter().find(|m| {
+            let s = m.scale_factor();
+            let (at, size) = (m.position().to_logical::<f64>(s), m.size().to_logical::<f64>(s));
+            (at.x..at.x + size.width).contains(&cursor.x) && (at.y..at.y + size.height).contains(&cursor.y)
+        })
+    };
+    #[cfg(not(target_os = "macos"))]
+    let found = app.monitor_from_point(position.x, position.y).ok().flatten();
+    if let Some(monitor) = found.or(primary) {
+        let scale  = monitor.scale_factor();
+        let anchor = rect.position.to_logical::<f64>(scale);
+        let icon   = rect.size.to_logical::<f64>(scale);
+        let area   = monitor.work_area();
+        let (left, top)     = (area.position.x as f64 / scale, area.position.y as f64 / scale);
+        let (right, bottom) = (left + area.size.width as f64 / scale, top + area.size.height as f64 / scale);
+        let x     = anchor.x.clamp(left, (right - WIDTH).max(left));
         let below = anchor.y + icon.height;
-        let y = if below + height <= bottom { below } else { anchor.y - height };
-        let _ = panel.set_position(PhysicalPosition::new(x, y.clamp(top, (bottom - height).max(top)))); // under the icon, else over it
+        let y     = if below + HEIGHT <= bottom { below } else { anchor.y - HEIGHT };  // under the icon, else over it
+        let at    = LogicalPosition::new(x, y.clamp(top, (bottom - HEIGHT).max(top)));
+        #[cfg(target_os = "macos")]
+        let _ = panel.set_position(at);
+        #[cfg(not(target_os = "macos"))]
+        let _ = panel.set_position(at.to_physical::<f64>(scale));
     }
     let _ = panel.show();
     let _ = panel.set_focus();

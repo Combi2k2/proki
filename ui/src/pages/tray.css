@@ -32,17 +32,17 @@
 }
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; width: 100%; min-height: 100%; }
-body { -webkit-font-smoothing: antialiased; user-select: none; }
+body { user-select: none; }
 button { font: inherit; color: inherit; cursor: default; border: 0; background: none; }
 button:disabled { opacity: .4; }
 button:focus-visible { outline: 2px solid var(--tray-selection); outline-offset: -2px; }
 .tray-panel {
-  width: 300px; max-width: 100vw; height: 252px; padding: 0 6px;
+  width: 280px; max-width: 100vw; height: 230px; padding: 0 5px;
   position: relative; display: flex; flex-direction: column;
   border-radius: 8px; background: var(--tray-surface); overflow: hidden;
 }
 html[data-native-menu="true"] .tray-panel { background: transparent; }
-.tray-header { display: flex; align-items: center; gap: 6px; height: 46px; flex: none; margin: 0 6px; border-bottom: 1px solid var(--tray-line); }
+.tray-header { display: flex; align-items: center; gap: 6px; height: 42px; flex: none; padding-inline: 9px 3px; position: relative; }
 .brand-mark { width: 18px; height: 18px; flex-shrink: 0; border-radius: 4px; }
 .brand-name { font-size: 13px; font-weight: 600; }
 .tracking-status { margin-left: auto; font-size: 11px; color: var(--tray-muted); }
@@ -50,33 +50,36 @@ html[data-native-menu="true"] .tray-panel { background: transparent; }
 .recording[data-recording="true"] { color: var(--tray-red); }
 .recording > span { width: 8px; height: 8px; background: currentColor; border-radius: 50%; }
 .recording:hover:enabled { background: var(--tray-line); }
-.tray-body { display: grid; grid-template-columns: minmax(0, 1fr) 108px; align-items: center; gap: 0; flex: 1; padding: 5px 0; }
-.tray-actions { min-width: 0; margin-inline: 6px; }
-.tray-actions button, .startup button, .tray-footer button { width: 100%; min-height: 26px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 8px; border-radius: 4px; text-align: left; white-space: nowrap; }
+.tray-body { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 4px; flex: 1; padding: 5px 0; }
+.tray-actions { min-width: 0; }
+.tray-actions button, .startup button, .tray-footer button { width: 100%; min-height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 9px; border-radius: 4px; text-align: left; white-space: nowrap; }
 .tray-actions button:hover:enabled, .startup button:hover:enabled, .tray-footer button:hover:enabled { background: var(--tray-selection); color: #fff; }
 .tray-actions button:hover:enabled .session-time { color: inherit; }
-hr { margin: 4px 0; border: 0; border-top: 1px solid var(--tray-line); }
-.focus { margin: 0; text-align: center; --score-color: var(--tray-muted); }
+hr { margin: 4px 9px; border: 0; border-top: 1px solid var(--tray-line); }
+.tray-header::after, .startup::before, .tray-footer::before { content: ""; position: absolute; inset-inline: 9px; height: 1px; background: var(--tray-line); }  /* separators, inset as the text is */
+.tray-header::after { bottom: 0; }
+.startup::before, .tray-footer::before { top: 0; }
+.focus { margin: 0 -5px 0 -13px; text-align: center; --score-color: var(--tray-muted); }  /* centred from the separators' end (the gap and their 9px) to the menu's edge (its 5px) */
 .focus[data-band="high"] { --score-color: var(--tray-green); }
 .focus[data-band="mid"] { --score-color: var(--tray-amber); }
 .focus[data-band="low"] { --score-color: var(--tray-red); }
-.focus-dial { width: 88px; height: 88px; position: relative; margin: 0 auto; }
+.focus-dial { width: 84px; height: 84px; position: relative; margin: 0 auto; }
 .focus-dial svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .focus-dial circle { fill: none; stroke-width: 8px; }
 .focus-track { stroke: var(--tray-track); }
 .focus-value { stroke: var(--score-color); stroke-linecap: round; }
 .focus-number { position: absolute; inset: 0; display: grid; place-items: center; font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--score-color); }
-.focus figcaption { font-size: 11px; margin-top: 3px; }
-.focus figcaption span { display: block; margin-top: 3px; font-size: 10px; color: var(--tray-muted); }
-.startup { height: 34px; flex: none; display: flex; align-items: center; margin-inline: 6px; padding-block: 3px; border-top: 1px solid var(--tray-line); }
+.focus figcaption { font-size: 11px; margin-top: 2px; }
+.focus figcaption span { display: block; margin-top: 1px; font-size: 10px; color: var(--tray-muted); }
+.startup { height: 32px; flex: none; display: flex; align-items: center; padding-block: 3px; position: relative; }
 .startup-switch { display: block; width: 28px; height: 16px; flex-shrink: 0; background: var(--tray-switch); border-radius: 8px; padding: 2px; }
 .startup-switch > span { display: block; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
 .startup button[aria-checked="true"] .startup-switch { background: var(--tray-selection); }
 .startup button[aria-checked="true"] .startup-switch > span { transform: translateX(12px); }
 .startup button:hover:enabled .startup-switch { outline: 1px solid #ffffff80; }
-.tray-footer { height: 40px; flex: none; display: flex; align-items: center; margin: 0 6px; padding-block: 3px; border-top: 1px solid var(--tray-line); }
+.tray-footer { height: 32px; flex: none; display: flex; align-items: center; padding-block: 3px; position: relative; }
 .session-time { font-size: 11px; color: var(--tray-muted); font-variant-numeric: tabular-nums; }
-.tray-error { position: absolute; inset: auto 6px 6px; margin: 0; padding: 8px; max-height: 110px; overflow-y: auto; display: flex; align-items: flex-start; gap: 6px; background: var(--tray-surface); border: 1px solid var(--tray-red); border-radius: 4px; color: var(--tray-red); font-size: 11px; user-select: text; }
+.tray-error { position: absolute; inset: auto 5px 5px; margin: 0; padding: 8px; max-height: 110px; overflow-y: auto; display: flex; align-items: flex-start; gap: 6px; background: var(--tray-surface); border: 1px solid var(--tray-red); border-radius: 4px; color: var(--tray-red); font-size: 11px; user-select: text; }
 .tray-error span { flex: 1; }
 .tray-error button { display: grid; place-items: center; padding: 2px; }
 @media (prefers-reduced-transparency: reduce) {
