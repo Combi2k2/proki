@@ -1,0 +1,3 @@
+interface:
+  display_name: "Proki Automation"
+  short_description: "Create, change, explain and troubleshoot Proki automations from plain words"

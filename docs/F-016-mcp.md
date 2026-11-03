@@ -15,6 +15,8 @@ and settings.
   apply changes, switch, reset, unused), media (library, pools, picks), settings (services,
   ports) and suggestions.
 - Program changes are checked together: all are kept, or none.
+- The `proki-automation` skill (`skills/proki-automation/`) teaches an assistant to build, change and
+  explain automations with these tools: `npx skills add Combi2k2/proki --skill proki-automation`.
 
 ## Limits
 - Local only: the tools server listens on 127.0.0.1 ([NF-003](NF-003-security.md)).

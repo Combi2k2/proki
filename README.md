@@ -172,6 +172,17 @@ codex mcp add proki -- proki mcp
 openclaw mcp set proki '{"command":"proki","args":["mcp"]}'
 ```
 
+Then give your assistant the **proki-automation** skill, so it can turn what you say in everyday words
+("remind me to stretch every hour, but not in calls") into an automation, change one, or explain why one did or
+didn't fire:
+
+```bash
+npx skills add Combi2k2/proki --skill proki-automation
+```
+
+It installs into Claude Code, Codex, Cursor and the other agents the [skills CLI](https://github.com/vercel-labs/skills)
+supports; or copy [`skills/proki-automation/`](skills/proki-automation) into your agent's skills folder yourself.
+
 Each feature has a one-minute page in [docs](docs/README.md), starting with the [architecture](docs/NF-001-architecture.md).
 
 ## 📄 License
