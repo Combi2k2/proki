@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { Pause, Play, X } from "lucide-react"
-import prokiMark from "../../logo/proki.png"
+import prokiMark from "../assets/logo/proki.png"
 import { INITIAL, tray, type TrayState, type TrayStatus } from "@/lib/tray"
 import "./tray.css"
 
