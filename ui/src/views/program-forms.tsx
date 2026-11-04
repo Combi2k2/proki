@@ -53,17 +53,22 @@ export const ACTIONS: Record<string, [string, LucideIcon, string]> = {  // each 
   remove:  ["Remove", ListMinus,                 "bg-orange-500/15 text-orange-700 dark:text-orange-300"],
 }
 
+/** An action's icon on its tint, as its state shows it. */
+export const Tinted = ({ icon: Icon, tint }: { icon: LucideIcon; tint: string }) => (
+  <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", tint)}><Icon aria-hidden className="size-3" /></span>
+)
+
 /** What a save says back: null when it's kept, else the mistake. */
 export type Save = (data: Record<string, unknown>) => Promise<string | null>
 
 // --- values, as they're typed ---------------------------------------------------------------
 
 /** A variable's value as it's typed: empty is unknown, true / false, a number, else an expression. */
-function valueText(value: unknown): string {
+export function valueText(value: unknown): string {
   return value === null || value === undefined ? "" : String(value)
 }
 
-function parseValue(text: string): boolean | number | string | null {
+export function parseValue(text: string): boolean | number | string | null {
   const t = text.trim()
   if (t === "") return null
   if (t === "true" || t === "false") return t === "true"
@@ -71,11 +76,11 @@ function parseValue(text: string): boolean | number | string | null {
 }
 
 /** A rule's side: a number, else an expression. */
-const parseSide = (text: string) => (/^-?\d+(\.\d+)?$/.test(text.trim()) ? Number(text.trim()) : text.trim())
+export const parseSide = (text: string) => (/^-?\d+(\.\d+)?$/.test(text.trim()) ? Number(text.trim()) : text.trim())
 const parseNumber = (text: string) => (text.trim() === "" ? null : Number(text))
 
 /** A time as it's typed: empty is none, a number is minutes, else a phrase ("6s", "1d"). */
-const parseSpan = (text: string): number | string | null => (text.trim() === "" ? null : /^\d+(\.\d+)?$/.test(text.trim()) ? Number(text) : text.trim())
+export const parseSpan = (text: string): number | string | null => (text.trim() === "" ? null : /^\d+(\.\d+)?$/.test(text.trim()) ? Number(text) : text.trim())
 
 // --- the form, and its fields ---------------------------------------------------------------
 
@@ -408,7 +413,7 @@ export function ActionForm({ spec, at, about, taken, onSave, onCancel }: {
     <Form onCancel={onCancel} onSave={save}>
       {spec && (
         <p className="flex items-center gap-2 text-xs">
-          <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", tint)}><Icon aria-hidden className="size-3" /></span>
+          <Tinted icon={Icon} tint={tint} />
           <span className="font-medium">{said}</span>
           {does && <span className="min-w-0 text-muted-foreground first-letter:uppercase">{does}.</span>}
         </p>

@@ -263,6 +263,11 @@ export type Played = {
 }
 
 /** Your programs' tools (proki/tools.py), by name, and what each returns. */
+/** Where a name is written or read: how it's written (`from`), or what reads it (`by`); a state's
+ * place, its program, its state and `at`, the way out's or the action's place there. */
+export type Place = { from?: SourceName | "proki"; by?: string; program?: string; state?: string; at?: number; kind?: string; text?: string; name?: string }
+export type Links = { writes: Place[]; reads: Place[] }
+
 type Tools = {
   reference: Reference
   get_program: ProgramDetail
@@ -283,6 +288,7 @@ type Tools = {
   set_picks: Done
   playground: Played
   evaluate: { value?: unknown; type?: Type; error?: string }  // an expression's value now, as an action works it out
+  links: Links  // what writes a signal, a variable or a rule, and what reads it
   get_settings: Services
   set_settings: Services  // a service set, asked from now on
   set_ports: Services  // saved for the next app launch

@@ -32,12 +32,14 @@ function holds(value: unknown): string {
   return n === 1 ? "1 field" : `${n} fields`
 }
 
-/** A cue to open what's too big for a line: what it holds, and an arrow. */
+/** A cue to open what's too big for a line: […] for a list, {…} for a record, its brackets in its
+ * type's colour, the dots as a value's; what it holds on hover. */
 export function Opens({ value, onOpen, className }: { value: unknown; onOpen: () => void; className?: string }) {
+  const list = Array.isArray(value)
   return (
-    <button type="button" onClick={(e) => (e.stopPropagation(), onOpen())}
-            className={cn("-mx-1 inline-flex items-center gap-0.5 rounded px-1 whitespace-nowrap text-muted-foreground underline decoration-dotted underline-offset-2 hover:bg-muted hover:text-foreground", className)}>
-      {holds(value)}<ChevronRight className="size-3" />
+    <button type="button" title={holds(value)} onClick={(e) => (e.stopPropagation(), onOpen())} style={{ color: `var(--type-${list ? "list" : "object"})` }}
+            className={cn("-mx-1 inline-flex items-center rounded px-1 whitespace-nowrap underline decoration-dotted underline-offset-2 hover:bg-muted", className)}>
+      {list ? "[" : "{"}<span className="text-muted-foreground">…</span>{list ? "]" : "}"}
     </button>
   )
 }

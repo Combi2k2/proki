@@ -1,9 +1,13 @@
 // A record's (a task's, a note's) fields, each with its sources, in order; the first with
-// a value wins. A row opens to edit it, one at a time.
+// a value wins. A row opens its dialog, changed where it's read, one at a time.
 
 import { useCallback, useEffect, useState, type ReactNode } from "react"
-import { Box, Brackets, CircleHelp, Clock, GripVertical, Hash, Plus, Radical, RotateCcw, ToggleRight, Trash2, TriangleAlert, Type as TextIcon, X, type LucideIcon } from "lucide-react"
+import {
+  Bot, Box, Brackets, CircleHelp, Clock, GripVertical, Hash, KeySquare, Plus, Radical, RotateCcw, Sigma, ToggleRight, Trash2, TriangleAlert, Type as TextIcon, User, Workflow, X,
+  type LucideIcon,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -12,25 +16,28 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import type { Field, Source, SourceName, Type, Weighed } from "@/lib/proki"
+import { Confirm } from "@/components/confirm"
 import { CodeArea, CodeInput } from "@/views/code"
+import { Editable, typing } from "@/views/in-place"
 
 type Change = (request: object) => Promise<string>
 
-const SOURCES: Record<SourceName, { means: string; chip: string; fresh: Source }> = {
-  expr:    { means: "Computed from other fields", chip: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+const SOURCES: Record<SourceName, { means: string; icon: LucideIcon; chip: string; fresh: Source }> = {
+  expr:    { means: "Computed from other fields", icon: Sigma,     chip: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
              fresh: { from: "expr", expr: "" } },
-  jev:     { means: "Asked to jev (local, fast)", chip: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  jev:     { means: "Asked to jev (local, fast)", icon: KeySquare, chip: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
              fresh: { from: "jev", type: "noul", question: "" } },
-  llm:     { means: "Asked to the LLM", chip: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  llm:     { means: "Asked to the LLM",           icon: Bot,       chip: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
              fresh: { from: "llm", context: "" } },
-  user:    { means: "Set by you, per record", chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300", fresh: { from: "user" } },
-  auto:    { means: "Set by a program", chip: "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300", fresh: { from: "auto" } },
+  user:    { means: "Set by you, per record",     icon: User,      chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300", fresh: { from: "user" } },
+  auto:    { means: "Set by a program",           icon: Workflow,  chip: "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300", fresh: { from: "auto" } },
 }
+export const AUTO = SOURCES.auto.chip  // the automations' tint, as a chip of theirs
 const PLAIN = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const  // names and formulas, as typed
 const NAMES = Object.keys(SOURCES) as SourceName[]
-const GRID  = "grid grid-cols-[11rem_minmax(0,1fr)_15rem] items-center gap-3"
+const GRID  = "grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_10.5rem] items-center gap-3"  // a table: room for three sources, what it is takes the rest
 
-/** A field: its name, what it is and its sources; open, its editor. */
+/** A field: its name, what it is and its sources; open, its dialog. */
 function FieldRow({ field, weighed, open, onOpen, onRenamed, onChange }: {
   field: Field
   weighed: Weighed
@@ -40,15 +47,15 @@ function FieldRow({ field, weighed, open, onOpen, onRenamed, onChange }: {
   onChange: Change
 }) {
   return (
-    <div className={cn("border-b", open !== null && "rounded-lg border bg-muted/30 my-1")}>
-      <div role="button" tabIndex={0} onClick={() => onOpen(open === null ? 0 : null)}
-           onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen(open === null ? 0 : null)}
-           className={cn(GRID, "cursor-pointer px-3 py-2 hover:bg-muted/60", open !== null && "hover:bg-transparent")}>
+    <div className="border-b last:border-b-0">
+      <div role="button" tabIndex={0} onClick={() => onOpen(0)}
+           onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen(0)}
+           className={cn(GRID, "cursor-pointer px-2 py-1.5 hover:bg-muted/60")}>
         <span className="flex min-w-0 items-center gap-1.5">
           <TypeIcon type={field.worked} />
-          <code title={field.key} className="truncate text-sm font-semibold">{field.key}</code>
+          <code title={field.key} className="truncate text-xs font-semibold">{field.key}</code>
         </span>
-        <span className="truncate text-xs text-muted-foreground">{field.desc || "–"}</span>
+        <span title={field.desc} className="truncate text-xs text-muted-foreground">{field.desc || "–"}</span>
         <span className="flex flex-wrap gap-1">
           {field.srcs.map((s, i) => (
             <Chip key={s.from} name={s.from} onClick={(e) => (e.stopPropagation(), onOpen(i))} />
@@ -56,14 +63,23 @@ function FieldRow({ field, weighed, open, onOpen, onRenamed, onChange }: {
           {field.srcs.length === 0 && <span className="text-xs text-muted-foreground">none</span>}
         </span>
       </div>
-      {open !== null && <Editor field={field} weighed={weighed} source={open} onSource={onOpen} onRenamed={onRenamed} onChange={onChange} />}
+      {open !== null && (
+        <Dialog open onOpenChange={(to) => !to && onOpen(null)}>
+          <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-2xl"
+                         onEscapeKeyDown={typing}>
+            <TooltipProvider delayDuration={300}>
+              <Editor field={field} weighed={weighed} source={open} onSource={onOpen} onRenamed={onRenamed} onChange={onChange} />
+            </TooltipProvider>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
 
-/** A record's fields, if `record` is one: each with its type, what it is and its sources, each
- *  opened to change how it's worked out; a new one added under them. `children` for a variable
- *  that isn't a record (nothing while it's asked). */
+/** A record's fields, if `record` is one: a table of each one's name, what it is and its
+ * sources, each opened to change it; a new one added under them. `children` for a variable that
+ * isn't a record (nothing while it's asked). */
 export function RecordFields({ record, children }: { record: string; children?: ReactNode }) {
   const [weighed, setWeighed] = useState<Weighed | null | undefined>(undefined)
   const [open, setOpen]       = useState<{ key: string; source: number } | null>(null)
@@ -83,22 +99,28 @@ export function RecordFields({ record, children }: { record: string; children?: 
   if (weighed === null)      return <>{children}</>
   return (
     <TooltipProvider delayDuration={300}>
-      <section className="flex flex-col border-t pt-3">
-        <span className="mb-1.5"><Label text="Fields" hint="click one to change how it's worked out: the first source with a value wins" /></span>
-        {weighed.fields.map((field) => (
-          <FieldRow key={field.key} field={field} weighed={weighed} onChange={change}
-                    open={open?.key === field.key ? open.source : null}
-                    onOpen={(source) => setOpen(source === null ? null : { key: field.key, source })}
-                    onRenamed={(key) => setOpen((o) => o && { ...o, key })} />
-        ))}
+      <section data-record className="flex flex-col border-t pt-3">
+        <span className="mb-1.5 text-xs font-medium">Fields</span>
+        <div className="rounded-md border">
+          <div className={cn(GRID, "border-b bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground")}>
+            <span>Name</span><span>What it is</span><span title="the first source with a value wins">Sources, first wins</span>
+          </div>
+          {weighed.fields.map((field) => (
+            <FieldRow key={field.key} field={field} weighed={weighed} onChange={change}
+                      open={open?.key === field.key ? open.source : null}
+                      onOpen={(source) => setOpen(source === null ? null : { key: field.key, source })}
+                      onRenamed={(key) => setOpen((o) => o && { ...o, key })} />
+          ))}
+        </div>
         <NewField onChange={change} onMade={(key) => setOpen({ key, source: 0 })} />
       </section>
     </TooltipProvider>
   )
 }
 
-/** A source as a chip: what it means as you hover it. */
-function Chip({ name, active, onClick, onRemove, ...drag }: {
+/** A source as a chip, its icon before its name: what it means as you hover it (under a
+ * TooltipProvider). */
+export function Chip({ name, active, onClick, onRemove, ...drag }: {
   name: SourceName
   active?: boolean
   onClick?: (e: React.MouseEvent) => void
@@ -108,9 +130,9 @@ function Chip({ name, active, onClick, onRemove, ...drag }: {
     <Tooltip>
       <TooltipTrigger asChild>
         <span {...drag} onClick={onClick}
-              className={cn("inline-flex h-5 cursor-pointer items-center gap-0.5 rounded-full px-2 font-mono text-[11px] font-medium select-none",
-                            SOURCES[name].chip, active && "ring-2 ring-ring/60", drag.draggable && "cursor-grab pl-1")}>
+              className={cn(TAG, "cursor-pointer", SOURCES[name].chip, active && "ring-2 ring-ring/60", drag.draggable && "cursor-grab pl-1")}>
           {drag.draggable && <GripVertical className="size-3 opacity-50" />}
+          <Mark icon={SOURCES[name].icon} />
           {name}
           {onRemove && (
             <button type="button" aria-label={`remove ${name}`} onClick={(e) => (e.stopPropagation(), onRemove())}
@@ -123,8 +145,13 @@ function Chip({ name, active, onClick, onRemove, ...drag }: {
   )
 }
 
-/** An open field: what it is, its sources in order (dragged to reorder), the one picked to
- * edit, and saving it all. */
+/** A chip's look, and its icon: a source's, or what reads a name. */
+export const TAG = "inline-flex h-5 items-center gap-1 rounded-full px-2 font-mono text-[11px] font-medium whitespace-nowrap select-none"
+export const Mark = ({ icon: Icon }: { icon: LucideIcon }) => <Icon aria-hidden className="size-3 shrink-0" strokeWidth={2.25} />
+
+/** An open field, as a variable's dialog shows one: its name and what it is, changed where they
+ * are; its type; its sources in order (dragged to reorder), the one picked edited under them and
+ * kept on Save; Reset or Delete by the close button. */
 function Editor({ field, weighed, source, onSource, onRenamed, onChange }: {
   field: Field
   weighed: Weighed
@@ -133,65 +160,82 @@ function Editor({ field, weighed, source, onSource, onRenamed, onChange }: {
   onRenamed: (key: string) => void
   onChange: Change
 }) {
-  const [key, setKey] = useState(field.key)
-  const [desc, setDesc] = useState(field.desc)
   const [sources, setSources] = useState<Source[]>(field.srcs)
-  const [type, setType] = useState<Type>(field.type)
   const [dragged, setDragged] = useState<number | null>(null)
-  const [error, setError] = useState("")
-  useEffect(() => (setKey(field.key), setDesc(field.desc), setSources(field.srcs), setType(field.type)), [field])
+  const [error, setError]     = useState("")
+  const kept = JSON.stringify(field.srcs)
+  useEffect(() => setSources(field.srcs), [kept])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const picked  = sources[Math.min(source, sources.length - 1)]
-  const edited  = desc !== field.desc || JSON.stringify(sources) !== JSON.stringify(field.srcs) || JSON.stringify(type) !== JSON.stringify(field.type)
-  const changed = edited || key.trim() !== field.key
+  const edited  = JSON.stringify(sources) !== kept
   const missing = NAMES.filter((n) => !sources.some((s) => s.from === n))
   const put     = (i: number, s: Source) => setSources(sources.map((old, j) => (j === i ? s : old)))
-  const move    = (from: number, to: number) => {
+  const define  = async (f: Partial<Field>) => (await onChange({ op: "define", field: { key: field.key, desc: field.desc, type: field.type, srcs: field.srcs, ...f } })) || null
+  const rename  = async (text: string) => {
+    const to      = text.trim()
+    const mistake = await onChange({ op: "rename", key: field.key, to })
+    if (!mistake) onRenamed(to)
+    return mistake || null
+  }
+  const move = (from: number, to: number) => {
     const next = [...sources]
     next.splice(to, 0, ...next.splice(from, 1))
     setSources(next)
     onSource(to)
   }
-  const save = async () => {
-    const to = key.trim()
-    if (to !== field.key) {
-      const mistake = await onChange({ op: "rename", key: field.key, to })
-      if (mistake) return setError(mistake)
-      onRenamed(to)
-    }
-    setError(edited ? await onChange({ op: "define", field: { key: to, desc, type, srcs: sources.map(cleaned) } }) : "")
+  const gone = async () => {
+    const mistake = await onChange({ op: "remove", key: field.key })
+    setError(mistake)
+    if (!mistake && !field.shipped) onSource(null)
   }
+  const Term = ({ children, hint }: { children: ReactNode; hint?: string }) => <dt title={hint} className="text-muted-foreground">{children}</dt>
 
   return (
-    <div className="flex flex-col gap-3 border-t px-3 pt-3 pb-3">
-      <div className="grid grid-cols-[11rem_minmax(0,1fr)] gap-2">
-        <Input {...PLAIN} value={key} onChange={(e) => setKey(e.target.value)} disabled={field.shipped} aria-label="name"
-               title={field.shipped ? "Built-in fields keep their name" : undefined} className="h-8 font-mono text-xs" />
-        <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description" className="h-8 text-xs" />
+    <>
+      <DialogHeader className="pr-16">
+        <DialogTitle className="flex min-w-0 items-center gap-2 font-mono">
+          <TypeIcon type={field.worked} className="size-4" />
+          <Editable label="Name" value={field.key} code onSave={field.shipped ? undefined : rename} title={field.shipped ? "Built-in fields keep their name" : undefined} className="-mb-1 truncate pb-1" />
+        </DialogTitle>
+        <DialogDescription asChild>
+          <div><Editable label="Description" value={field.desc} long placeholder="No description" onSave={(t) => define({ desc: t })} /></div>
+        </DialogDescription>
+      </DialogHeader>
+      <div className="absolute top-2 right-10">
+        <Confirm title={field.shipped ? `Reset the field “${field.key}”?` : `Delete the field “${field.key}”?`}
+                 description={field.shipped ? "Its sources go back to the app's." : "Every record loses its value. This can't be undone."}
+                 action={field.shipped ? "Reset" : "Delete field"} onConfirm={gone}>
+          <Button size="icon-sm" variant="ghost" aria-label={field.shipped ? "Reset" : "Delete"} title={field.shipped ? "Reset to the app's" : "Delete"}>
+            {field.shipped ? <RotateCcw /> : <Trash2 />}
+          </Button>
+        </Confirm>
       </div>
-      <TypeField label="Type" value={type} onChange={(t) => setType(t ?? "any")} />
-      {type === "any" && field.worked !== "any" && <p className="-mt-2 text-xs text-muted-foreground">Worked out: {said(field.worked)}</p>}
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-xs text-muted-foreground">Sources</span>
-        {sources.map((s, i) => (
-          <span key={s.from} className="flex items-center gap-1.5">
-            {i > 0 && <span className="text-xs text-muted-foreground">→</span>}
-            <Chip name={s.from} active={s === picked} onClick={() => onSource(i)}
-                  onRemove={() => (setSources(sources.filter((_, j) => j !== i)), onSource(Math.max(0, i - 1)))}
-                  draggable onDragStart={() => setDragged(i)} onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => dragged !== null && dragged !== i && move(dragged, i)} onDragEnd={() => setDragged(null)} />
-          </span>
-        ))}
-        {missing.length > 0 && (
-          <select value="" aria-label="add a source"
-                  onChange={(e) => (setSources([...sources, SOURCES[e.target.value as SourceName].fresh]), onSource(sources.length))}
-                  className="h-6 rounded-full border border-dashed bg-transparent px-2 text-xs text-muted-foreground outline-none hover:bg-muted">
-            <option value="" disabled>+ source</option>
-            {missing.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-        )}
-      </div>
+      <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t pt-3 text-xs">
+        <Term>Type</Term>
+        <dd><TypeChange type={field.worked} own={field.type === "any" ? undefined : field.type} onSave={(t) => define({ type: t })} /></dd>
+        <Term hint="the first source with a value wins">Sources</Term>
+        <dd className="flex flex-wrap items-center gap-1.5">
+          {sources.map((s, i) => (
+            <span key={s.from} className="flex items-center gap-1.5">
+              {i > 0 && <span className="text-muted-foreground">→</span>}
+              <Chip name={s.from} active={s === picked} onClick={() => onSource(i)}
+                    onRemove={() => (setSources(sources.filter((_, j) => j !== i)), onSource(Math.max(0, i - 1)))}
+                    draggable onDragStart={() => setDragged(i)} onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => dragged !== null && dragged !== i && move(dragged, i)} onDragEnd={() => setDragged(null)} />
+            </span>
+          ))}
+          {missing.length > 0 && (
+            <select value="" aria-label="add a source"
+                    onChange={(e) => (setSources([...sources, SOURCES[e.target.value as SourceName].fresh]), onSource(sources.length))}
+                    className="h-5 rounded-full border border-dashed bg-transparent px-2 text-[11px] text-muted-foreground outline-none hover:bg-muted">
+              <option value="" disabled>+ source</option>
+              {missing.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          )}
+          <span className="text-muted-foreground">the first with a value wins</span>
+        </dd>
+      </dl>
 
       {picked ? (
         <div className="rounded-md border bg-background p-3">
@@ -200,15 +244,43 @@ function Editor({ field, weighed, source, onSource, onRenamed, onChange }: {
       ) : <p className="text-xs text-muted-foreground">No sources: always empty.</p>}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
-      <div className="flex items-center gap-2">
-        <Button size="sm" onClick={save} disabled={!changed}>Save</Button>
-        <Button size="sm" variant="ghost" disabled={!changed} onClick={() => (setKey(field.key), setDesc(field.desc), setSources(field.srcs), setType(field.type), setError(""))}>
-          Discard
-        </Button>
-        <Button size="sm" variant="ghost" className="ml-auto text-muted-foreground hover:text-destructive"
-                onClick={async () => setError(await onChange({ op: "remove", key: field.key }))}>
-          {field.shipped ? <><RotateCcw /> Reset</> : <><Trash2 /> Delete</>}
-        </Button>
+      {edited && (
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={async () => setError((await define({ srcs: sources.map(cleaned) })) ?? "")}>Save sources</Button>
+          <Button size="sm" variant="ghost" onClick={() => (setSources(field.srcs), setError(""))}>Discard</Button>
+        </div>
+      )}
+    </>
+  )
+}
+
+/** A type, said; given `onSave`, clicked to change: its kind, and what's inside it, kept on Save.
+ * `own`: the one you gave (none: worked out). */
+export function TypeChange({ type, own, onSave }: { type?: Type; own?: Type; onSave?: (type: Type) => Promise<string | null> }) {
+  const [draft, setDraft] = useState<Type | null>(null)
+  const [error, setError] = useState("")
+  const kind  = kindOf(type ?? "any")
+  const shown = <span style={{ color: `var(--type-${kind})` }}>{type && type !== "any" ? said(type) : "any"}</span>
+  if (!onSave) return shown
+  if (draft === null) return (
+    <button type="button" onClick={() => setDraft(own ?? type ?? "any")} title="Click to change"
+            className="cursor-text rounded-sm decoration-muted-foreground decoration-dotted underline-offset-4 hover:underline">
+      {shown}{!own && type && type !== "any" && <span className="text-muted-foreground"> (worked out)</span>}
+    </button>
+  )
+  const keep = async () => {
+    const mistake = await onSave(draft)
+    setError(mistake ?? "")
+    if (!mistake) setDraft(null)
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <TypeField label="" value={draft} alone onChange={(t) => setDraft(t ?? "any")} />
+      <TypeInside value={draft} onChange={setDraft} />
+      {error && <span className="text-[11px] break-words text-destructive">{error}</span>}
+      <div className="flex gap-2">
+        <Button size="xs" onClick={keep}>Save</Button>
+        <Button size="xs" variant="ghost" onClick={() => (setDraft(null), setError(""))}>Cancel</Button>
       </div>
     </div>
   )
@@ -538,7 +610,7 @@ function cleaned(s: Source): Source {
 }
 
 /** What's typed in as a value: a number, true or false, null, or else the text. */
-function parsed(text: string): unknown {
+export function parsed(text: string): unknown {
   if (!text.trim()) return undefined
   try {
     return JSON.parse(text)

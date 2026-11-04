@@ -11,12 +11,15 @@
 // program still runs. A state renamed takes its new name in the transitions to it, and as the
 // program's start; a transition to a state not there yet makes it.
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ArrowLeft, ArrowLeftToLine, ArrowRight, Check, ChevronRight, Code, GripVertical, Eye, EyeOff, Lock, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react"
+import {
+  ArrowLeft, ArrowLeftToLine, ArrowRight, ChartLine, Check, ChevronRight, Code, GripVertical, Eye, EyeOff, Lock, PawPrint, Pencil, Plus, RotateCcw, Scale, Split, Trash2,
+  Variable, Workflow, X, type LucideIcon,
+} from "lucide-react"
 import { Confirm } from "@/components/confirm"
 import { PageHeader } from "@/components/page"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -27,21 +30,24 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   GLOBAL, type ActionSpec, type BranchSpec, type Change, type GlobalSpecs, type ProgramDetail, type ProgramSpecs, type Reference, type RuleSpec, type Scope,
-  type SignalSpec, type Type, type VarDetail, type VariableSpec, type Where,
+  type Links, type Place, type SignalSpec, type Type, type VarDetail, type VariableSpec, type Where,
 } from "@/lib/proki"
 import { recall, recallJson, remember, rememberJson } from "@/lib/remember"
 import { cn } from "@/lib/utils"
-import { ACTIONS, ActionForm, BranchForm, insert, NAMES, ProgramForm, RuleForm, SignalForm, StateForm, useAimed, VariableForm, type Save } from "@/views/program-forms"
+import {
+  ACTIONS, ActionForm, BranchForm, insert, NAMES, parseSide, parseSpan, parseValue, ProgramForm, RuleForm, SignalForm, StateForm, Tinted, useAimed, valueText, VariableForm, type Save,
+} from "@/views/program-forms"
 import { Expr } from "@/views/code"
-import { RecordFields, said, TypeField, TypeIcon, TypeInside } from "@/views/fields"
+import { AUTO, Chip, Mark, parsed, RecordFields, said, TAG, TypeChange, TypeField, TypeIcon, TypeInside } from "@/views/fields"
+import { Editable, typing } from "@/views/in-place"
 import { GraphView } from "@/views/program-graph"
-import { action, shown } from "@/views/program-inspect"
+import { action, shown, SYMBOL } from "@/views/program-inspect"
 import { atomic, Inspect, Opens } from "@/views/inspect"
 import { IconPicker } from "@/views/icon-picker"
 import { useDrag } from "@/views/tasks"
@@ -55,7 +61,11 @@ type Running = Reference["programs"][number]
 
 const depth = (p: Path) => (p.program === null ? 0 : p.state === null ? 1 : 2)
 const CHANGED = "proki:changed"  // a change kept: each part showing one reads it again
-const GO      = "proki:go"       // the bubble's way to a scope: its detail, the path
+const GO      = "proki:go"       // the way to a scope, from any page: its detail, the path
+
+let arriving: Path | null = null  // the scope gone to, for the automations' page as it opens
+/** The automations' page at `path`: there now, or opened there. */
+const goTo = (path: Path) => (arriving = path, window.dispatchEvent(new CustomEvent(GO, { detail: path })))
 
 /** An automation's title, as its card says it, else its name. */
 const titled = (reference: Reference | null, name: string) => {
@@ -78,7 +88,7 @@ export function Scope({ where }: { where: Where }) {
 
 /** The programs, from `open`'s if given; `onWhere` hears the scope you're in. */
 export function ProgramsView({ open = null, onWhere }: { open?: string | null; onWhere?: (where: Where) => void }) {
-  const [path, setPath] = useState<Path>({ program: open, state: null })
+  const [path, setPath] = useState<Path>(() => arriving ?? { program: open, state: null })
   const [deeper, setDeeper] = useState(true)  // the way the last move went: in, or out
   const [trail, setTrail] = useState<string[]>([])  // the states you came through to this one, in this program
   const [reference, setReference] = useState<Reference | null>(null)
@@ -116,7 +126,8 @@ export function ProgramsView({ open = null, onWhere }: { open?: string | null; o
   const going = useRef(go)
   going.current = go
   useEffect(() => {
-    const heard = (e: Event) => going.current((e as CustomEvent<Path>).detail)
+    arriving = null
+    const heard = (e: Event) => (arriving = null, going.current((e as CustomEvent<Path>).detail))
     window.addEventListener(GO, heard)
     return () => window.removeEventListener(GO, heard)
   }, [])
@@ -542,7 +553,7 @@ function StateMain({ name, state, specs, detail, reference, change, act, setErro
                      const [said, Icon, tint] = ACTIONS[a.kind] ?? [a.kind, Code, "bg-muted text-muted-foreground"]
                      return (
                        <>
-                         <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md", tint)}><Icon aria-hidden className="size-3" /></span>
+                         <Tinted icon={Icon} tint={tint} />
                          <span className="w-12 shrink-0 font-medium">{said}</span>
                          {a.desc ? <span className="truncate text-muted-foreground">{a.desc}</span> : <Expr className="truncate">{text}</Expr>}
                        </>
@@ -609,10 +620,10 @@ function Way({ branch, live, alone, onGo }: { branch: BranchSpec; live?: Program
   )
 }
 
-/** Whether something holds now: a green tick, a grey cross, a dash when it isn't known. */
+/** Whether something holds now: a green tick, a red cross, a dash when it isn't known. */
 function Truth({ value }: { value: unknown }) {
   if (value === true)  return <Check className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="true now" />
-  if (value === false) return <X className="size-3.5 shrink-0 text-muted-foreground" aria-label="false now" />
+  if (value === false) return <X className="size-3.5 shrink-0 text-red-600 dark:text-red-400" aria-label="false now" />
   return <span className="w-3.5 shrink-0 text-center text-muted-foreground" aria-label="not known now">–</span>
 }
 
@@ -641,6 +652,19 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
   const sensors = useDrag()
   const [order, setOrder] = useState<number[] | null>(null)  // a drop, shown until the list comes back with it
   const [refused, setRefused] = useState<{ at: number; why: string } | null>(null)
+  const [lit, setLit] = useState<number | null>(null)  // the one a dialog's chip came to
+  useEffect(() => {
+    const take = () => {
+      const f = flashing
+      if (!f || f.kind !== kind || f.program !== at.program || f.state !== at.state) return
+      flashing = null
+      setLit(f.at)
+      setTimeout(() => setLit(null), 2400)
+    }
+    take()
+    window.addEventListener(FLASH, take)
+    return () => window.removeEventListener(FLASH, take)
+  }, [kind, at.program, at.state])
   const kept = JSON.stringify(items)
   useEffect(() => setOrder(null), [kept])
   const dropped = async (e: DragEndEvent) => {
@@ -661,7 +685,7 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
           {shown.map((i) => open === i ? (
             <div key={i}>{form(items[i], (data) => saved(data, [{ op: "update", kind, data: { ...at, at: i, changes: data } }])(), close)}</div>
           ) : (
-            <Line key={i} id={i} refused={refused?.at === i} named={kind === "action" ? `the action “${(items[i] as ActionSpec).name}”` : `transition ${i + 1}`}
+            <Line key={i} id={i} refused={refused?.at === i} lit={lit === i} named={kind === "action" ? `the action “${(items[i] as ActionSpec).name}”` : `transition ${i + 1}`}
                   onEdit={() => setOpen(i)} onDelete={() => act([{ op: "remove", kind, data: { ...at, at: i } }])}>
               {line(items[i], i)}
             </Line>
@@ -720,17 +744,14 @@ function Kept({ own, where, reference, change, act }: {
 }) {
   const [tab, setTab] = useState<Tab>(() => recall("programs.kind", TABS.map(([k]) => k), "signal"))
   const kind = tab === "input" ? "signal" : tab
-  const scopes = SCOPES.filter(([s]) => s === "global" || (s === "special" ? kind === "variable" : s === "program" ? where.program !== null : where.state !== null))
+  const scopes = tab === "input" ? SCOPES.filter(([s]) => s === "global")  // the inputs: the app's, everywhere
+                                 : SCOPES.filter(([s]) => s === "global" || (s === "special" ? kind === "variable" : s === "program" ? where.program !== null : where.state !== null))
   const [open, setOpen] = useState<Scope[]>([where.scope])  // the scopes open, any of them at once
   const [adding, setAdding] = useState<Scope | null>(null)
   const [hidden, setHidden] = useState(() => recall("programs.hidden", ["shown", "kept"], "kept") === "shown")
   const [hid, setHid]       = useState<string[]>(() => recallJson("programs.hid", []))  // each line hidden, as kind:name
   const full = (s: Spec) => (s.scope === "global" ? s.name : s.scope === "program" ? `${s.program}.${s.name}` : `${s.program}.${s.state}.${s.name}`)
   const rows = { variable: reference.variables, signal: reference.signals, rule: reference.rules }
-  const valueOf = (s: Spec) => {
-    const row = rows[kind].find((r) => r.name === full(s))
-    return kind === "rule" ? (row as Reference["rules"][number] | undefined)?.chance : (row as { value?: unknown } | undefined)?.value
-  }
   const veiled = (name: string) => hid.includes(`${kind}:${name}`)
   const veil   = (name: string) => {
     const next = veiled(name) ? hid.filter((k) => k !== `${kind}:${name}`) : [...hid, `${kind}:${name}`]
@@ -749,9 +770,7 @@ function Kept({ own, where, reference, change, act }: {
     const mine = (own[`${kind}s` as const] as Spec[]).filter((s) => s.scope === scope && (scope !== "state" || s.state === where.state) && (hidden || !veiled(full(s))))
     const taken = new Set(mine.map(full))
     const inside = scope === "program" ? `${where.program}.` : `${where.program}.${where.state}.`
-    const outer = where.scope === "global" && scope !== "special"
-      ? rows[kind].filter((r) => r.scope === scope && !taken.has(r.name) && (r as ObjectRow).fields)  // a table, kept by the code
-      : rows[kind].filter((r) => r.scope === scope && !taken.has(r.name) && (scope === "global" || scope === "special" || r.name.startsWith(inside)))
+    const outer = rows[kind].filter((r) => r.scope === scope && !taken.has(r.name) && (scope === "global" || scope === "special" || r.name.startsWith(inside)))
     return { mine, outer: outer.filter((r) => hidden || !veiled(r.name)) }
   }
 
@@ -766,15 +785,14 @@ function Kept({ own, where, reference, change, act }: {
           </button>
         ))}
       </div>
-      {tab === "input" ? <Inputs reference={reference} /> : scopes.map(([scope, title]) => {
-        const { mine, outer } = of(scope)
+      {scopes.map(([scope, title]) => {
+        const { mine, outer } = tab === "input" ? { mine: [], outer: [] } : of(scope)
         const here = { ...where, scope }
         const shut = !open.includes(scope)
-        const lines = [
-          ...mine.map((s) => (
-            <KeptLine key={`${s.scope}.${s.name}`} veiled={veiled(full(s))} onVeil={() => veil(full(s))} kind={kind} spec={s} where={here} value={valueOf(s)} full={full(s)}
-                      type={(rows[kind].find((r) => r.name === full(s)) as { type?: Type } | undefined)?.type}
-                      app={(rows[kind].find((r) => r.name === full(s)) as { app?: boolean } | undefined)?.app}
+        const lines = tab === "input" ? [<Inputs key="inputs" reference={reference} />] : [
+          ...mine.map((s, i) => (
+            <KeptLine key={`${s.scope}:${i}`} veiled={veiled(full(s))} onVeil={() => veil(full(s))} kind={kind} spec={s} where={here} full={full(s)}
+                      row={(rows[kind] as Row[]).find((r) => r.name === full(s))}
                       onSave={(data) => change([{ op: "update", kind, data: { ...found(s), changes: data } }])}
                       onDelete={() => act([{ op: "remove", kind, data: found(s) }])} />
           )),
@@ -789,9 +807,9 @@ function Kept({ own, where, reference, change, act }: {
                       aria-expanded={!shut} className="flex flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-left hover:bg-background">
                 <ChevronRight strokeWidth={3} className={cn("size-3.5 transition-transform", !shut && "rotate-90")} />
                 <span className={cn("text-xs font-medium", shut && "text-muted-foreground")}>{title}</span>
-                <span className="text-[11px] text-muted-foreground tabular-nums">{mine.length + outer.length}</span>
+                <span className="text-[11px] text-muted-foreground tabular-nums">{tab === "input" ? reference.inputs.length : mine.length + outer.length}</span>
               </button>
-              {scope !== "special" && (
+              {scope !== "special" && tab !== "input" && (
                 <Button size="icon-xs" variant="ghost" aria-label={`add to ${title.toLowerCase()}`} disabled={adding === scope}
                         onClick={() => (setOpen(shut ? [...open, scope] : open), setAdding(scope))}><Plus /></Button>
               )}
@@ -852,16 +870,19 @@ const inside = (f: ObjectRow): ObjectField[] | undefined => {
 }
 
 /** A variable with fields (work, work.tasks, track): its name, `label`, (what it is, on hover),
- * click it to see what it is; open, its fields, each with its value for the record at hand, each
- * hidden as any line is (yours, kept in this window, else as the code says), shown greyed on the
- * switch, `hidden`. A field with fields of its own (work.tasks, work.plan) opens as one. */
+ * click it to see what it is; its value on the right, as any line's; its chevron opens its fields,
+ * each with its value for the record at hand, each clicked to see what it is, each hidden as any
+ * line is (yours, kept in this window, else as the code says), shown greyed on the switch, `hidden`.
+ * A field with fields of its own (work.tasks, work.plan) opens as one. */
 function ObjectLine({ object, label, hidden, veiled, onVeil }: { object: ObjectRow; label: string; hidden: boolean; veiled?: boolean; onVeil: () => void }) {
   const key = `space.${object.name}.shown`  // as it was kept before: your choices stay
   const [open, setOpen]       = useState(false)
   const [viewing, setViewing] = useState(false)
+  const [seen, setSeen]       = useState<ObjectField | null>(null)  // the field whose dialog is open
   const [chosen, setChosen]   = useState<Record<string, boolean>>(() => recallJson(key, {}))
   const fields = object.fields ?? []
   const short  = (f: VarDetail) => f.name.slice(object.name.length + 1)
+  const value  = (object as { scope?: Scope }).scope === "special" ? Object.fromEntries(fields.map((f) => [short(f), f.value])) : object.value  // the app's own (work, track): its fields'
   const sees   = (f: ObjectField) => chosen[short(f)] ?? f.shown ?? true
   const veil   = (f: ObjectField) => {
     const next = { ...chosen, [short(f)]: !sees(f) }
@@ -870,18 +891,17 @@ function ObjectLine({ object, label, hidden, veiled, onVeil }: { object: ObjectR
   }
   return (
     <div className="flex flex-col gap-0.5">
-      <div className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
+      <div className="group/line flex items-center gap-1 rounded-md px-1 py-1 text-xs hover:bg-background">
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} the fields of ${object.name}`}
+                title={`${fields.length} ${fields.length === 1 ? "field" : "fields"}`} className="-ml-1 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <ChevronRight strokeWidth={3} className={cn("size-3 transition-transform", open && "rotate-90")} />
+        </button>
         <button onClick={() => setViewing(true)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <TypeIcon type={object.type ?? "object"} />
           <span title={[object.name, hover({ desc: object.desc, type: object.type ?? "object" })].filter(Boolean).join(" · ")}
                 className={cn("min-w-0 flex-1 truncate font-mono", veiled ? "text-muted-foreground" : "font-medium")}>{label}</span>
         </button>
-        <span className="flex w-20 shrink-0 justify-end font-mono">
-          <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
-                  className="-mx-1 inline-flex items-center gap-0.5 rounded px-1 whitespace-nowrap text-muted-foreground underline decoration-dotted underline-offset-2 hover:bg-muted hover:text-foreground">
-            {fields.length} fields<ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} />
-          </button>
-        </span>
+        <Value value={value} name={object.name} />
         <Into name={object.name} />
         <Veil name={object.name} veiled={veiled} onClick={onVeil} />
       </div>
@@ -891,11 +911,11 @@ function ObjectLine({ object, label, hidden, veiled, onVeil }: { object: ObjectR
             ? <ObjectLine key={f.name} object={{ ...f, fields: inside(f) }} label={short(f)} hidden={hidden} veiled={!sees(f)} onVeil={() => veil(f)} />
             : (
             <div key={f.name} className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
-              <span className="flex min-w-0 flex-1 items-center gap-2">
+              <button onClick={() => setSeen(f)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                 <TypeIcon type={f.type} />
                 <span title={[f.name, hover(f)].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{short(f)}</span>
-                <Value value={f.value} name={f.name} />
-              </span>
+              </button>
+              <Value value={f.value} name={f.name} />
               <Into name={f.name} />
               <Veil name={f.name} veiled={!sees(f)} onClick={() => veil(f)} />
             </div>
@@ -903,54 +923,59 @@ function ObjectLine({ object, label, hidden, veiled, onVeil }: { object: ObjectR
           {!hidden && !fields.some(sees) && <span className="px-1 py-0.5 text-[11px] text-muted-foreground">All hidden: switch on the hidden ones to see them</span>}
         </div>
       )}
-      {viewing && <Viewing object={object} onClose={() => setViewing(false)} />}
+      {viewing && <Viewing object={object} label={label} value={value} onClose={() => setViewing(false)} />}
+      {seen && (
+        <Seen kind="variable" row={seen as Row} name={short(seen)} full={seen.name} desc={seen.desc} type={seen.type} value={seen.value} settable={false}
+              from={`a field of ${object.name}, kept by the app`} locked="it's kept by the app" onClose={() => setSeen(null)} />
+      )}
     </div>
   )
 }
 
-/** A variable the app keeps, over the page: what it is, and its fields; a record's, each with how
- * it's worked out, to change; else each with its type. */
-function Viewing({ object, onClose }: { object: ObjectRow; onClose: () => void }) {
+/** A variable the app keeps, over the page, as any other: what it is, its value, what writes and
+ * reads it, and its fields; a record's, each with how it's worked out, to change; else each
+ * clicked to see what it is. */
+function Viewing({ object, label, value, onClose }: { object: ObjectRow; label: string; value: unknown; onClose: () => void }) {
+  const [seen, setSeen] = useState<ObjectField | null>(null)
+  const short = (f: VarDetail) => f.name.slice(object.name.length + 1)
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-2xl">
-        <DialogHeader className="pr-8">
-          <DialogTitle className="flex min-w-0 items-center gap-2 font-mono">
-            <TypeIcon type={object.type ?? "object"} className="size-4" /><span className="truncate">{object.name}</span>
-            <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="kept by the app" />
-          </DialogTitle>
-          <DialogDescription className="break-words">{object.desc || "No description"}</DialogDescription>
-        </DialogHeader>
-        <RecordFields record={object.name}>
-          <section className="flex flex-col border-t pt-3">
-            <span className="mb-1.5 text-xs font-medium">Fields</span>
-            {(object.fields ?? []).map((f) => (
-              <div key={f.name} className="grid grid-cols-[minmax(0,11rem)_minmax(0,1fr)] items-center gap-3 border-b py-2 text-xs last:border-b-0">
-                <span className="flex min-w-0 items-center gap-1.5"><TypeIcon type={f.type} /><code className="truncate font-medium">{f.name.slice(object.name.length + 1)}</code></span>
-                <span className="text-muted-foreground">{f.desc || "–"}</span>
-              </div>
-            ))}
-          </section>
-        </RecordFields>
-      </DialogContent>
-    </Dialog>
+    <Seen kind="variable" row={object as Row} name={label} full={object.name} desc={object.desc} type={object.type ?? "object"} value={value} settable={false}
+          from="kept by the app" locked="it's kept by the app" onClose={onClose}>
+      <section className="flex flex-col border-t pt-3">
+        <span className="mb-1.5 text-xs font-medium">Fields</span>
+        {(object.fields ?? []).map((f) => (
+          <div key={f.name} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-3 border-b py-1.5 text-xs last:border-b-0">
+            <button onClick={() => setSeen(f)} className="flex min-w-0 items-center gap-1.5 rounded text-left hover:bg-muted">
+              <TypeIcon type={f.type} /><code className="truncate font-medium underline decoration-dotted underline-offset-2">{short(f)}</code>
+            </button>
+            <span className="text-muted-foreground">{f.desc || "–"}</span>
+          </div>
+        ))}
+      </section>
+      {seen && (
+        <Seen kind="variable" row={seen as Row} name={short(seen)} full={seen.name} desc={seen.desc} type={seen.type} value={seen.value} settable={false}
+              from={`a field of ${object.name}, kept by the app`} locked="it's kept by the app" onClose={() => setSeen(null)} />
+      )}
+    </Seen>
   )
 }
 
-function KeptLine({ kind, spec, where, value, full, type, app, veiled, onVeil, onSave, onDelete }: {
+function KeptLine({ kind, spec, where, full, row, veiled, onVeil, onSave, onDelete }: {
   kind: Kind
   spec: Spec
   where: Where
-  value: unknown
   full: string
-  type?: Type
-  app?: boolean     // the app reads it: it can't be removed, nor retyped
+  row?: Row         // as it runs (none: not built yet)
   veiled?: boolean  // a hidden one, shown on the switch
   onVeil: () => void
   onSave: Save
   onDelete: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const type  = (row as { type?: Type } | undefined)?.type
+  const value = now(kind, row)
+  const app   = (row as { app?: boolean } | undefined)?.app  // the app reads it: it can't be removed, nor retyped
+  const from  = { special: "kept by the app", global: where.program ? "global, made by this automation" : "global", program: "this automation", state: "this state" }[spec.scope]
   return (
     <>
       <div className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
@@ -964,7 +989,10 @@ function KeptLine({ kind, spec, where, value, full, type, app, veiled, onVeil, o
         <Into name={spec.name} />
         <Veil name={full} veiled={veiled} onClick={onVeil} />
       </div>
-      {open && <Defining kind={kind} spec={spec} where={where} full={full} type={type} onSave={onSave} onDelete={app ? undefined : onDelete} onClose={() => setOpen(false)} />}
+      {open && (
+        <Seen kind={kind} row={row} spec={spec} name={spec.name} full={full} desc={spec.desc} type={type} value={value} from={from}
+              kept={app ? "the app reads it" : undefined} onSave={onSave} onDelete={app ? undefined : onDelete} onClose={() => setOpen(false)} />
+      )}
     </>
   )
 }
@@ -981,50 +1009,416 @@ function Into({ name }: { name: string }) {
 }
 
 type Row = Reference["variables"][number] | Reference["signals"][number] | Reference["rules"][number]
+/** Its value now: a rule's, its chance. */
+const now = (kind: Kind, row?: Row) => kind === "rule" ? (row as Reference["rules"][number] | undefined)?.chance : (row as { value?: unknown } | undefined)?.value
 
 /** One of a wider scope's, read here: click it to see what it is, its value, and where it's
  * changed (the app's own: nowhere; a global one another automation made: in that one). */
 function Outer({ kind, row, scope, program, veiled, onVeil }: { kind: Kind; row: Row; scope: Scope; program: string | null; veiled: boolean; onVeil: () => void }) {
   const [open, setOpen] = useState(false)
-  const type  = (row as { type?: Type }).type
-  const value = kind === "rule" ? (row as Reference["rules"][number]).chance : (row as { value: unknown }).value
-  const short = scope === "global" || scope === "special" ? row.name : row.name.split(".").at(-1)!  // as an expression here says it
-  const code  = (row as { from?: string }).from === "code" || scope === "special"
-  const there = scope === "program" ? { program, state: null } : null
-  const from  = code ? "kept by the app" : { special: "", global: "global, made by another automation", program: "this automation", state: "this state" }[scope]
+  const type   = (row as { type?: Type }).type
+  const value  = now(kind, row)
+  const short  = scope === "global" || scope === "special" ? row.name : row.name.split(".").at(-1)!  // as an expression here says it
+  const code   = (row as { from?: string }).from === "code" || scope === "special"
+  const there  = scope === "program" && !code ? { program, state: null } : null
+  const from   = code ? "kept by the app" : { special: "", global: "global, made by another automation", program: "this automation", state: "this state" }[scope]
+  const locked = code ? "it's kept by the app" : { special: "", global: "another automation made it", program: "", state: "this state's question sets it" }[scope]
   return (
     <div className="group/line flex items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-background">
       <button onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
         {kind !== "rule" && <TypeIcon type={type} />}
-        <span title={[row.name, hover({ desc: row.desc, type })].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{row.name}</span>
+        <span title={[row.name, hover({ desc: row.desc, type })].filter(Boolean).join(" · ")} className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{short}</span>
       </button>
       <Value value={value} rule={kind === "rule"} name={row.name} />
       <Into name={short} />
       <Veil name={row.name} veiled={veiled} onClick={onVeil} />
       {open && (
-        <Dialog open onOpenChange={(open) => !open && setOpen(false)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader className="pr-8">
-              <DialogTitle className="flex min-w-0 items-center gap-2 font-mono">
-                {kind !== "rule" && <TypeIcon type={type} className="size-4" />}<span className="truncate">{row.name}</span>
-              </DialogTitle>
-              <DialogDescription className="break-words">{row.desc || "No description"}</DialogDescription>
-            </DialogHeader>
-            <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-2 border-t pt-3 text-xs">
-              {kind !== "rule" && <><dt className="text-muted-foreground">Type</dt><dd>{type && type !== "any" ? said(type) : "any"}</dd></>}
-              <dt className="text-muted-foreground">{kind === "rule" ? "Chance now" : "Now"}</dt>
-              <dd className="flex *:w-auto *:justify-start"><Value value={value} rule={kind === "rule"} name={row.name} /></dd>
-              <dt className="text-muted-foreground">From</dt><dd className="first-letter:uppercase">{from}</dd>
-            </dl>
-            {there && (
-              <div className="flex justify-end">
-                <Button size="sm" variant="outline" onClick={() => (setOpen(false), window.dispatchEvent(new CustomEvent(GO, { detail: there })))}>
-                  Edit it in the automation <ArrowRight data-icon="inline-end" />
-                </Button>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        <Seen kind={kind} row={row} name={short} full={row.name} desc={row.desc} type={type} value={value} from={from} settable={!code}
+              locked={there ? undefined : locked} kept={there ? "delete it in the automation" : undefined}
+              onEdit={there ? () => (setOpen(false), goTo(there)) : undefined} onClose={() => setOpen(false)} />
+      )}
+    </div>
+  )
+}
+
+/** A way into a state with one of its actions or ways out lit, as a chip of a dialog asks. */
+type Flash = { program: string; state: string; kind: "action" | "branch"; at: number }
+let flashing: Flash | null = null  // lit as its state opens, then forgotten
+const FLASH = "proki:flash"
+
+/** A variable, a signal or a rule, over the page: what it is, its type, its value now, how it's
+ * worked out, where it's from, its fields, what writes it and what reads it. Yours
+ * (`spec`, `onSave`): each part is changed where it is, underlined as you point at it. Edit and
+ * Delete sit by its close button; without `onEdit`, `onDelete`, each is greyed and says why on
+ * hover (`locked`: both, `kept`: Delete). A variable's fields: a record's, with how each is worked
+ * out, else `children`, else as its type says. `full`: its name as the app knows it; Escape, while a
+ * part is being changed, puts that part back and leaves the dialog open. */
+function Seen({ kind, row, spec, name, full, desc, type, value, from, settable: open = true, locked, kept, history, onHistory, onSave, onEdit, onDelete, onClose, onLeave, children }: {
+  kind: Kind | "input"
+  row?: Row         // as it runs (none: not built yet)
+  spec?: Spec       // yours, to change
+  name: string      // as an expression here says it
+  full: string
+  desc?: string
+  type?: Type
+  value: unknown
+  from: string      // where it's made
+  settable?: boolean  // its value set by you, if nothing else says no (the app's own: no)
+  locked?: string
+  kept?: string
+  history?: string  // an input's: how much of it is kept
+  onHistory?: (text: string) => Promise<string | null>
+  onSave?: Save
+  onEdit?: () => void
+  onDelete?: () => void
+  onClose: () => void
+  onLeave?: () => void  // going to a place of it: every dialog under it closing too (none: only this one)
+  children?: ReactNode
+}) {
+  const [links, setLinks] = useState<Links | null>(null)
+  useEffect(() => {
+    window.proki.tool("links", { name: full }).then((answer) => setLinks(answer.error ? null : answer))
+  }, [full])
+  const save    = onSave && ((changes: Record<string, unknown>) => onSave(changes))
+  const rule    = kind === "rule" ? row as Reference["rules"][number] | undefined : undefined
+  const ruled   = kind === "rule" ? spec as RuleSpec | undefined : undefined
+  const signal  = kind === "signal" ? spec as SignalSpec | undefined : undefined
+  const expr    = kind === "signal" ? (row as { expr?: string } | undefined)?.expr : undefined
+  const persist = kind === "variable" ? (row as { persist?: boolean } | undefined)?.persist : undefined
+  const scope   = (row as { scope?: Scope } | undefined)?.scope ?? spec?.scope
+  const lasts   = persist ? "across restarts" : { special: "", global: "until Proki restarts", program: "until the automation starts over", state: "until it leaves this state" }[scope ?? "global"]
+  const user    = open && kind === "variable" && !!links?.writes.some((w) => w.from === "user" && !w.program)
+  const set = async (text: string) => {
+    const answer = await window.proki.tool("set_value", { name: full, value: text.trim() === "" ? null : said(type) === "string" ? text : parsed(text) })
+    if (!answer.error) window.dispatchEvent(new Event(CHANGED))
+    return answer.error ?? null
+  }
+  const Term = ({ children }: { children: ReactNode }) => <dt className="text-muted-foreground">{children}</dt>
+  const worked: Worked | undefined = kind === "signal" ? {
+    said:   signal?.expr ?? expr ?? "",
+    detail: signal && save ? <Editable label="Expression" value={signal.expr} code list={NAMES} onSave={(t) => save({ expr: t })} className="rounded-md bg-muted px-2 py-1.5 text-xs" />
+                           : <Expr className="block rounded-md bg-muted px-2 py-1.5 break-words">{expr ?? ""}</Expr>,
+  } : rule ? {
+    said:   `${ruled?.lhs ?? rule.lhs} ${SYMBOL[ruled?.cmp ?? rule.cmp]} ${ruled?.rhs ?? rule.rhs}`,
+    detail: (
+      <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-xs">
+        <Term>Fires when</Term>
+        <dd className="flex flex-wrap items-baseline gap-1.5 break-words">
+          {ruled && save ? (
+            <>
+              <Editable label="Left side" value={String(ruled.lhs)} code list={NAMES} onSave={(t) => save({ lhs: parseSide(t) })} />
+              <select aria-label="Compared by" value={ruled.cmp} onChange={(e) => save({ cmp: e.target.value })}
+                      className="cursor-pointer appearance-none bg-transparent font-mono decoration-dotted underline-offset-4 outline-none hover:underline">
+                {Object.entries(SYMBOL).map(([k, s]) => <option key={k} value={k}>{s}</option>)}
+              </select>
+              <Editable label="Right side" value={String(ruled.rhs)} code list={NAMES} onSave={(t) => save({ rhs: parseSide(t) })} />
+            </>
+          ) : <Expr>{`${rule.lhs} ${SYMBOL[rule.cmp]} ${rule.rhs}`}</Expr>}
+        </dd>
+        <Term>Softness</Term>
+        <dd><Editable label="Softness" value={String(ruled?.softness ?? rule.softness)} onSave={ruled && save && ((t) => save({ softness: Number(t) || 0 }))} /> <span className="text-muted-foreground">0 is hard</span></dd>
+        <Term>Level</Term>
+        <dd><Editable label="Level" value={String(ruled?.level ?? rule.level)} onSave={ruled && save && ((t) => save({ level: Math.round(Number(t)) || 1 }))} /> <span className="text-muted-foreground">higher votes first</span></dd>
+      </dl>
+    ),
+  } : undefined
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg sm:has-[[data-record]]:max-w-2xl"
+                     onEscapeKeyDown={typing}>
+        <DialogHeader className="pr-24">
+          <DialogTitle className="flex min-w-0 items-center gap-2 font-mono">
+            {kind !== "rule" && <TypeIcon type={type} className="size-4" />}
+            <Editable label="Name" value={name} code onSave={save && ((t) => save({ name: t.trim() }))} className="-mb-1 truncate pb-1" />
+          </DialogTitle>
+          <DialogDescription asChild>
+            <div><Editable label="Description" value={desc ?? ""} long placeholder="No description" onSave={save && ((t) => save({ desc: t }))} /></div>
+          </DialogDescription>
+        </DialogHeader>
+        <Corner what={kind} name={name} locked={locked} kept={kept} inPlace={!!save} onEdit={onEdit} onDelete={onDelete && (() => (onDelete(), onClose()))} />
+        <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 border-t pt-3 text-xs">
+          {kind !== "rule" && <><Term>Type</Term><dd><TypeChange type={type} own={(spec as { type?: Type } | undefined)?.type} onSave={save && !kept ? (t) => save({ type: t }) : undefined} /></dd></>}
+          <Term>{kind === "rule" ? "Chance now" : "Now"}</Term>
+          <dd className="flex *:w-auto *:justify-start"><Value value={value} rule={kind === "rule"} name={name} /></dd>
+          {kind === "variable" && spec && (
+            <><Term>Starts as</Term><dd><Editable label="Starts as" value={valueText((spec as VariableSpec).value)} code list={NAMES} placeholder="unknown" onSave={save && ((t) => save({ value: parseValue(t) }))} /></dd></>
+          )}
+          {kind === "signal" && (
+            <>
+              <Term>History</Term>
+              <dd>
+                <Editable label="History" value={String(signal?.backfill ?? (row as { backfill?: number | null } | undefined)?.backfill ?? "")} placeholder="not kept"
+                          onSave={signal && save && ((t) => save({ backfill: parseSpan(t), persist: parseSpan(t) !== null }))} />
+                <span className="text-muted-foreground"> {signal ? "(minutes, or 6s, 1h, 7d)" : "minutes"}</span>
+              </dd>
+            </>
+          )}
+          {kind === "input" && (
+            <>
+              <Term>History</Term>
+              <dd><Editable label="History" value={history ?? ""} placeholder="not kept" onSave={onHistory} /> <span className="text-muted-foreground">(minutes, or 12h, 1d)</span></dd>
+            </>
+          )}
+          {kind === "variable" && lasts && <><Term>Kept</Term><dd>{lasts}</dd></>}
+          <Term>From</Term><dd className="first-letter:uppercase">{from}</dd>
+        </dl>
+        {kind === "variable" ? <RecordFields record={full}>{children ?? <Shape type={type} />}</RecordFields> : <Shape type={type} />}
+        {links && <Linked links={links} worked={worked} measured={kind === "input"} value={value} type={type} onSet={user ? set : undefined} onLeave={onLeave ?? onClose} />}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** How it's worked out, as Linked's expr row says it (`said`) and opens it (`detail`). */
+type Worked = { said: string; detail: ReactNode }
+
+/** What writes it and what reads it, each a table: a chip a row (expr, auto, user; the
+ * automations, rules, signals, variables, the app), what it is beside it; a row clicked opens it
+ * over the dialog. `worked`: its expr row; `onSet`: its user row (none: you can't set it). The
+ * automations' rows go where they are, lit, from any page; `onLeave`: the dialog closing. */
+function Linked({ links, worked, measured, value, type, onSet, onLeave }: {
+  links: Links
+  worked?: Worked
+  measured?: boolean  // an input's: the app measures it (else, it keeps it)
+  value: unknown
+  type?: Type
+  onSet?: (text: string) => Promise<string | null>
+  onLeave: () => void
+}) {
+  const [open, setOpen] = useState<string | null>(null)
+  const [seen, setSeen] = useState<{ kind: Kind; name: string } | null>(null)
+  const auto  = links.writes.filter((w) => w.program)
+  const user  = onSet && links.writes.some((w) => w.from === "user" && !w.program)
+  const flows = links.reads.filter((r) => r.program)
+  const named = (by: string) => links.reads.filter((r) => r.by === by).map((r) => r.name ?? "")
+  const shown = worked ?? links.writes.filter((w) => w.from === "expr").map((w): Worked => ({ said: w.text ?? "", detail: <Expr className="block rounded-md bg-muted px-2 py-1.5 break-words">{w.text ?? ""}</Expr> }))[0]
+  const visit = (p: Place) => {
+    flashing = { program: p.program!, state: p.state!, kind: p.by === "condition" ? "branch" : "action", at: p.at ?? 0 }
+    setOpen(null)
+    onLeave()
+    goTo({ program: p.program!, state: p.state! })
+    window.dispatchEvent(new Event(FLASH))
+  }
+  const where   = (places: Place[]) => [...new Set(places.map((p) => p.program))].join(", ")
+  const written = [
+    shown && { id: "expr", chip: <Chip name="expr" />, said: <Expr className="truncate">{shown.said}</Expr> },
+    auto.length > 0 && { id: "auto", chip: <Chip name="auto" />, said: `${counted(auto.length, "action")} in ${where(auto)}` },
+    links.writes.some((w) => w.from === "proki") && { id: "proki", chip: <Pill by="proki" />, said: measured ? "Measured by the app, each cycle" : "Kept by the app, as it works" },
+    user && { id: "user", chip: <Chip name="user" />, said: <>Set by you · now <span className="font-mono text-foreground">{brief(value)}</span></> },
+  ].filter(Boolean) as Entry[]
+  const read = [
+    flows.length > 0 && { id: "auto", chip: <Pill by="auto" />,
+                          said: `${[counted(flows.filter((r) => r.by === "condition").length, "transition"), counted(flows.filter((r) => r.by === "action").length, "action")].filter(Boolean).join(", ")} in ${where(flows)}` },
+    ...(["rule", "signal", "variable"] as const).map((by) => named(by).length > 0 && { id: by, chip: <Pill by={by} />, said: <span className="font-mono">{named(by).join(", ")}</span> }),
+    links.reads.some((r) => r.by === "app") && { id: "proki", chip: <Pill by="proki" />, said: "The app reads it: it can't be removed, nor retyped" },
+  ].filter(Boolean) as Entry[]
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Table title="Written by" rows={written} empty="Nothing: it's worked out by the app." onOpen={setOpen} />
+      <Table title="Read by" rows={read} empty="Nothing reads it." onOpen={(id) => {
+        const names = id === "rule" || id === "signal" || id === "variable" ? named(id) : []
+        if (names.length === 1) setSeen({ kind: id as Kind, name: names[0] })
+        else setOpen(`read:${id}`)
+      }} />
+      {open === "expr" && shown && <Detail title={<><Chip name="expr" /> Worked out</>} about="From its expression, each cycle." onClose={() => setOpen(null)}>{shown.detail}</Detail>}
+      {(open === "auto" || open === "read:auto") && (
+        <Detail title={open === "auto" ? <><Chip name="auto" /> Written by the automations</> : <><Pill by="auto" /> Read by the automations</>}
+                about="Click one to go there." wide onClose={() => setOpen(null)}>
+          <Places places={open === "auto" ? auto : flows} onVisit={visit} />
+        </Detail>
+      )}
+      {open === "proki" && (
+        <Detail title={<><Pill by="proki" /> Written by</>} onClose={() => setOpen(null)}
+                about={measured ? "The app measures it each cycle, from what your computer recorded, or the clock. Nothing else can write it."
+                                : "The app keeps it up as it works: from your records, your sessions, what you do in it."} />
+      )}
+      {open === "user" && onSet && <Setting value={value} type={type} onSet={onSet} onClose={() => setOpen(null)} />}
+      {(open === "read:rule" || open === "read:signal" || open === "read:variable") && (
+        <Detail title={<><Pill by={open.slice(5) as Reader} /> Read by</>} about={open === "read:variable" ? "Each starts from its value." : `Each ${open.slice(5)} is worked out from it.`} onClose={() => setOpen(null)}>
+          <ul className="flex flex-col rounded-md border text-xs">
+            {named(open.slice(5)).map((n) => (
+              <li key={n} className="border-b last:border-b-0">
+                <button type="button" onClick={() => setSeen({ kind: open.slice(5) as Kind, name: n })}
+                        className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left font-mono hover:bg-muted/60">
+                  {n}<ChevronRight className="size-3.5 text-muted-foreground" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Detail>
+      )}
+      {open === "read:proki" && (
+        <Detail title={<><Pill by="proki" /> Read by</>} onClose={() => setOpen(null)}
+                about="The app reads it to show you your day, so it can't be removed, and its type stays as the app needs it." />
+      )}
+      {seen && <SeenNamed {...seen} onClose={() => setSeen(null)} onLeave={() => (setSeen(null), setOpen(null), onLeave())} />}
+    </TooltipProvider>
+  )
+}
+
+/** A signal, a variable or a rule found by its full name, over the dialog, as it runs: read
+ * here; changed in its own scope. `onLeave`: going to a place of it, every dialog closing. */
+function SeenNamed({ kind, name, onClose, onLeave }: { kind: Kind; name: string; onClose: () => void; onLeave: () => void }) {
+  const [row, setRow] = useState<Row | null | undefined>(undefined)
+  useEffect(() => {
+    window.proki.tool("reference").then((r) => setRow(r.error ? null : ({ variable: r.variables, signal: r.signals, rule: r.rules }[kind] as Row[]).find((x) => x.name === name) ?? null))
+  }, [kind, name])
+  if (row === undefined) return null
+  if (row === null) return <Detail title={<code>{name}</code>} about="It isn't running now." onClose={onClose} />
+  const scope = (row as { scope: Scope }).scope
+  const code  = (row as { from?: string }).from === "code" || scope === "special"
+  const [program, state] = name.split(".")
+  const from  = code ? "kept by the app" : { special: "", global: "global", program: `the automation ${program}`, state: `the automation ${program}, its state ${humane(state ?? "")}` }[scope]
+  return (
+    <Seen kind={kind} row={row} name={name} full={name} desc={row.desc} type={(row as { type?: Type }).type} from={from} settable={false}
+          value={now(kind, row)}
+          locked={code ? "it's kept by the app" : "change it in its own scope"} onClose={onClose} onLeave={onLeave} />
+  )
+}
+
+type Entry = { id: string; chip: ReactNode; said: ReactNode }
+const counted = (n: number, what: string) => (n ? `${n} ${what}${n > 1 ? "s" : ""}` : "")
+
+/** A table of Linked's: its chip, then what it is, a row each; a row clicked opens it. */
+function Table({ title, rows, empty, onOpen }: { title: string; rows: Entry[]; empty: string; onOpen: (id: string) => void }) {
+  const ROW = "grid grid-cols-[7rem_minmax(0,1fr)_auto] items-center gap-3 px-2"
+  return (
+    <section className="flex flex-col gap-1.5 border-t pt-3 text-xs">
+      <span className="font-medium">{title}</span>
+      {rows.length === 0 ? <span className="text-muted-foreground">{empty}</span> : (
+        <div className="rounded-md border">
+          {rows.map((r) => (
+            <button key={r.id} type="button" onClick={() => onOpen(r.id)} className={cn(ROW, "w-full border-b py-1.5 text-left last:border-b-0 hover:bg-muted/60")}>
+              <span className="flex">{r.chip}</span>
+              <span className="min-w-0 truncate text-muted-foreground">{r.said}</span>
+              <ChevronRight className="size-3.5 text-muted-foreground" />
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+type Reader = keyof typeof READERS
+const READERS = {  // what reads a name: its icon, its tint, what it means
+  auto:     [Workflow,  AUTO,                                                   "Read by an automation: a transition's condition, or an action"],
+  rule:     [Scale,     "bg-rose-500/15 text-rose-700 dark:text-rose-300",       "Read by a rule, to work out its chance"],
+  signal:   [ChartLine, "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",       "Read by a signal, to work out its value"],
+  variable: [Variable,  "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300", "Read by a variable, to start from"],
+  proki:    [PawPrint,  "bg-violet-500/15 text-violet-700 dark:text-violet-300", "Read by the app itself"],
+} satisfies Record<string, [LucideIcon, string, string]>
+
+/** What reads it, as a chip like a source's: its icon and its kind. */
+function Pill({ by }: { by: Reader }) {
+  const [icon, tint, means] = READERS[by]
+  return <span title={means} className={cn(TAG, tint)}><Mark icon={icon} />{by}</span>
+}
+
+/** A row of Linked's, opened over the dialog. */
+function Detail({ title, about, wide, onClose, children }: { title: ReactNode; about?: string; wide?: boolean; onClose: () => void; children?: ReactNode }) {
+  return (
+    <Dialog open onOpenChange={(to) => !to && onClose()}>
+      <DialogContent className={wide ? "sm:max-w-xl" : "sm:max-w-md"}
+                     onEscapeKeyDown={typing}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm">{title}</DialogTitle>
+          {about && <DialogDescription>{about}</DialogDescription>}
+        </DialogHeader>
+        {children}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Where in the automations: a row each, its automation, its state, and its action (or
+ * transition), with its icon; a row clicked goes there. */
+function Places({ places, onVisit }: { places: Place[]; onVisit: (p: Place) => void }) {
+  const ROW = "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-3 px-2"
+  return (
+    <div className="rounded-md border text-xs">
+      <div className={cn(ROW, "border-b bg-muted/40 py-1 text-[11px] text-muted-foreground")}><span>Automation</span><span>State</span><span>Where</span></div>
+      {places.map((p, i) => {
+        const [name, Icon, tint] = p.by === "condition" ? [`Transition ${(p.at ?? 0) + 1}`, Split, "bg-muted text-muted-foreground"] : ACTIONS[p.kind ?? ""] ?? [p.kind ?? "action", Code, "bg-muted text-muted-foreground"]
+        return (
+          <button key={i} type="button" onClick={() => onVisit(p)}
+                  className={cn(ROW, "w-full border-b py-1.5 text-left last:border-b-0 hover:bg-muted/60")}>
+            <span className="truncate font-medium">{p.program}</span>
+            <span className="truncate">{humane(p.state ?? "")}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Tinted icon={Icon} tint={tint} />
+              <span className="shrink-0">{name}</span>
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Its value, set by you, over the dialog: as JSON (text as it is, for a string). */
+function Setting({ value, type, onSet, onClose }: { value: unknown; type?: Type; onSet: (text: string) => Promise<string | null>; onClose: () => void }) {
+  const [text, setText]   = useState(value == null ? "" : typeof value === "string" ? value : JSON.stringify(value, null, 2))
+  const [error, setError] = useState("")
+  const keep = async () => {
+    const mistake = await onSet(text)
+    setError(mistake ?? "")
+    if (!mistake) onClose()
+  }
+  return (
+    <Detail title={<><Chip name="user" /> Set it yourself</>} onClose={onClose}
+            about={`Kept from now on, until an automation writes it: the last write wins.${said(type) !== "string" ? " Typed as JSON; empty is unknown." : ""}`}>
+      <Textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} spellCheck={false}
+                onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && keep()}
+                className="max-h-72 min-h-20 font-mono text-xs" />
+      {error && <p className="text-xs break-words text-destructive">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button size="sm" onClick={keep}>Set</Button>
+      </div>
+    </Detail>
+  )
+}
+
+/** The fields of a record, or of each item of a list of records, as its type says: each its name,
+ * its type and what it is (nothing for any other type). */
+function Shape({ type }: { type?: Type }) {
+  const schema = typeof type === "object" ? type as { type?: string; properties?: Record<string, Record<string, unknown>>; items?: { type?: string; properties?: Record<string, Record<string, unknown>> } } : undefined
+  const props  = schema?.type === "object" ? schema.properties : schema?.type === "array" && schema.items?.type === "object" ? schema.items.properties : undefined
+  if (!props) return null
+  return (
+    <section className="flex flex-col border-t pt-3">
+      <span className="mb-1.5 text-xs font-medium">{schema?.type === "array" ? "Each item's fields" : "Fields"}</span>
+      {Object.entries(props).map(([key, inner]) => (
+        <div key={key} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-3 border-b py-1.5 text-xs last:border-b-0">
+          <span title={said(inner as Type)} className="flex min-w-0 items-center gap-1.5"><TypeIcon type={inner as Type} /><code className="truncate font-medium">{key}</code></span>
+          <span className="text-muted-foreground">{String(inner.description ?? "") || "–"}</span>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+/** A dialog's Edit and Delete, by its close button; one that can't be done is greyed, and says why
+ * on hover (`locked`: neither can, `kept`: it can't be deleted). `inPlace`: changed where it is,
+ * no Edit. */
+function Corner({ what, name, locked, kept, inPlace, onEdit, onDelete }: {
+  what: string; name: string; locked?: string; kept?: string; inPlace?: boolean; onEdit?: () => void; onDelete?: () => void
+}) {
+  const why = locked ? `This ${what} is read-only: ${locked}` : `This ${what} can't be deleted: ${kept}`
+  return (
+    <div className="absolute top-2 right-10 flex">
+      {!inPlace && (
+        <span title={onEdit ? "Edit" : why}>
+          <Button size="icon-sm" variant="ghost" aria-label={`Edit the ${what} ${name}`} disabled={!onEdit} onClick={onEdit}><Pencil /></Button>
+        </span>
+      )}
+      {onDelete ? (
+        <Confirm title={`Delete the ${what} “${name}”?`} description="This can't be undone." action={`Delete ${what}`} onConfirm={onDelete}>
+          <Button size="icon-sm" variant="ghost" aria-label={`Delete the ${what} ${name}`} title="Delete"><Trash2 /></Button>
+        </Confirm>
+      ) : (
+        <span title={why}><Button size="icon-sm" variant="ghost" aria-label={`Delete the ${what} ${name}`} disabled><Trash2 /></Button></span>
       )}
     </div>
   )
@@ -1040,25 +1434,15 @@ function Veil({ name, veiled, onClick }: { name: string; veiled?: boolean; onCli
   )
 }
 
-/** A variable's, a signal's or a rule's definition (a new one's, without `spec`), over the page:
- * its name the title, its description under it, each edited in place; then the rest. */
-function Defining({ kind, spec, where, full, type: worked, onSave, onDelete, onClose }: {
-  kind: Kind
-  spec?: Spec
-  where: Where
-  full?: string     // its full name (none: a new one)
-  type?: Type       // its type as it's worked out (its own: as it says)
-  onSave: Save
-  onDelete?: () => void
-  onClose: () => void
-}) {
-  const [name, setName] = useState(spec?.name ?? "")
-  const [desc, setDesc] = useState(spec?.desc ?? "")
-  const [type, setType] = useState<Type>((spec as { type?: Type } | undefined)?.type ?? "any")
+/** A new variable, signal or rule, over the page: its name the title, its description under it,
+ * each typed in place; then the rest. Yours once made: changed where it is, in its own dialog. */
+function Defining({ kind, where, onSave, onClose }: { kind: Kind; where: Where; onSave: Save; onClose: () => void }) {
+  const [name, setName] = useState("")
+  const [desc, setDesc] = useState("")
+  const [type, setType] = useState<Type>("any")
   const named = { name, desc, type }
-  const was   = useRef(named)  // as it opened: Escape or a click outside closes it only unchanged
   const box   = useRef<HTMLDivElement>(null)
-  const kept  = (e: Event) => (box.current?.querySelector("form[data-dirty]") || name !== was.current.name || desc !== was.current.desc || type !== was.current.type) && e.preventDefault()
+  const kept  = (e: Event) => (box.current?.querySelector("form[data-dirty]") || name || desc || type !== "any") && e.preventDefault()  // Escape or a click outside closes it only untouched
   const save: Save = async (data) => { const mistake = await onSave(data); if (!mistake) onClose(); return mistake }
   const props = { where, named, onSave: save, onCancel: onClose }
   const deep  = typeof type === "object" && (type.type === "object" || type.type === "array")  // its fields want the room
@@ -1069,53 +1453,17 @@ function Defining({ kind, spec, where, full, type: worked, onSave, onDelete, onC
         <DialogHeader className="pr-14">
           <div className="flex items-start gap-3">
             <DialogTitle className="flex min-w-0 flex-1 items-center gap-2 font-mono">
-              {kind !== "rule" && <TypeIcon type={type === "any" ? worked : type} className="size-4" />}
-              <InPlace label="Name" value={name} onChange={setName} code placeholder={`new ${kind}`} editing={!spec} />
+              {kind !== "rule" && <TypeIcon type={type} className="size-4" />}
+              <Editable label="Name" value={name} onSave={async (t) => (setName(t), null)} code placeholder={`new ${kind}`} editing className="truncate" />
             </DialogTitle>
             {kind !== "rule" && <TypeField label="" value={type} alone onChange={(t) => setType(t ?? "any")} />}
           </div>
-          <DialogDescription asChild><div><InPlace label="Description" value={desc} onChange={setDesc} placeholder="No description" /></div></DialogDescription>
+          <DialogDescription asChild><div><Editable label="Description" value={desc} onSave={async (t) => (setDesc(t), null)} long placeholder="No description" /></div></DialogDescription>
         </DialogHeader>
-        {onDelete && (
-          <Confirm title={`Delete the ${kind} “${spec?.name}”?`} description="This can't be undone." action={`Delete ${kind}`} onConfirm={() => (onDelete(), onClose())}>
-            <Button size="icon-xs" variant="ghost" aria-label={`Delete the ${kind} ${spec?.name}`} title="Delete" className="absolute top-3.5 right-11"><Trash2 /></Button>
-          </Confirm>
-        )}
         {kind !== "rule" && <TypeInside value={type} onChange={setType} />}
-        {kind === "variable" && full && <RecordFields record={full} />}
-        {kind === "variable" ? <VariableForm spec={spec as VariableSpec | undefined} {...props} />
-          : kind === "signal" ? <SignalForm spec={spec as SignalSpec | undefined} {...props} />
-          : <RuleForm spec={spec as RuleSpec | undefined} {...props} />}
+        {kind === "variable" ? <VariableForm {...props} /> : kind === "signal" ? <SignalForm {...props} /> : <RuleForm {...props} />}
       </DialogContent>
     </Dialog>
-  )
-}
-
-/** Text that's read as it is, and edited where it is: a pencil on hover, then a field. */
-function InPlace({ label, value, onChange, code, placeholder, editing: start = false }: {
-  label: string
-  value: string
-  onChange: (value: string) => void
-  code?: boolean
-  placeholder: string
-  editing?: boolean
-}) {
-  const [editing, setEditing] = useState(start)
-  const done = (e: React.KeyboardEvent) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), setEditing(false))
-  if (editing && code) {
-    return <Input aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={placeholder} onBlur={() => setEditing(false)}
-                  onKeyDown={done} autoCapitalize="off" autoCorrect="off" spellCheck={false} className="h-8 font-mono" />
-  }
-  if (editing) {
-    return <Textarea aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} autoFocus placeholder={placeholder} onBlur={() => setEditing(false)}
-                     onKeyDown={done} className="field-sizing-content min-h-0 resize-none text-sm" />
-  }
-  return (
-    <button type="button" onClick={() => setEditing(true)} aria-label={`${label}: ${value || placeholder}, edit`}
-            className="group/edit inline-flex max-w-full cursor-text items-center gap-1.5 rounded-sm text-left">
-      <span className={cn(code ? "truncate" : "min-w-0 break-words", !value && "text-muted-foreground italic")}>{value || placeholder}</span>
-      <Pencil aria-hidden className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100" />
-    </button>
   )
 }
 
@@ -1153,54 +1501,16 @@ function InputLine({ name, desc, type, value, spec, onBackfill }: {
       <button onClick={() => setOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
         <TypeIcon type={type} />
         <span title={[name, hover({ desc, type })].filter(Boolean).join(" · ")}
-              className={cn("min-w-0 flex-1 truncate font-mono", spec ? "font-medium" : "text-muted-foreground")}>{name}</span>
+              className={cn("min-w-0 flex-1 truncate font-mono", !spec && "text-muted-foreground")}>{name}</span>
       </button>
       <Value value={value} name={name} />
       {spec && <Into name={name} />}
-      {open && <Measured name={name} desc={desc} type={type} value={value} spec={spec} onBackfill={onBackfill} onClose={() => setOpen(false)} />}
+      {open && (
+        <Seen kind="input" name={name} full={name} desc={desc} type={type} value={value} from="an input: measured by the app" settable={false}
+              locked="the app measures it" history={spec?.backfill == null ? "" : String(spec.backfill)}
+              onHistory={(t) => onBackfill(parseSpan(t))} onClose={() => setOpen(false)} />
+      )}
     </div>
-  )
-}
-
-/** An input, over the page: what it is, its value now, whether it's read, and how much of its
- * history is kept, to change. Escape or a click outside closes it only unchanged. */
-function Measured({ name, desc, type, value, spec, onBackfill, onClose }: Parameters<typeof InputLine>[0] & { onClose: () => void }) {
-  const was = spec?.backfill == null ? "" : String(spec.backfill)
-  const [backfill, setBackfill] = useState(was)
-  const [error, setError] = useState("")
-  const kept = (e: Event) => backfill !== was && e.preventDefault()
-  const save = async () => {
-    const t    = backfill.trim()
-    const next = t === "" ? null : /^\d+(\.\d+)?$/.test(t) ? Number(t) : t
-    const mistake = next === (spec?.backfill ?? null) ? null : await onBackfill(next)
-    if (mistake) return setError(mistake)
-    onClose()
-  }
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md" onEscapeKeyDown={kept} onInteractOutside={kept}>
-        <DialogHeader className="pr-8">
-          <DialogTitle className="flex min-w-0 items-center gap-2 font-mono"><TypeIcon type={type} className="size-4" /><span className="truncate">{name}</span></DialogTitle>
-          <DialogDescription className="break-words">{desc || "No description"}</DialogDescription>
-        </DialogHeader>
-        <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-2 border-t pt-3 text-xs">
-          <dt className="text-muted-foreground">Type</dt><dd>{type && type !== "any" ? said(type) : "any"}</dd>
-          <dt className="text-muted-foreground">Now</dt><dd className="flex *:w-auto *:justify-start"><Value value={value} name={name} /></dd>
-          <dt className="text-muted-foreground">Read</dt><dd>{spec ? "by the automations, by its name" : "by no automation yet"}</dd>
-        </dl>
-        <form className="flex flex-col gap-3 border-t pt-3" onSubmit={(e) => { e.preventDefault(); save() }}>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium">History kept<span className="ml-1.5 font-normal text-muted-foreground">for what reads its past: 1d, 12h, or minutes</span></span>
-            <Input value={backfill} onChange={(e) => setBackfill(e.target.value)} placeholder="none" className="h-8 w-40 text-sm" />
-          </label>
-          {error && <p className="text-xs break-words text-destructive">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit" size="sm">Save</Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }
 
@@ -1263,6 +1573,7 @@ function brief(value: unknown): string {
     return unit ? `${Math.trunc(value / (size as number))}${unit}` : shown(value)
   }
   if (typeof value === "string" && value.length > 10) return `"${value.slice(0, 8)}…"`
+  if (Array.isArray(value)) return "[]"
   return shown(value)
 }
 
@@ -1288,13 +1599,19 @@ function Block({ title, add, children }: { title: string; add?: () => void; chil
 }
 
 /** A line of a list, carried by its grip: what it says (click it to edit), then its pencil and its
- * bin; `named`, what it is, as its buttons say it; `refused`: shaken, as a drop that wasn't kept. */
-function Line({ id, named, refused, children, onEdit, onDelete }: { id: number; named: string; refused?: boolean; children: ReactNode; onEdit: () => void; onDelete: () => void }) {
+ * bin; `named`, what it is, as its buttons say it; `refused`: shaken, as a drop that wasn't kept;
+ * `lit`: flashed, as a dialog's chip comes to it. */
+function Line({ id, named, refused, lit, children, onEdit, onDelete }: {
+  id: number; named: string; refused?: boolean; lit?: boolean; children: ReactNode; onEdit: () => void; onDelete: () => void
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: id + 1 })  // ids from 1: 0 isn't one
+  const box = useRef<HTMLDivElement | null>(null)
+  useEffect(() => void (lit && box.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })), [lit])
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }}
+    <div ref={(el) => void (setNodeRef(el), box.current = el)} style={{ transform: CSS.Translate.toString(transform), transition }}
          className={cn("group flex items-center gap-2 rounded-lg border bg-card py-1.5 pr-3 pl-1 text-xs hover:bg-muted/50",
-                       isDragging && "relative z-10 shadow-lg ring-1 ring-foreground/10", refused && "animate-shake ring-2 ring-destructive/50")}>
+                       isDragging && "relative z-10 shadow-lg ring-1 ring-foreground/10", refused && "animate-shake ring-2 ring-destructive/50",
+                       lit && "animate-[flash_2.4s_ease-out] ring-2 ring-brand/60")}>
       <button {...attributes} {...listeners} aria-label={`Move ${named}`} className="cursor-grab touch-none text-muted-foreground hover:text-foreground">
         <GripVertical className="size-3.5" />
       </button>

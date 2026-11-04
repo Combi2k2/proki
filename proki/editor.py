@@ -4,6 +4,7 @@
     reference(engine)               what a program can use, and what runs now, with its values
     detail(engine, name)            one program, state by state, and what it depends on
     unused(engine)                  what no program's way out depends on, nor the app, nor a metric
+    links(engine, name)             what writes a signal or a variable, and what reads it
     evaluate(expr)                  an expression's value now, and its type
     set_value(name, value)          a variable's value, set now
 
@@ -227,6 +228,74 @@ def unused(engine: Engine) -> list[tuple[str, str, dict]]:
             *(("remove", "variable", ident(v)) for v in specs.variables if full(v) not in named),
             *(("remove", "signal", ident(s)) for s in specs.signals if full(s) not in named),
             *(("remove", "rule", ident(r)) for r in specs.rules if full(r) not in voted)]
+
+
+def links(engine: Engine, name: str) -> dict:
+    """What writes `name` (an input's, a signal's, a variable's or a rule's full name) and what reads
+    it, each a place:
+
+        writes  "from": expr (a signal: its expression), auto (a state's action: set, add, a
+                question to the LLM, jev or you, ...), user (you, setting it yourself) or proki
+                (an input: the app measures it; a variable of the app's, it keeps it)
+        reads   "by": condition, action (a state's way out or action), rule, signal, variable
+                (what it starts as) or app; a rule's, only the ways out that vote with it
+
+    A state's place is its `program`, `state` and `at`, the way out's or the action's place
+    there, with its `kind` and `text`; a rule's, a signal's or a variable's is its `name`.
+    KeyError for no input, signal, variable or rule of that name."""
+    found = Stream.registry.get(name) or Rule.registry.get(name)
+    if not isinstance(found, Signal | Variable | Rule) and name not in Primitive.kinds:
+        raise KeyError(f"no input, signal, variable or rule {name!r}")
+
+    sides = {id(side) for r in Rule.registry.values() for side in (r.lhs, r.rhs)}
+    named = lambda s: Stream.registry.get(s.name) is s and ":" not in s.name and id(s) not in sides  # a way out's condition, a rule's side: named inside
+
+    def reads(stream: Stream, inner: bool = False) -> set[str]:  # the names it reads, the first met down each way
+        met, todo, seen = set(), list(stream.inputs) if inner else [stream], set()
+        while todo:
+            s = todo.pop()
+            if id(s) in seen:
+                continue
+            seen.add(id(s))
+            if named(s):
+                met.add(s.name)
+            else:
+                todo += s.inputs
+        return met
+
+    apps           = isinstance(found, Variable) and name not in {v.name for v in engine.compiled.variables}
+    writes, readby = [{"from": "proki"}] if name in Primitive.kinds or apps else [], []
+    if isinstance(found, Signal):
+        writes.append({"from": "expr", "text": signal_row(found)["expr"]})
+    for program in Program.registry.values():
+        for state, body in program.states.items():
+            place = {"program": program.name, "state": state}
+            for at, b in enumerate(body.next):
+                conds = [c for c in b.conds if isinstance(c, Stream) and name in reads(c)]
+                rules = [r for r in b.rules if r.name == name]
+                if conds or rules:
+                    readby.append({"by": "condition", **place, "at": at, "kind": "way out", "text": ", ".join([*(c.expr for c in conds), *(r.name for r in rules)])})
+            for at, a in enumerate(body.do):
+                kind = next((k for k, made in ACTIONS.items() if type(a) is made), "action")
+                if any(name in reads(expr.stream()) for expr in a.read()):  readby.append({"by": "action", **place, "at": at, "kind": kind, "text": ""})
+                if found in a.write():                                       writes.append({"from": "auto", **place, "at": at, "kind": kind, "text": ""})
+    readby += [{"by": "rule", "name": r.name} for r in Rule.registry.values() if name in reads(r.lhs) | reads(r.rhs)]
+    readby += [{"by": "signal", "name": s.name} for s in Stream.registry.values() if isinstance(s, Signal) and named(s) and s is not found and name in reads(s, inner=True)]
+    readby += [{"by": "variable", "name": v.name} for v in Stream.registry.values()
+               if isinstance(v, Variable) and v is not found and isinstance(v.initial, str) and name in safe(lambda: reads(Expr(v.initial).stream()))]
+    if name in engine.reads:
+        readby.append({"by": "app"})
+    if isinstance(found, Variable) and (not isinstance(found, Linked) or found.write):
+        writes.append({"from": "user"})
+    return {"writes": writes, "reads": readby}
+
+
+def safe(made: Any) -> set[str]:
+    """What `made()` gives, or nothing where it can't be worked out."""
+    try:
+        return made()
+    except ProkiError:
+        return set()
 
 
 def evaluate(expr: str) -> dict:

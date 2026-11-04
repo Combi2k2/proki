@@ -79,6 +79,11 @@ function Bubbles({ bubbles }: { bubbles: Bubble[] }) {
   const [open, setOpen] = useState<string | null>(null)
   const buttons = useRef<Record<string, HTMLButtonElement | null>>({})
   const it      = bubbles.find((b) => b.id === open)
+  useEffect(() => {  // gone to a place in an automation: shut, to show it
+    const shut = () => setOpen(null)
+    window.addEventListener("proki:flash", shut)
+    return () => window.removeEventListener("proki:flash", shut)
+  }, [])
   useEffect(() => {  // a dialog open makes room for it
     if (!it) return
     document.documentElement.dataset.bubble = it.id
@@ -128,6 +133,13 @@ function Main() {
     })
   }, [])
   const go = (to: View, card: number | string | null = null) => (setView(to), setOpened(card))
+  const at = useRef(view)
+  at.current = view
+  useEffect(() => {  // an automation's scope gone to from another page: the automations, opened there
+    const heard = (e: Event) => at.current !== "programs" && go("programs", (e as CustomEvent<{ program: string | null }>).detail.program)
+    window.addEventListener("proki:go", heard)
+    return () => window.removeEventListener("proki:go", heard)
+  }, [])
   useEffect(() => {  // your suggestions waiting, sent: now, when you're back online, and every ten minutes
     const send = () => void window.proki.tool("send_suggestions")
     send()

@@ -306,3 +306,30 @@ async def test_what_no_way_out_depends_on_is_taken_out_and_the_rest_stays(tmp_pa
                     {"op": "remove", "kind": "variable", "data": {"name": "count", "scope": "global", "program": None, "state": None}}]
     assert "error" not in ask(e, op="remove_unused")
     assert ask(e, op="unused")["changes"] == [] and "count" not in Stream.registry and "hours" in Stream.registry
+
+
+def test_links_say_what_writes_a_name_and_what_reads_it(tmp_path):
+    config = {**CONFIG, "signals": [*CONFIG["signals"], {"name": "doubled", "expr": "count * 2"}],
+              "rules": [*CONFIG["rules"], {"name": "long", "lhs": "hours", "cmp": "gt", "rhs": 8}]}
+    looks  = {"program": {"initial": "on", "states": {
+        "on": {"do": [{"add": {"name": "count", "expr": "1"}}, {"ask_usr": {"context": "Fine?", "title": "Fine?", "result": "said"}}],
+               "every": 0.1, "next": [{"goto": "on", "when": ["count > 3", "late"]}]}}}}
+    e = Engine(programs_folder(tmp_path, config, {"looks": looks}))
+    count = ask(e, op="links", name="count")
+    assert {"from": "auto", "program": "looks", "state": "on", "at": 0, "kind": "add", "text": ""} in count["writes"]
+    assert {"from": "user"} in count["writes"]
+    assert {"by": "signal", "name": "doubled"} in count["reads"]
+    assert any(r["by"] == "condition" and r["text"] == "count > 3" for r in count["reads"])
+    said = ask(e, op="links", name="looks.on.said")
+    assert [(w["from"], w.get("kind")) for w in said["writes"]] == [("auto", "ask_usr"), ("user", None)]  # the question, and you
+    hours = ask(e, op="links", name="hours")
+    assert hours["writes"] == [{"from": "expr", "text": "daytime / 60"}]
+    assert hours["reads"] == [{"by": "rule", "name": "long"}]
+    assert ask(e, op="links", name="long")["reads"] == []                                  # no way out votes with it
+    late = ask(e, op="links", name="late")
+    assert [r["by"] for r in late["reads"]] == ["condition"] and late["writes"] == []
+    daytime = ask(e, op="links", name="daytime")
+    assert daytime["writes"] == [{"from": "proki"}] and {"by": "signal", "name": "hours"} in daytime["reads"]
+    assert {"from": "proki"} in ask(e, op="links", name="work.tasks")["writes"]          # the app's: it keeps it
+    assert {"from": "proki"} not in count["writes"]
+    assert "error" in ask(e, op="links", name="nothing")
