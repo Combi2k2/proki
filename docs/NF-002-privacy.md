@@ -16,6 +16,6 @@ you chose.
 - An LLM or Jev request carries the context that question needs, nothing more.
 
 ## Limits
-- A suggestion you send ([F-017](F-017-contribute.md)) goes to the developer's sheet, with the
-  contact you give.
+- A suggestion you send ([F-017](F-017-support.md)) goes to the developer's sheet, with the
+  contact you give, and its pictures to the developer's Google Drive.
 - No export or backup yet (F-018, F-022).

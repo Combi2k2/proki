@@ -149,8 +149,9 @@ fn note(app: AppHandle) {
     popup::new_note(&app);
 }
 
-const LINKS: [(&str, &str); 4] = [ // the pages a page may open, by name
+const LINKS: [(&str, &str); 5] = [ // the pages a page may open, by name
     ("github",        "https://github.com/Combi2k2/proki"),
+    ("coffee",        "https://buymeacoffee.com/combi2k2"),
     ("activitywatch", "https://activitywatch.net/downloads/"),
     ("aw-chrome",     "https://chromewebstore.google.com/detail/activitywatch-web-watcher/nglaklhklhcoonedhgnpgddginnjdadi"),
     ("aw-firefox",    "https://addons.mozilla.org/firefox/addon/aw-watcher-web/"),

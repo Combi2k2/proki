@@ -1,5 +1,5 @@
 // The main window: everyday views first, then the advanced ones (automations, time reports and every kind of record);
-// Help, Settings and Contribute at the foot. The tray opens it on one of them ("navigate"), the engine on a
+// Help, Settings and Support at the foot. The tray opens it on one of them ("navigate"), the engine on a
 // group's card too (#tasks/12), or an automation (#programs/bedtime), and remembers nothing else: each view loads
 // what it shows. In its corner, on every view, bubbles, each opening a panel over the window and over the dialogs
 // in it: what the automations can use, for the one you're in, else everywhere.
@@ -17,7 +17,6 @@ import { cn } from "@/lib/utils"
 
 // each view loaded when first opened: the charts, graphs and editors only by the views that show them
 const AppsView       = lazy(() => import("@/views/apps").then((m)       => ({ default: m.AppsView })))
-const ContributeView = lazy(() => import("@/views/contribute").then((m) => ({ default: m.ContributeView })))
 const ManualView     = lazy(() => import("@/views/manual").then((m)     => ({ default: m.ManualView })))
 const MediaView      = lazy(() => import("@/views/media").then((m)      => ({ default: m.MediaView })))
 const MetricsView    = lazy(() => import("@/views/metrics").then((m)    => ({ default: m.MetricsView })))
@@ -26,6 +25,7 @@ const ProgramsView   = lazy(() => import("@/views/programs").then((m)   => ({ de
 const Resources      = lazy(() => import("@/views/programs").then((m)   => ({ default: m.Resources })))
 const Scope          = lazy(() => import("@/views/programs").then((m)   => ({ default: m.Scope })))
 const SettingsView   = lazy(() => import("@/views/settings").then((m)   => ({ default: m.SettingsView })))
+const SupportView    = lazy(() => import("@/views/support").then((m)    => ({ default: m.SupportView })))
 const TablesView     = lazy(() => import("@/views/tables").then((m)     => ({ default: m.TablesView })))
 const TasksView      = lazy(() => import("@/views/tasks").then((m)      => ({ default: m.TasksView })))
 const TodayView      = lazy(() => import("@/views/today").then((m)      => ({ default: m.TodayView })))
@@ -50,7 +50,7 @@ const SECTIONS: { head?: string; items: Entry[] }[] = [
 const LAST: Entry[] = [  // at the sidebar's foot
   { view: "manual",     title: "Help",       icon: CircleHelp,     tint: "text-sky-500 dark:text-sky-400" },
   { view: "settings",   title: "Settings",   icon: Settings,       tint: "text-zinc-500 dark:text-zinc-400" },
-  { view: "contribute", title: "Contribute", icon: HeartHandshake, tint: "text-rose-500 dark:text-rose-400" },
+  { view: "support",    title: "Support",    icon: HeartHandshake, tint: "text-rose-500 dark:text-rose-400" },
 ]
 
 /** A view's button in the sidebar: its icon and title (only its icon, narrow). */
@@ -169,7 +169,7 @@ function Main() {
         {view === "media" && <MediaView />}
         {view === "tables" && <TablesView />}
         {view === "manual" && <ManualView onGo={go} />}
-        {view === "contribute" && <ContributeView />}
+        {view === "support" && <SupportView />}
         {view === "settings" && <SettingsView onWelcome={() => setWelcome(true)} />}
         </Suspense>
       </div>

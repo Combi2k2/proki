@@ -23,7 +23,7 @@ a minute. Older plans and audits are in git history, before the commit that adde
 | [F-014](F-014-help.md) | Help and playground | ✅ |
 | [F-015](F-015-ai-services.md) | AI services (LLM, Jev) | ✅ |
 | [F-016](F-016-mcp.md) | MCP tools | ✅ |
-| [F-017](F-017-contribute.md) | Contribute | 🟡 |
+| [F-017](F-017-support.md) | Support | 🟡 |
 | F-018 | Import and export automations | 📌 |
 | F-019 | Media packs | 📌 |
 | F-020 | A catalog of shared packs | 🔍 |

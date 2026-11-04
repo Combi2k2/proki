@@ -14,6 +14,7 @@
   <a href="https://github.com/Combi2k2/proki/actions/workflows/release.yml"><img src="https://github.com/Combi2k2/proki/actions/workflows/release.yml/badge.svg?branch=main" alt="Release workflow status" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Combi2k2/proki?style=flat" alt="MIT license" /></a>
   <img src="https://img.shields.io/badge/status-early%20build-blue?style=flat" alt="Early build" />
+  <a href="https://buymeacoffee.com/combi2k2"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=flat&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee" /></a>
 </p>
 
 <a id="download"></a>
@@ -32,7 +33,8 @@
   <a href="#what-you-can-do">Features</a> ·
   <a href="#your-day-stays-yours">Privacy</a> ·
   <a href="#try-proki">Try it</a> ·
-  <a href="#for-builders">Builders</a>
+  <a href="#for-builders">Builders</a> ·
+  <a href="#support">Support</a>
 </p>
 
 ---
@@ -184,6 +186,17 @@ It installs into Claude Code, Codex, Cursor and the other agents the [skills CLI
 supports; or copy [`skills/proki-automation/`](skills/proki-automation) into your agent's skills folder yourself.
 
 Each feature has a one-minute page in [docs](docs/README.md), starting with the [architecture](docs/NF-001-architecture.md).
+
+<a id="support"></a>
+## ☕ Support
+
+Proki is free, open source, and made by one person. If it makes your days easier, you can
+[buy me a coffee](https://buymeacoffee.com/combi2k2). A star, a bug report, or a suggestion from the app's
+Support page helps just as much.
+
+<p>
+  <a href="https://buymeacoffee.com/combi2k2"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee" /></a>
+</p>
 
 ## 📄 License
 

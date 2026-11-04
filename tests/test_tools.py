@@ -260,11 +260,15 @@ def test_a_suggestion_waits_until_the_vault_has_it(tmp_path, monkeypatch):
     made = {t.name: t.run for t in suggestions.tools(tmp_path / "outbox.json", "https://vault")}
     assert made["suggest"]({"text": " the graph is slow ", "contact": "me@here"}) == {"waiting": 1}
     assert made["suggest"]({"text": "more colours"}) == {"waiting": 2}
-    with pytest.raises(ValueError):
-        made["suggest"]({"text": "  "})
+    assert made["suggest"]({"text": "this", "pictures": ["data:image/png;base64,iVBORw0KGgo="]}) == {"waiting": 3}
+    for wrong in ({"text": "  "}, {"text": "x", "pictures": ["data:text/html;base64,PGI+"]},
+                  {"text": "x", "pictures": ["data:image/png;base64," + "A" * 2_700_000]}, {"text": "x", "pictures": ["data:image/png;base64,AA=="] * 4}):
+        with pytest.raises(ValueError):
+            made["suggest"](wrong)
     up[0] = True
     assert made["send_suggestions"]({}) == {"waiting": 0}
-    assert [s["text"] for s in got] == ["the graph is slow", "more colours"] and got[0]["contact"] == "me@here"
+    assert [s["text"] for s in got] == ["the graph is slow", "more colours", "this"] and got[0]["contact"] == "me@here"
+    assert got[0]["pictures"] == [] and got[2]["pictures"] == ["data:image/png;base64,iVBORw0KGgo="]
     assert suggestions.tools(tmp_path / "none.json", "")[1].run({}) == {"waiting": 0}
 
 
