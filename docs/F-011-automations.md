@@ -10,7 +10,11 @@ The routines behind every prompt: read them, switch them off, and change them.
 - Each automation (a program) is a state machine. A state's actions run as it's entered:
   set a variable, ask you, Jev or the LLM, poke, lock, open a page. Its ways out read signals,
   variables and rules.
-- Scopes: Global, then a program, then a state. A drawer lists what the scope can use.
+- Scopes: Global, then a program, then a state. The Resources bubble lists what the scope can
+  use (inputs, signals, variables, rules), the same global ones from anywhere.
+- Each one opens a dialog, changed where it's read: its type, its value, its fields, what writes
+  it (expr, auto, user, proki) and what reads it. A place in an automation opens there, lit,
+  from any page.
 - A program is drawn as a graph you can arrange; the live view shows the state now and when
   it next wakes.
 - Every change is checked before it's kept, and one that breaks something is refused.
@@ -22,3 +26,4 @@ The routines behind every prompt: read them, switch them off, and change them.
 ## Limits
 - Which action of a state is running isn't shown; most finish within one cycle.
 - Pin and unpin aren't in the app or the MCP tools yet: only the engine has them.
+- A value you set yourself holds only until an automation writes it: the last write wins.

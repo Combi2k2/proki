@@ -35,9 +35,11 @@ def tools(engine: Engine, shipped: Shipped) -> list[Tool]:
         Tool("evaluate", "An expression's value now, and its type, as an action would work it out (error: why it "
                          "can't be).", {"expr": {"type": "string"}},
              lambda args: editor.evaluate(args["expr"]), ("expr",), readonly=True),
-        Tool("links", "What writes a signal or a variable (its full name) and what reads it: each state's way out "
-                      "or action, rule, signal and variable, and the app; `from` says how it's written (expr, auto, "
-                      "llm, jev, user).", {"name": {"type": "string"}},
+        Tool("links", "What writes an input, a signal, a variable or a rule (its full name) and what reads it. "
+                      "`writes`, each by `from`: expr (its expression), auto (a state's action, its questions too: "
+                      "`program`, `state`, `at`, `kind`), user (you can set it) or proki (the app measures or keeps "
+                      "it). `reads`, each by `by`: condition (a way out: its `at` in its state, `text`), action, rule, "
+                      "signal, variable (starts from it) or app.", {"name": {"type": "string"}},
              lambda args: editor.links(engine, args["name"]), ("name",), readonly=True),
         Tool("playground", "The playground's own made-up signals (a value a minute) and variables, to try on: with "
                            "`expr`, its value each minute and its type; with `action` (set, add, sub, append, remove), "

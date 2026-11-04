@@ -79,6 +79,7 @@ Do them in that order.
 | one program, its states, live values   | `get_program`                               | no      |
 | one program's specs, as edited, with `at` | `program_specs`                          | no      |
 | an expression's value now              | `evaluate`                                  | no      |
+| what writes a name, and what reads it  | `links`                                     | no      |
 | try an expression or action on sample data | `playground`                            | no      |
 | make or change a program               | `apply_changes` (one batch, all or nothing) | **yes** |
 | on / off                               | `switch_program`                            | **yes** |

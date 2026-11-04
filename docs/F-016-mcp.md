@@ -11,9 +11,9 @@ and settings.
 - `proki mcp` is a stdio MCP server: it starts Proki if it isn't running, then passes messages
   to the local tools server with its token.
 - Install it from the tray's menu, then add it: `claude mcp add proki -- proki mcp`.
-- Tools: records (read, add, change, move, remove), programs (reference, evaluate, playground,
-  apply changes, switch, reset, unused), media (library, pools, picks), settings (services,
-  ports) and suggestions.
+- Tools: records (read, add, change, move, remove), programs (reference, evaluate, what writes and
+  reads a name, playground, apply changes, switch, reset, unused, how often it looks), media
+  (library, pools, picks), settings (services, ports) and suggestions, with pictures.
 - Program changes are checked together: all are kept, or none.
 - The `proki-automation` skill (`skills/proki-automation/`) teaches an assistant to build, change and
   explain automations with these tools: `npx skills add Combi2k2/proki --skill proki-automation`.

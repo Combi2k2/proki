@@ -73,7 +73,7 @@ first cause that explains it, and say it in one sentence.
 | - | ---------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
 | 1 | it's on                                  | `get_program` → `on`                                                  | `false`: switched off                                          |
 | 2 | where it is                              | `state`, `waking`                                                    | not in the state that waits for the moment: it's stuck waiting elsewhere (a cooling state whose way back never comes true; an ask still open) |
-| 3 | which condition blocks                   | the branch's `conds[].value` now                                      | a `false` one is the blocker; `null` means **unknown** (no data yet, no answer, a name nothing sets) and blocks too |
+| 3 | which condition blocks                   | the branch's `conds[].value` now                                      | a `false` one is the blocker; `null` means **unknown** (no data yet, no answer, a name nothing sets: `links` on it shows no `writes`) and blocks too |
 | 4 | the rules                                | `reference.rules[].chance` for the branch's rules                     | a chance of 0, or several on one level where most fail; a higher level blocking a lower one |
 | 5 | the cooldown                             | `evaluate` `<program>_next_at - time`, `today` vs the done-day global | a positive number: it's waiting that many minutes; done-day equals `today`: done for the day |
 | 6 | the moment, at that time                 | for a past miss, the conditions then: windows (`focus_history`, `engaged_history`), `running` | the moment wasn't true (e.g. a 2-minute break reset a "50 minutes without a break") |
@@ -84,7 +84,7 @@ first cause that explains it, and say it in one sentence.
 
 | Check                                     | Cause if…                                                                        |
 | ----------------------------------------- | -------------------------------------------------------------------------------- |
-| what sets the cooldown, and on which answers | it isn't set on "Later" or on no answer, so it asks again at the next check   |
+| what sets the cooldown (`links` on it), and on which answers | it isn't set on "Later" or on no answer, so it asks again at the next check |
 | the branch back to idle                   | it returns at once and the moment is still true: needs a cooldown or a cooling state |
 | soft rules and `every`                    | a soft rule checked every few seconds fires within the minute, whatever its chance |
 | a self-loop (`goto` its own state)        | re-entering re-runs its actions: intended for ringing, wrong for a once-off      |

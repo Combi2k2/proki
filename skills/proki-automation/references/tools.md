@@ -21,6 +21,7 @@ None of these change anything. Use them freely.
 | `program_specs` | see one program's specs as they're edited, in order, with `default`/`changed` | `name` (null: global scope) |
 | `list_specs`    | list all specs of one kind (e.g. every rule), optionally of one program   | `kind`, `program?`        |
 | `evaluate`      | an expression's value and type now                                        | `expr`                    |
+| `links`         | what writes one name and what reads it, across every program               | `name` (its full name)    |
 | `playground`    | try an expression or action on made-up data                               | `expr?`, `action?`, `variables?` |
 | `unused`        | list what nothing depends on, as removal changes                           | nothing                   |
 
@@ -37,6 +38,15 @@ and whether it `sets` them).
 `signals`, `rules`, each in order. **A branch's or an action's `at` is its position among its state's**
 (count from 0, in this list's order). Use it to find what to `update`. `default: true` means Proki ships
 this program (it can be reset); `changed: true` means the user's version differs from the shipped one.
+
+**`links`** answers "what sets this?" and "what would break if I changed it?" for an input, signal,
+variable or rule, by its full name (`stretch.asking.answer`). `writes[]`, each by `from`: `expr` (a
+signal's expression, in `text`), `auto` (a state's action: `program`, `state`, `at`, `kind`; questions
+to the LLM, jev or the user are `auto` too), `user` (a variable the user can set) or `proki` (an input
+the app measures, or a variable it keeps, like `work.tasks`). `reads[]`, each by `by`: `condition` (a way
+out: its `at` among its state's branches, and `text`), `action`, `rule`, `signal`, `variable` (starts
+from it; each with `name`) or `app` (the app reads it: it can't be removed or retyped). An empty `writes`
+on a variable means nothing sets it: a condition on it stays unknown.
 
 **`evaluate`** works an expression out as an action would: windows (`ts_*`, `delay`, `every`) give `null`.
 Evaluate a signal by name instead.
@@ -111,7 +121,8 @@ Traps:
 - **`at` shifts.** After removing or inserting a branch or action, the later ones' `at` change. In one batch,
   order removals from the highest `at` down, or re-read `program_specs` between writes.
 - **Renaming** a program or state with `update` renames what it owns (its states, branches, actions) along
-  with it. Expressions elsewhere that name it aren't rewritten: search them first.
+  with it. Expressions elsewhere that name it aren't rewritten: search them first. Before renaming or
+  removing a variable, signal or rule, `links` lists everything that reads it.
 - **Removing** a program removes its states, branches, actions and every variable, signal and rule it
   brings. Removing a state removes its branches, actions and state-scoped specs. The result lists all of it.
   Removal can't be undone except by adding it back: keep the `program_specs` read from before.
@@ -180,5 +191,6 @@ Programs read records through variables (`work.tasks`, `work.task`, `note`…); 
 
 ## Suggestions
 
-`suggest` keeps a note for Proki's developer (sent with `send_suggestions` once online). Use it when the
-user wants something Proki can't observe or do yet, with their agreement.
+`suggest` keeps a note for Proki's developer (sent with `send_suggestions` once online): `text`, `contact?`,
+and up to three `pictures` (each a PNG, JPEG, WebP or GIF data URL, 2 MB at most). Use it when the user
+wants something Proki can't observe or do yet, with their agreement.

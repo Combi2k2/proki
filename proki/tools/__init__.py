@@ -2,6 +2,7 @@
 
     reference                           what a program can use, its values now, and the programs that run
     evaluate                            an expression's value now, and its type
+    links                               what writes a name (expr, auto, user, proki) and what reads it
     playground                          made-up signals and variables, to try an expression or an action on
     get_program                         one program, state by state, and what it depends on
     program_specs                       one program's specs, or the global scope's, as they're edited
@@ -13,6 +14,8 @@
     switch_program                      a program on or off
     set_value                           a variable's value, set now
     reset_program                       a program, or the global scope, back to its default
+    unused, remove_unused               what nothing depends on, listed, or taken out
+    cycle                               how often Proki looks and its programs run
 
     get_media                           the pictures and sounds, a page at a time or by keys
     add_media, remove_media             a file or a folder of yours in (a copy), or some deleted (gone in a week)
@@ -28,7 +31,7 @@
     get_settings, set_settings          the LLM and jev: each one's provider, key and model, asked from then on
     test_connection, list_models        whether one answers at a provider, and the models there
 
-    suggest, send_suggestions           a suggestion for Proki's developer, kept until you're online
+    suggest, send_suggestions           a suggestion for Proki's developer (pictures too), kept until you're online
 
 A poke's or a question's pictures and sounds are chosen in the media library, by its action's
 id, not in its program.
