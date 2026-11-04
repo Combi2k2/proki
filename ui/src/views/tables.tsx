@@ -133,7 +133,7 @@ function Cell({ value, type, onOpen }: { value: unknown; type: Type | undefined;
   if (!atomic(value)) return <Opens value={value} onOpen={() => onOpen(value)} />
   if (typeof value === "boolean") return value
     ? <Check aria-label="yes" className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-    : <X aria-label="no" className="size-3.5 text-muted-foreground" />
+    : <X aria-label="no" className="size-3.5 text-red-600 dark:text-red-400" />
   if (type === "time" && typeof value === "number") {
     const at = new Date(value * 60_000)
     return <time dateTime={at.toISOString()} className="whitespace-nowrap tabular-nums">{at.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
