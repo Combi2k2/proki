@@ -13,3 +13,6 @@ build/
 skills-lock.json
 .ruff_cache/
 .impeccable/
+
+# graphify's knowledge graph of the code: made again with /graphify . --update
+graphify-out/
