@@ -15,18 +15,20 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  Background, BackgroundVariant, BaseEdge, Controls, EdgeLabelRenderer, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider,
+  Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider,
   getBezierPath, getSmoothStepPath, getStraightPath, useInternalNode, useNodesState, useReactFlow,
   type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps, type Viewport,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import dagre from "@dagrejs/dagre"
 import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type Simulation, type SimulationNodeDatum } from "d3-force"
-import { Check, CornerDownRight, Hourglass, Loader2, Minus, Orbit, Spline, X } from "lucide-react"
+import { Check, CornerDownRight, Hourglass, Loader2, Maximize, Minus, Orbit, Spline, X, ZoomIn, ZoomOut } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { ProgramDetail } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { recall, remember } from "@/lib/remember"
+import { humane } from "@/lib/friendly"
 import { isElse, minutes, summary, type Inspected } from "@/views/program-inspect"
 
 const H = 64  // a box's height
@@ -249,23 +251,29 @@ function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
         defaultViewport={view ?? undefined} fitView={!view} fitViewOptions={FIT}
         minZoom={0.3} maxZoom={2.5} nodesConnectable={false} edgesFocusable={false} deleteKeyCode={null}
         colorMode={dark ? "dark" : "light"} proOptions={{ hideAttribution: true }}
-        aria-label={`${detail.name}: its states and the ways between them`}>
+        aria-label={`${detail.name}: its states and transitions`}>
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} />
-        <Controls showInteractive={false} position="top-right" onZoomIn={() => void (hand.current = true)} onZoomOut={() => void (hand.current = true)}
-                  onFitView={() => ((moved.current = false), keep(viewKey, null))} />  {/* the corner below: the bubbles' */}
-        <Panel position="bottom-left">
-          <div className="flex items-center gap-1 rounded-xl border bg-background/90 p-1 shadow-sm backdrop-blur">
-            <ToggleGroup type="single" size="sm" spacing={1} value={style} onValueChange={(s) => s && pick(s as typeof style)} aria-label="The view">
-              {STYLES.map((s) => {
-                const Icon = s === "curved" ? Spline : s === "elbow" ? CornerDownRight : s === "straight" ? Minus : Orbit
-                return (
-                  <ToggleGroupItem key={s} value={s} title={s === "springs" ? "laid out by springs: drag a box to pull the others, double-click it to fix it" : `${s} arrows`}>
-                    <Icon data-icon="inline-start" /><span className="capitalize max-[900px]:hidden">{s}</span>
-                  </ToggleGroupItem>
-                )
-              })}
-            </ToggleGroup>
+        <Panel position="bottom-center">
+          <div className="flex gap-1 rounded-xl border bg-background/90 p-1 shadow-sm backdrop-blur">
+            <Button size="icon-sm" variant="ghost" title="Zoom in" aria-label="Zoom in" onClick={() => (hand.current = true, void flow.zoomIn())}><ZoomIn /></Button>
+            <Button size="icon-sm" variant="ghost" title="Zoom out" aria-label="Zoom out" onClick={() => (hand.current = true, void flow.zoomOut())}><ZoomOut /></Button>
+            <Button size="icon-sm" variant="ghost" title="Fit to the window" aria-label="Fit to the window"
+                    onClick={() => ((moved.current = false), keep(viewKey, null), void flow.fitView({ ...FIT, duration: 300 }))}><Maximize /></Button>
           </div>
+        </Panel>
+        <Panel position="bottom-left">
+          <ToggleGroup type="single" size="sm" spacing={1} value={style} onValueChange={(s) => s && pick(s as typeof style)} aria-label="The view"
+                       className="gap-1 rounded-xl border bg-background/90 p-1 shadow-sm backdrop-blur">
+            {STYLES.map((s) => {
+              const Icon = s === "curved" ? Spline : s === "elbow" ? CornerDownRight : s === "straight" ? Minus : Orbit
+              return (
+                <ToggleGroupItem key={s} value={s} className="size-7 px-0" aria-label={`${s} arrows`}
+                                 title={s === "springs" ? "Springs: drag a state to pull the others, double-click it to fix it" : `${s[0].toUpperCase()}${s.slice(1)} arrows`}>
+                  <Icon />
+                </ToggleGroupItem>
+              )
+            })}
+          </ToggleGroup>
         </Panel>
       </ReactFlow>
     </div>
@@ -293,8 +301,8 @@ function StateBox({ data, dragging }: NodeProps<StateNode>) {
                        lit ? "border-primary bg-primary text-primary-foreground" : !fixed && "hover:border-foreground/30", dragging && "shadow-md",
                        picked && "ring-2 ring-ring ring-offset-2 ring-offset-background")}>
       {lit && <span aria-hidden className={cn("pointer-events-none absolute -inset-1.5 rounded-[16px]", doing ? "animate-round" : "border-2 border-brand/60 motion-safe:animate-breathe")} />}
-      {start && <span className="absolute -top-5 left-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">start</span>}
-      <span title={s.name} className="max-w-full truncate font-mono text-[14px] font-medium">{s.name}</span>
+      {start && <span className="absolute -top-5 left-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">start</span>}
+      <span className="max-w-full truncate font-mono text-[14px] font-medium">{humane(s.name)}</span>
       <span className={cn("flex items-center gap-1 text-xs", lit ? "text-primary-foreground/80" : "text-muted-foreground")}>
         {waits ? (
           <><Hourglass className="size-3 animate-hourglass" aria-hidden /><span className="tabular-nums" aria-label={`waits ${left} seconds more`}>{clock(left!)}</span></>
@@ -388,9 +396,9 @@ function WayArrow({ id, source, target, data, markerEnd }: EdgeProps<WayEdge>) {
                          stroke: data.flowing ? "var(--primary)" : undefined, opacity: data.tried === false ? 0.45 : 1 }} />
       <EdgeLabelRenderer>
         <button onClick={data.onOpen} title={[`${data.number}`, data.label, data.hint].filter(Boolean).join(" · ")}
-                aria-label={`way out ${data.number}: ${data.label}${data.tried === true ? ", holds now" : data.tried === false ? ", doesn't hold now" : ""}`}
+                aria-label={`transition ${data.number}: ${data.label}${data.tried === true ? ", holds now" : data.tried === false ? ", doesn't hold now" : ""}`}
                 style={{ transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px) rotate(${mid.angle}deg)` }}
-                className={cn("nodrag nopan pointer-events-auto absolute flex h-5 min-w-8 items-center justify-center rounded-full border-[1.5px] bg-background px-1 font-mono text-[11px] font-medium",
+                className={cn("nodrag nopan pointer-events-auto absolute flex h-5 min-w-8 items-center justify-center rounded-full border-[1.5px] bg-background px-1 font-mono text-xs font-medium",
                               "before:absolute before:-inset-0.5 before:content-['']",  // a 24px target
                               "transition-colors", data.dashed && "border-dashed",
                               data.tried === true ? "border-emerald-500/70 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
