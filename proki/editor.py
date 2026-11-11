@@ -230,6 +230,9 @@ def unused(engine: Engine) -> list[tuple[str, str, dict]]:
             *(("remove", "rule", ident(r)) for r in specs.rules if full(r) not in voted)]
 
 
+PLANNED = {"work.tasks": "work.plan", "work.groups": "work.plan"}  # records the app fills from a plan an action asks for
+
+
 def links(engine: Engine, name: str) -> dict:
     """What writes `name` (an input's, a signal's, a variable's or a rule's full name) and what reads
     it, each a place:
@@ -263,7 +266,9 @@ def links(engine: Engine, name: str) -> dict:
                 todo += s.inputs
         return met
 
-    apps           = isinstance(found, Variable) and name not in {v.name for v in engine.compiled.variables}
+    held           = isinstance(found, Linked) and bool(found.write)  # kept elsewhere and set by programs: the app reads it, doesn't write it
+    apps           = isinstance(found, Variable) and not held and name not in {v.name for v in engine.compiled.variables}
+    plan           = Stream.registry.get(PLANNED.get(name, ""))
     writes, readby = [{"from": "proki"}] if name in Primitive.kinds or apps else [], []
     if isinstance(found, Signal):
         writes.append({"from": "expr", "text": signal_row(found)["expr"]})
@@ -278,14 +283,15 @@ def links(engine: Engine, name: str) -> dict:
             for at, a in enumerate(body.do):
                 kind = next((k for k, made in ACTIONS.items() if type(a) is made), "action")
                 if any(name in reads(expr.stream()) for expr in a.read()):  readby.append({"by": "action", **place, "at": at, "kind": kind, "text": ""})
-                if found in a.write():                                       writes.append({"from": "auto", **place, "at": at, "kind": kind, "text": ""})
+                if found in a.write() or (plan in a.write() and kind == "ask_llm"):  writes.append({"from": "auto", **place, "at": at, "kind": kind, "text": ""})
     readby += [{"by": "rule", "name": r.name} for r in Rule.registry.values() if name in reads(r.lhs) | reads(r.rhs)]
     readby += [{"by": "signal", "name": s.name} for s in Stream.registry.values() if isinstance(s, Signal) and named(s) and s is not found and name in reads(s, inner=True)]
     readby += [{"by": "variable", "name": v.name} for v in Stream.registry.values()
                if isinstance(v, Variable) and v is not found and isinstance(v.initial, str) and name in safe(lambda: reads(Expr(v.initial).stream()))]
-    if name in engine.reads:
+    if name in engine.reads or held:
         readby.append({"by": "app"})
-    if isinstance(found, Variable) and (not isinstance(found, Linked) or found.write):
+    listed = isinstance(found.type, dict) and found.type.get("type") in ("array", "object") if isinstance(found, Variable) else False  # a list or an object is yours to change, kept as the app keeps it
+    if isinstance(found, Variable) and (not isinstance(found, Linked) or found.write or listed):
         writes.append({"from": "user"})
     return {"writes": writes, "reads": readby}
 

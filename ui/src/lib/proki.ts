@@ -95,6 +95,7 @@ export type Field = {
   worked: Type        // and as worked out: its type, else its sources' (an answer's, its formula's)
   shipped: boolean    // one proki came with: removing it brings it back as it came
   setters: string[]   // the programs that set it
+  places: Place[]     // and the actions that do
 }
 /** A kind of record's fields (task, note, track), and its records with
  * their values (the task's: the ready ones, the weightiest first). */
@@ -277,6 +278,10 @@ type Tools = {
   reset_program: Done
   switch_program: Done
   set_value: Done  // a variable's value, set now, as an action would
+  add_record: { id: number }  // a record of a kind of record (work.tasks), added last
+  change_record: Done
+  remove_record: Done  // and what's its
+  move_record: Done
   cycle: { seconds: number }  // how often Proki looks: set first, given `seconds`
   get_media: { media: MediaItem[]; total: number }
   add_media: { key?: string; keys?: string[] }  // a file's key, a folder's keys

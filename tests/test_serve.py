@@ -1,5 +1,6 @@
 """What the engine answers for the UI (proki/serve.py), over an in-process bus."""
 
+import json
 import sqlite3
 
 import pytest
@@ -256,6 +257,10 @@ async def test_the_fields_through_the_bus():
     assert ranked(await fields({"op": "read"})) == ["Due soon", "Someday"]
     assert await fields({"op": "set", "key": "away", "id": soon, "value": True}) == {}  # yours, for a record
     assert board.tasks.get_row(soon)["away"] is True
+    assert await fields({"op": "define", "field": {"key": "mood", "srcs": [{"from": "user"}]}}) == {}
+    assert await fields({"op": "set", "key": "mood", "id": soon, "value": "calm"}) == {}
+    assert await fields({"op": "remove", "key": "mood"}) == {}  # yours: its values go with it
+    assert "mood" not in json.loads(db.execute("SELECT kept FROM records_task WHERE id = ?", (soon,)).fetchone()[0])
 
 
 def test_todays_focus_each_five_minutes_you_were_active_and_the_lines_between_its_bands():

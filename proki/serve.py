@@ -74,6 +74,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from proki.core.actions import ACTIONS
 from proki.core.programs import Program
 from proki.core.records import ASKS, STAMPS, Field, Records
 from proki.core.signals import Signal, Stream
@@ -210,7 +211,7 @@ def on_fields(request: dict, work: Work, reload: Callable[[], None]) -> dict:
         keys = [*STAMPS, *table.fields, *table.code]
         return {
             "records" : records.kinds(),
-            "fields"  : [asdict(f) | {"worked": f.type, "shipped": f.key in table.shipped, "setters": setters(table, f.key)} for f in table.fields.values()],
+            "fields"  : [asdict(f) | {"worked": f.type, "shipped": f.key in table.shipped, "setters": setters(table, f.key), "places": placed(table, f.key)} for f in table.fields.values()],
             "own"     : [*STAMPS, *table.code],
             "rows"    : [{"id": row["id"], "name": str(row.get("name") or row["id"]), "values": {k: row.get(k) for k in keys}} for row in table.current()],
             "contexts": {channel: table.context(channel) for channel in ASKS},
@@ -220,7 +221,11 @@ def on_fields(request: dict, work: Work, reload: Callable[[], None]) -> dict:
     elif op == "rename":
         table.rename(request["key"], request["to"])
     elif op == "remove":
-        table.remove(request["key"])
+        key = request["key"]
+        table.remove(key)
+        if key not in table.shipped:  # yours, gone for good: its value too, from every record
+            with table.writing():
+                table.db.execute(f"UPDATE {table.sql} SET kept = json_remove(kept, ?), cache = json_remove(cache, ?)", (f'$."{key}"',) * 2)
     elif op == "rerun":
         table.rerun(request["key"], request.get("source"), request.get("id"))
     elif op == "context":
@@ -237,11 +242,16 @@ def on_fields(request: dict, work: Work, reload: Callable[[], None]) -> dict:
     return {}
 
 
+def placed(table: Records, key: str) -> list[dict]:
+    """The actions that set a field of a record: each its program, state, place there and kind."""
+    return [{"program": p.name, "state": name, "at": at, "kind": next((k for k, made in ACTIONS.items() if type(a) is made), "action")}
+            for p in Program.registry.values() for name, state in p.states.items() for at, a in enumerate(state.do)
+            if str(getattr(a, "name", "")).endswith(f".{key}") and any(v is table or getattr(v, "table", None) is table for v in a.write())]
+
+
 def setters(table: Records, key: str) -> list[str]:
     """The programs that set a field of a record."""
-    return [p.name for p in Program.registry.values() if any(
-        str(getattr(a, "name", "")).endswith(f".{key}") and any(v is table or getattr(v, "table", None) is table for v in a.write())
-        for state in p.states.values() for a in state.do)]
+    return list(dict.fromkeys(place["program"] for place in placed(table, key)))
 
 
 def on_notes(request: dict) -> dict:
