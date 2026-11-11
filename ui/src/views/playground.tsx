@@ -16,9 +16,9 @@ import { Input } from "@/components/ui/input"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { Played, Type } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { CodeInput, Expr } from "@/views/code"
+import { CodeInput, colour, Expr } from "@/views/code"
 import { said, TypeIcon } from "@/views/fields"
-import { hover, Value } from "@/views/programs"
+import { hover, Value } from "@/views/resources"
 
 const OPS = {  // what each reads at minute t, in words
   every:    "the mean of each full bin of w minutes, held until the next one ends",
@@ -129,7 +129,7 @@ function Signal({ name, desc, values, start }: { name: string; desc: string; val
   const data = values.map((v, minute) => ({ minute, v }))
   return (
     <div className="rounded-xl border bg-card px-3 pt-2.5 pb-1">
-      <p className="px-1 text-xs"><code className="font-mono font-semibold">{name}</code> <span className="text-muted-foreground">· {desc}</span></p>
+      <p className="px-1 text-xs"><Expr className="font-semibold">{name}</Expr> <span className="text-muted-foreground">· {desc}</span></p>
       <ChartContainer config={{ v: { label: name, color: "var(--metric)" } } satisfies ChartConfig} className="aspect-auto h-24 w-full">
         <ComposedChart data={data} margin={{ left: 0, right: 8, top: 6, bottom: 0 }}>
           <XAxis dataKey="minute" type="number" domain={[0, values.length - 1]} tickLine={false} axisLine={false} tick={AXIS} tickFormatter={(m) => clock(start, m)} ticks={[0, 30, 60, 90, values.length - 1]} />
@@ -246,7 +246,7 @@ function Expression({ expr, onExpr, vars, start, onFocus }: { expr: string; onEx
       {answer && (answer.error ? <p role="status" className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">{answer.error}</p> : (
         <div role="status" className="mt-3 rounded-lg bg-muted px-3 py-2">
           <div className="flex items-start gap-2 font-mono text-xs">
-            <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words">{moves ? `at ${clock(start, answer.values!.length - 1)}: ${num(answer.value)}` : JSON.stringify(answer.value ?? null, null, 2)}</pre>
+            <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words">{moves ? `at ${clock(start, answer.values!.length - 1)}: ` : ""}{moves ? colour(String(num(answer.value))) : colour(answer.value == null ? "–" : JSON.stringify(answer.value, null, 2))}</pre>
             {answer.yours && <Badge variant="secondary" className="shrink-0 text-[11px]">on your values</Badge>}
             <Badge variant="outline" className="shrink-0 text-[11px]">{said(answer.type)}</Badge>
           </div>

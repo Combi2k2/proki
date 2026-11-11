@@ -22,7 +22,7 @@ const MediaView      = lazy(() => import("@/views/media").then((m)      => ({ de
 const MetricsView    = lazy(() => import("@/views/metrics").then((m)    => ({ default: m.MetricsView })))
 const NotesView      = lazy(() => import("@/views/notes").then((m)      => ({ default: m.NotesView })))
 const ProgramsView   = lazy(() => import("@/views/programs").then((m)   => ({ default: m.ProgramsView })))
-const Resources      = lazy(() => import("@/views/programs").then((m)   => ({ default: m.Resources })))
+const Resources      = lazy(() => import("@/views/resources").then((m)  => ({ default: m.Resources })))
 const Scope          = lazy(() => import("@/views/programs").then((m)   => ({ default: m.Scope })))
 const SettingsView   = lazy(() => import("@/views/settings").then((m)   => ({ default: m.SettingsView })))
 const SupportView    = lazy(() => import("@/views/support").then((m)    => ({ default: m.SupportView })))
@@ -74,7 +74,7 @@ function Item({ view: v, title, icon: Icon, tint, at, onGo }: Entry & { at: View
 type Bubble = { id: string; title: string; icon: typeof Sun; about: ReactNode; panel: ReactNode }  // about: under its title
 
 /** The bubbles at the window's corner, each opening its panel above them, over the window and its
- * dialogs: one open at a time, none when the app opens. Escape in it closes it. */
+ * dialogs (a dialog open leaves it in reach: it stays lit, and clicking it doesn't close the dialog): one open at a time, none when the app opens. Escape in it closes it. */
 function Bubbles({ bubbles }: { bubbles: Bubble[] }) {
   const [open, setOpen] = useState<string | null>(null)
   const buttons = useRef<Record<string, HTMLButtonElement | null>>({})
@@ -90,7 +90,7 @@ function Bubbles({ bubbles }: { bubbles: Bubble[] }) {
     return () => void delete document.documentElement.dataset.bubble
   }, [it?.id])
   return createPortal(<>
-    <div className="fixed right-4 bottom-4 z-50 flex items-center gap-2">
+    <div data-bubble-panel className="pointer-events-auto fixed right-4 bottom-4 z-[60] flex items-center gap-2">
       {bubbles.map(({ id, title, icon: Icon }) => (
         <button key={id} ref={(b) => void (buttons.current[id] = b)} onClick={() => setOpen(open === id ? null : id)}
                 aria-label={title} title={title} aria-expanded={open === id} aria-controls={`bubble-${id}`}
@@ -100,9 +100,10 @@ function Bubbles({ bubbles }: { bubbles: Bubble[] }) {
       ))}
     </div>
     {it && (
-      <section id={`bubble-${it.id}`} aria-labelledby={`bubble-${it.id}-title`} tabIndex={-1}
+      <section id={`bubble-${it.id}`} data-bubble-panel aria-labelledby={`bubble-${it.id}-title`} tabIndex={-1}
+               onWheel={(e) => e.stopPropagation()}  // a dialog over the window locks its scroll; this panel stays in reach
                onKeyDown={(e) => e.key === "Escape" && !e.defaultPrevented && (e.preventDefault(), setOpen(null), buttons.current[it.id]?.focus())}
-               className="fixed right-4 bottom-[4.5rem] z-50 flex h-[min(38rem,calc(100dvh-6rem))] w-[min(23rem,calc(100vw-2rem))] origin-bottom-right flex-col rounded-2xl border bg-background shadow-2xl outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-[0.96] motion-safe:duration-200">
+               className="pointer-events-auto fixed right-4 bottom-[4.5rem] z-[60] flex h-[min(38rem,calc(100dvh-6rem))] w-[min(23rem,calc(100vw-2rem))] origin-bottom-right flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-[0.96] motion-safe:duration-200">
         <header className="flex items-center gap-1 border-b py-2.5 pr-2 pl-4">
           <div className="min-w-0 flex-1">
             <h2 id={`bubble-${it.id}-title`} className="text-sm font-medium">{it.title}</h2>
@@ -125,6 +126,7 @@ function Main() {
   const [opened, setOpened] = useState<number | string | null>(opening(card))  // a card, or an automation, to open
   const [where, setWhere] = useState<Where>(GLOBAL)
   const [welcome, setWelcome] = useState(() => recall("proki-welcomed", ["yes", "no"] as const, "no") === "no")  // the welcome, not seen through yet
+  useEffect(() => void import("@/views/known").then((m) => m.keepLearning()), [])
   useEffect(() => {
     window.proki.onNavigate((path) => {
       const [to, card] = path.split("/")

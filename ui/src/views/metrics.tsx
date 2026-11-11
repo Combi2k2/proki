@@ -162,7 +162,7 @@ function Chart({ metric, horizon }: { metric: Metric; horizon: Horizon }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title(metric.name)}</CardTitle>
+        <CardTitle className="font-mono">{title(metric.name)}</CardTitle>
         <CardDescription>
           {latest ? <>latest <span className="font-medium text-foreground tabular-nums">{shown(latest.value)}</span> · </> : null}
           {metric.method} per {HORIZONS.find(([h]) => h === horizon)![2]}

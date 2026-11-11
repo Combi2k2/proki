@@ -39,17 +39,25 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onInteractOutside,
+  over,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  over?: boolean  // over the whole window, the panels too (centred, not beside them)
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={over ? "z-[70]" : undefined} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        onInteractOutside={(e) => {  // the window's panels stay in reach: a click in one leaves the dialog be
+          if ((e.target as Element | null)?.closest?.("[data-bubble-panel]")) e.preventDefault()
+          onInteractOutside?.(e)
+        }}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 min-[1100px]:[[data-bubble]_&]:left-[calc(50%-12.5rem)] z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overscroll-contain rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          over && "z-[70] min-[1100px]:[[data-bubble]_&]:left-1/2",
           className
         )}
         {...props}

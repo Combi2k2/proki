@@ -4,40 +4,25 @@
 // the action is saved. A form you've changed is marked so (`data-dirty`), so what would close it
 // can ask first; Escape cancels one you haven't.
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
-import { AppWindow, Bell, Bot, Equal, KeySquare, ListMinus, ListPlus, Loader2, Lock, MessageCircleQuestionMark, Minus, Music, Plus, X, type LucideIcon } from "lucide-react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { AppWindow, Bell, Bot, CircleCheck, Equal, KeySquare, ListMinus, ListPlus, Loader2, Lock, MessageCircleQuestionMark, Minus, Music, Play, Plus, Trash2, type LucideIcon } from "lucide-react"
 import { DynamicIcon, type IconName } from "lucide-react/dynamic"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import type { MediaItem, RuleSpec, SignalSpec, StateSpec, Type, VariableSpec, Where } from "@/lib/proki"
+import type { MediaItem, StateSpec, Type } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { CodeInput } from "@/views/code"
+import { BARE, CodeInput, Template } from "@/views/code"
 import { Criteria, TypeField } from "@/views/fields"
 import { IconPicker } from "@/views/icon-picker"
+import { CHANGED_LINE, Editable, Pick, useStaged } from "@/views/in-place"
 import { file, MediaPicker } from "@/views/media"
-import { SYMBOL } from "@/views/program-inspect"
 
 export const NAMES = "proki-names"  // the names a field suggests: a <datalist> the page fills
 const ASKS = ["ask_usr", "ask_jev", "ask_llm"]
 
-let aimed: HTMLInputElement | null = null  // the names field you were in last, while its form is open
-const hearing = new Set<() => void>()
-const aim = (field: HTMLInputElement | null) => void (aimed !== field && ((aimed = field), hearing.forEach((heard) => heard())))
-
-/** The names field a name picked elsewhere goes into, while there is one. */
-export const useAimed = () => useSyncExternalStore((heard) => (hearing.add(heard), () => void hearing.delete(heard)), () => aimed)
-
-/** `name` typed into that field, where its caret was. */
-export function insert(name: string) {
-  const field = aimed
-  if (!field?.isConnected) return aim(null)
-  field.focus()
-  field.setRangeText(name, field.selectionStart ?? field.value.length, field.selectionEnd ?? field.value.length, "end")
-  field.dispatchEvent(new Event("input", { bubbles: true }))
-}
 const TIMEOUT: Record<string, number> = { ask_usr: 120, ask_jev: 10, ask_llm: 10 }  // seconds, unless it says
 export const ACTIONS: Record<string, [string, LucideIcon, string]> = {  // each action's name, its icon, and the tint behind it
   poke:    ["Poke",   Bell,                      "bg-sky-500/15 text-sky-700 dark:text-sky-300"],
@@ -82,23 +67,64 @@ const parseNumber = (text: string) => (text.trim() === "" ? null : Number(text))
 /** A time as it's typed: empty is none, a number is minutes, else a phrase ("6s", "1d"). */
 export const parseSpan = (text: string): number | string | null => (text.trim() === "" ? null : /^\d+(\.\d+)?$/.test(text.trim()) ? Number(text) : text.trim())
 
+const SPANS = [["second", 1 / 60, "s"], ["minute", 1, ""], ["hour", 60, "h"], ["day", 1440, "d"], ["month", 43200, ""], ["year", 525600, ""]] as const
+type Unit = (typeof SPANS)[number][0]
+
+/** A time as a number and a unit: "" is none, minutes a number, else a phrase ("6s", "1d"). */
+const unitOf = (text: string): { n: string; unit: Unit } => {
+  const t = text.trim()
+  const said = t.match(/^(\d+(?:\.\d+)?)\s*(s|min|h|d)$/)
+  if (said) return { n: said[1], unit: ({ s: "second", min: "minute", h: "hour", d: "day" } as const)[said[2] as "s" | "min" | "h" | "d"] }
+  if (!/^\d+(\.\d+)?$/.test(t)) return { n: t, unit: "minute" }
+  const m = Number(t)
+  const whole = [...SPANS].reverse().find(([, size]) => size >= 1 && m % size === 0)
+  return whole ? { n: String(m / whole[1]), unit: whole[0] } : { n: String(m * 60), unit: "second" }
+}
+
+/** A number and a unit, as the text the engine reads (the longer units as minutes). */
+const spanOf = (n: string, unit: Unit) => {
+  if (n.trim() === "") return ""
+  const [, size, mark] = SPANS.find(([u]) => u === unit)!
+  return mark ? `${n.trim()}${mark}` : String(Number(n) * size)
+}
+
+/** How long something is kept: a number and a unit to pick, changed where they're read, held with the dialog's Save.
+ * `name`: its key in what's held; `was`: the span as kept (the engine's text); `editable`: none, read only. */
+export function SpanField({ label, name, was, editable }: { label: string; name: string; was: string; editable: boolean }) {
+  const st   = useStaged()
+  const kept = (() => { const u = unitOf(was); return spanOf(u.n, u.unit) })()
+  const now  = unitOf((st?.patch[name] as string | undefined) ?? was)
+  const put  = (text: string) => st?.put(name, text, kept)
+  return (
+    <span className="flex items-baseline gap-2 whitespace-nowrap">
+      <span className="w-8 shrink-0">
+        <Editable label={label} placeholder="none" changed={!!st?.lit(name)} value={now.n}
+                  onSave={editable ? async (t) => /^(\d+(\.\d+)?)?$/.test(t.trim()) ? (put(spanOf(t, now.n === "" ? "minute" : now.unit)), null) : "A number" : undefined} />
+      </span>
+      {now.n !== "" && (
+        <Pick label="Unit" value={now.unit} changed={!!st?.lit(name)} options={SPANS.map(([u]) => [u, u])}
+              onPick={editable ? (u) => put(spanOf(now.n, u as Unit)) : undefined}>
+          {now.unit}{now.n === "1" ? "" : "s"}
+        </Pick>
+      )}
+    </span>
+  )
+}
+
 // --- the form, and its fields ---------------------------------------------------------------
 
 /** A form: its fields, then Save and Cancel, and the mistake the last save made. */
-function Form({ children, onSave, onCancel, saveLabel = "Save", plain }: {
+function Form({ children, onSave, onCancel, saveLabel = "Save", plain, onDirty }: {
   children: ReactNode
   onSave: () => Promise<string | null>
   onCancel: () => void
   saveLabel?: string
   plain?: boolean  // no box of its own: in a panel already
+  onDirty?: () => void  // as it's first changed
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const form = useRef<HTMLFormElement>(null)
-  useEffect(() => {
-    const held = form.current
-    return () => void (aimed && held?.contains(aimed) && aim(null))
-  }, [])
   const save = async () => {
     const was = form.current!.dataset.dirty
     delete form.current!.dataset.dirty  // what a save moves on to needn't ask
@@ -109,9 +135,8 @@ function Form({ children, onSave, onCancel, saveLabel = "Save", plain }: {
     if (mistake && was && form.current) form.current.dataset.dirty = was
   }
   return (
-    <form ref={form} className={cn("flex flex-col gap-3", !plain && "rounded-lg border bg-muted/30 p-3")} onSubmit={(e) => { e.preventDefault(); save() }}
-          onChange={(e) => void (e.currentTarget.dataset.dirty = "yes")}
-          onFocus={(e) => aim(e.target instanceof HTMLInputElement && e.target.getAttribute("list") === NAMES ? e.target : null)}
+    <form ref={form} className={cn("flex flex-col", plain ? "gap-4" : "gap-3", !plain && "rounded-lg border bg-muted/30 p-3")} onSubmit={(e) => { e.preventDefault(); save() }}
+          onChange={(e) => (e.currentTarget.dataset.dirty = "yes", onDirty?.())}
           onKeyDown={(e) => e.key === "Escape" && !e.defaultPrevented && (e.preventDefault(), !e.currentTarget.dataset.dirty && onCancel())}>
       {children}
       {error && <p className="text-xs break-words text-destructive">{error}</p>}
@@ -141,7 +166,7 @@ function Text({ value, onChange, code, names, ...props }: {
   code?: boolean
   names?: boolean
 } & Omit<React.ComponentProps<"input">, "value" | "onChange">) {
-  if (names) return <CodeInput value={value} onChange={(e) => onChange(e.target.value)} list={NAMES} className="h-8 text-xs" {...props} />
+  if (names || code) return <CodeInput value={value} onChange={(e) => onChange(e.target.value)} list={names ? NAMES : undefined} className="h-8 text-xs" {...props} />
   return <Input value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-8 text-sm", code && "font-mono text-xs")} spellCheck={!code} {...props} />
 }
 
@@ -159,111 +184,6 @@ function Choice({ value, onChange, options, className }: {
 }
 
 const Row = ({ children }: { children: ReactNode }) => <div className="grid grid-cols-2 gap-3">{children}</div>
-
-// --- a variable, a signal, a rule -----------------------------------------------------------
-
-/** A name, a description and a type given from outside the form (a panel's title, the line
- *  under it, and the type beside its name). */
-type Named = { name: string; desc: string; type: Type }
-
-/** A variable: where it starts, and its type. */
-export function VariableForm({ spec, where, named, onSave, onCancel }: {
-  spec?: VariableSpec; where: Where; named?: Named; onSave: Save; onCancel: () => void
-}) {
-  const [name, setName] = useState(spec?.name ?? "")
-  const [desc, setDesc] = useState(spec?.desc ?? "")
-  const [value, setValue] = useState(valueText(spec?.value))
-  const [type, setType] = useState<Type>(spec?.type ?? "any")
-  const scope = spec?.scope ?? where.scope
-  const head = named ?? { name, desc }
-  return (
-    <Form plain={!!named} onCancel={onCancel}
-          onSave={() => onSave({ name: head.name.trim(), desc: head.desc, value: parseValue(value), type: named?.type ?? type, scope })}>
-      <Row>
-        {!named && <Field label="Name"><Text value={name} onChange={setName} code autoFocus placeholder="pokes" /></Field>}
-        <Field label="Starts as" hint="number, true/false or expression">
-          <Text value={value} onChange={setValue} code names placeholder="0" />
-        </Field>
-      </Row>
-      {!named && <TypeField label="Type" value={type} onChange={(t) => setType(t ?? "any")} />}
-      {!named && <Field label="Description"><Text value={desc} onChange={setDesc} placeholder="pokes today" /></Field>}
-    </Form>
-  )
-}
-
-const UNITS: [string, string][] = [["s", "seconds"], ["min", "minutes"], ["h", "hours"], ["d", "days"]]
-
-/** A history's length as its amount and its unit: "7d" is 7 days, a number minutes. */
-function spanned(backfill: number | string | null | undefined): [string, string] {
-  if (backfill == null) return ["", "d"]
-  if (typeof backfill === "number") return [String(backfill), "min"]
-  const found = /^(\d+(?:\.\d+)?)\s*(s|min|h|d)$/.exec(backfill.trim())
-  return found ? [found[1], found[2]] : [backfill, "min"]
-}
-
-/** A signal: its expression, and how much of its history is kept, across restarts. Typing an
- *  amount keeps it; switched off, none is. */
-export function SignalForm({ spec, where, named, onSave, onCancel }: { spec?: SignalSpec; where: Where; named?: Named; onSave: Save; onCancel: () => void }) {
-  const [name, setName] = useState(spec?.name ?? "")
-  const [desc, setDesc] = useState(spec?.desc ?? "")
-  const [expr, setExpr] = useState(spec?.expr ?? "")
-  const [[amount, unit], setSpan] = useState(spanned(spec?.backfill))
-  const [persist, setPersist] = useState(spec?.persist ?? spec?.backfill != null)
-  const [type, setType] = useState<Type>(spec?.type ?? "any")
-  const scope = spec?.scope ?? where.scope
-  const head = named ?? { name, desc }
-  const kept = persist && amount.trim() !== ""
-  const typed = (v: string) => { setSpan([v, unit]); if (v.trim()) setPersist(true) }
-  const keep = (on: boolean) => { setPersist(on); if (!on) setSpan(["", unit]) }
-  return (
-    <Form plain={!!named} onCancel={onCancel}
-          onSave={() => onSave({ name: head.name.trim(), desc: head.desc, expr, backfill: kept ? `${amount.trim()}${unit}` : null, persist: kept,
-                                 type: named?.type ?? type, scope })}>
-      {!named && <Field label="Name"><Text value={name} onChange={setName} code autoFocus placeholder="focus_5m" /></Field>}
-      <Field label="Expression"><Text value={expr} onChange={setExpr} code names placeholder="ts_mean(keys_pressed, 5)" /></Field>
-      <Field label="History" hint="kept across restarts">
-        <div className="flex items-center gap-2">
-          <Text value={amount} onChange={typed} type="number" min={0} step="any" placeholder="–" className="h-8 w-24 text-sm" />
-          <Choice value={unit} onChange={(u) => setSpan([amount, u])} options={UNITS} className={cn(!persist && "opacity-50")} />
-          <Switch checked={persist} onCheckedChange={keep} aria-label="Keep its history across restarts" />
-        </div>
-      </Field>
-      {!named && <TypeField label="Type" value={type} onChange={(t) => setType(t ?? "any")} />}
-      {!named && <Field label="Description"><Text value={desc} onChange={setDesc} placeholder="typing, last 5 min" /></Field>}
-    </Form>
-  )
-}
-
-export function RuleForm({ spec, where, named, onSave, onCancel }: { spec?: RuleSpec; where: Where; named?: Named; onSave: Save; onCancel: () => void }) {
-  const [name, setName] = useState(spec?.name ?? "")
-  const [desc, setDesc] = useState(spec?.desc ?? "")
-  const [lhs, setLhs] = useState(String(spec?.lhs ?? ""))
-  const [cmp, setCmp] = useState<string>(spec?.cmp ?? "gt")
-  const [rhs, setRhs] = useState(String(spec?.rhs ?? ""))
-  const [softness, setSoftness] = useState(String(spec?.softness ?? 0))
-  const [level, setLevel] = useState(String(spec?.level ?? 1))
-  const scope = spec?.scope ?? where.scope
-  const head = named ?? { name, desc }
-  return (
-    <Form plain={!!named} onCancel={onCancel}
-          onSave={() => onSave({ name: head.name.trim(), desc: head.desc, lhs: parseSide(lhs), cmp, rhs: parseSide(rhs),
-                                 softness: Number(softness) || 0, level: Math.round(Number(level)) || 1, scope })}>
-      {!named && <Field label="Name"><Text value={name} onChange={setName} code autoFocus placeholder="focus_high" /></Field>}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-        <Field label="Left"><Text value={lhs} onChange={setLhs} code names placeholder="focus" /></Field>
-        <Choice value={cmp} onChange={setCmp} options={Object.entries(SYMBOL).map(([k, s]) => [k, s])} className="w-16 font-mono" />
-        <Field label="Right"><Text value={rhs} onChange={setRhs} code names placeholder="0.6" /></Field>
-      </div>
-      <Row>
-        <Field label="Softness" hint="0 = hard">
-          <Text value={softness} onChange={setSoftness} type="number" min={0} step="any" />
-        </Field>
-        <Field label="Level" hint="higher votes first"><Text value={level} onChange={setLevel} type="number" step={1} /></Field>
-      </Row>
-      {!named && <Field label="Description"><Text value={desc} onChange={setDesc} placeholder="focus is building" /></Field>}
-    </Form>
-  )
-}
 
 // --- a program, a state, a way out ----------------------------------------------------------
 
@@ -359,7 +279,7 @@ function Lines({ values, onChange, placeholder, add }: { values: string[]; onCha
         <div key={i} className="flex gap-1.5">
           <Text value={v} onChange={(next) => onChange(values.map((w, j) => (j === i ? next : w)))} code names placeholder={placeholder}
                 autoFocus={i === values.length - 1 && v === ""} />
-          <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" onClick={() => onChange(values.filter((_, j) => j !== i))}><X /></Button>
+          <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" onClick={() => onChange(values.filter((_, j) => j !== i))}><Trash2 /></Button>
         </div>
       ))}
       <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onChange([...values, ""])}><Plus /> {add}</Button>
@@ -370,21 +290,21 @@ function Lines({ values, onChange, placeholder, add }: { values: string[]; onCha
 // --- an action ------------------------------------------------------------------------------
 
 type Params = Record<string, unknown>
-type Picks = { image: string[]; sound: string[] }  // an action's pictures and sounds, by kind
+export type Picks = { image: string[]; sound: string[] }  // an action's pictures and sounds, by kind
 
 /** An action: its kind (chosen when it's new), its name (its kind's, until you change it) and
  *  what it's for, then its params, as the kind takes them, and a poke's or a question's picks.
  *  Its id is made from where it is and its name as it's added ("bedtime.poking.bedtime"). */
-export function ActionForm({ spec, at, about, taken, onSave, onCancel }: {
+export function ActionForm({ spec, at, taken, onSave, onCancel, onDirty }: {
   spec?: { id: string; name: string; desc: string; kind: string; params: Params }
   at: { program: string; state: string }
-  about: { name: string; about: string }[]  // what each kind does
   taken: string[]  // its state's actions' names
   onSave: Save
   onCancel: () => void
+  onDirty?: () => void
 }) {
   const [kind, setKind] = useState(spec?.kind ?? "poke")
-  const [name, setName] = useState(spec?.name ?? free("poke", taken))
+  const [name, setName] = useState(spec?.name ?? free("poke", taken))  // never shown: only the engine's key for it
   const [desc, setDesc] = useState(spec?.desc ?? "")
   const [params, setParams] = useState<Params>(spec?.params ?? {})
   const id = spec?.id ?? `${at.program}.${at.state}.${name}`
@@ -401,33 +321,24 @@ export function ActionForm({ spec, at, about, taken, onSave, onCancel }: {
     setParams((p) => { const next = { ...p }; if (value === undefined) delete next[key]; else next[key] = value; return next })
   const pick = (which: keyof Picks, keys: string[]) => { setPicks((p) => ({ ...p, [which]: keys })); setPicked(true) }
   const shown = kind === "poke" || kind === "ask_usr"
-  const does = about.find((a) => a.name === kind)?.about
   const save = async () => {
-    const mistake = await onSave({ name, desc, kind, params: cleaned(kind, params) })
+    const mistake = await onSave({ name, desc: spec ? spec.desc : desc, kind, params: cleaned(kind, params) })  // yours, in its dialog, is changed there
     if (mistake || !picked || !shown) return mistake
     const answer = await window.proki.tool("set_picks", { id, keys: [...picks.image, ...picks.sound] })
     return answer.error ? `Saved, but its pictures and sounds weren't: ${answer.error}` : null
   }
-  const [said, Icon, tint] = ACTIONS[kind] ?? [kind, Bot, "bg-muted text-muted-foreground"]
   return (
-    <Form onCancel={onCancel} onSave={save}>
-      {spec && (
-        <p className="flex items-center gap-2 text-xs">
-          <Tinted icon={Icon} tint={tint} />
-          <span className="font-medium">{said}</span>
-          {does && <span className="min-w-0 text-muted-foreground first-letter:uppercase">{does}.</span>}
-        </p>
-      )}
+    <Form onCancel={onCancel} onSave={save} plain onDirty={onDirty}>
       {!spec && (
-        <Field label="Kind">
-          <Choice value={kind} onChange={(k) => { if (name === free(kind, taken)) setName(free(k, taken)); setKind(k); setParams({}) }} options={Object.entries(ACTIONS).map(([k, [said]]) => [k, said])} />
-          {does && <p className="text-xs text-muted-foreground first-letter:uppercase">{does}.</p>}
-        </Field>
+        <DialogHeader>
+          <DialogTitle>
+            <Pick label="Kind" value={kind} className="gap-2 text-base"
+                  options={Object.entries(ACTIONS).map(([k, [said, Icon, tint]]) => [k, <><Tinted icon={Icon} tint={tint} />{said}</>])}
+                  onPick={(k) => { if (name === free(kind, taken)) setName(free(k, taken)); setKind(k); setParams({}) }} />
+          </DialogTitle>
+          <DialogDescription asChild><div><Editable label="Description" value={desc} long placeholder="No description" onSave={async (t) => (setDesc(t), null)} className="text-sm text-muted-foreground" /></div></DialogDescription>
+        </DialogHeader>
       )}
-      <Row>
-        <Field label="Name"><Text value={name} onChange={setName} code placeholder="bedtime" /></Field>
-        <Field label="Description"><Text value={desc} onChange={setDesc} placeholder="asks whether to wind down" /></Field>
-      </Row>
       {(kind === "set" || kind === "add" || kind === "sub" || kind === "append" || kind === "remove") && (
         <>
           {kind === "append" ? (
@@ -473,7 +384,7 @@ export function ActionForm({ spec, at, about, taken, onSave, onCancel }: {
           </Field>
         </>
       )}
-      {kind === "poke" && <Said params={params} set={set} picks={picks} pick={pick} poke />}
+      {kind === "poke" && <PopupFields kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />}
       {kind === "ask_jev" && <JevFields params={params} set={set} />}
       {ASKS.includes(kind) && kind !== "ask_jev" && <AskFields kind={kind} params={params} set={set} picks={picks} pick={pick} at={at} />}
       {kind === "open" && (
@@ -495,10 +406,17 @@ function free(kind: string, taken: string[]): string {
 }
 
 /** The params as the kind takes them: what's empty left out, an open's page always said. */
-function cleaned(kind: string, params: Params): Params {
+export function cleaned(kind: string, params: Params): Params {
   const kept = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0)))
   if (kind === "open" && !kept.path) kept.path = "'today'"
   if (kind === "ask_llm") delete kept.schema  // it answers as its variable is typed
+  if (kept.context && typeof kept.context === "object") {  // what fills its text: a name each, one with no name left out
+    const { format, values } = contextOf(kept.context)
+    const filled = values.filter(([name]) => name.trim())
+    if (filled.length) kept.context = { format, values: Object.fromEntries(filled) }
+    else if (format) kept.context = format
+    else delete kept.context
+  }
   if (kept.fields) kept.fields = Object.fromEntries(Object.entries(kept.fields as Record<string, string>).filter(([k]) => k.trim()))
   if ((kind === "set" || kind === "add" || kind === "sub") && !("expr" in kept)) kept.expr = null
   return kept
@@ -517,7 +435,7 @@ function FieldsField({ value, onChange }: { value: Record<string, string>; onCha
           <span className="text-xs text-muted-foreground">is</span>
           <CodeInput value={expr} onChange={(e) => put(rows.map((r, j) => (j === i ? [r[0], e.target.value] : r)))}
                      list={NAMES} layout="flex-1" className="h-8 text-xs" placeholder="'Todo'" />
-          <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" onClick={() => put(rows.filter((_, j) => j !== i))}><X /></Button>
+          <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" onClick={() => put(rows.filter((_, j) => j !== i))}><Trash2 /></Button>
         </div>
       ))}
       <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => put([...rows.filter(([k]) => k !== ""), ["", ""]])}><Plus /> Field</Button>
@@ -525,55 +443,234 @@ function FieldsField({ value, onChange }: { value: Record<string, string>; onCha
   )
 }
 
-/** What a poke or a question to you says and shows: its text, title (a poke's, if it has one), pictures and sounds. */
-function Said({ params, set, picks, pick, poke }: {
-  poke?: boolean
+type Pair = [string, string]
+
+/** What's said, as the popup shows it: its text with {name}s filled from expressions. */
+const contextOf = (value: unknown) => {
+  const context = typeof value === "string" ? { format: value, values: {} } : (value as { format?: string; values?: Record<string, string> | Pair[] }) ?? {}
+  return { format: context.format ?? "", values: (Array.isArray(context.values) ? context.values : Object.entries(context.values ?? {})) as Pair[] }
+}
+
+/** What's new in `now` (a flag each), and where something of `was` isn't any more (the place among `now` it was at). */
+function compared(was: string[], now: string[]) {
+  const left  = [...was]
+  const added = now.map((n) => { const j = left.indexOf(n); return j < 0 || !left.splice(j, 1) })
+  const kept  = [...now]
+  const gone: { at: number; label: string }[] = []
+  let at = 0
+  for (const w of was) {
+    const j = kept.indexOf(w)
+    if (j < 0) gone.push({ at, label: w })
+    else (kept[j] = "\u0000", at++)
+  }
+  return { added, gone }
+}
+
+/** A red arrow in a table's margin, where what's listed was taken out. */
+const Gone = ({ labels, className }: { labels: string[]; className: string }) => (
+  <span title={`Taken out: ${labels.join(", ") || "an empty row"}`} className={cn("absolute -left-[5px] z-10 text-removed", className)}><Play aria-hidden className="size-2.5 fill-current" /></span>
+)
+
+/** A table's row trash, there as you point at the row. */
+const Out = ({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) => (
+  <Button type="button" size="icon-xs" variant="ghost" aria-label={label} title="Take it out" onClick={onClick}
+          className={cn("text-destructive opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100", className)}><Trash2 /></Button>
+)
+
+/** What's said, a text with {name}s, read as it's typed: the slots coloured as Python reads a format string. */
+function TemplateField({ value, onChange, placeholder, changed }: { value: string; onChange: (text: string) => void; placeholder: string; changed?: boolean }) {
+  return <Template value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label="Text" className={cn(changed && CHANGED_LINE)} />
+}
+
+/** An expression, typed where it's read, coloured as Python is. */
+function ExprField({ label, value, placeholder, onChange, changed }: { label: string; value: string; placeholder: string; onChange: (text: string) => void; changed?: boolean }) {
+  return <CodeInput aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} list={NAMES} layout="min-w-40 flex-1" placeholder={placeholder} className={cn(BARE, changed && CHANGED_LINE)} />
+}
+
+/** What fills a text's {name}s, as a table like the resource dialog's: a name, then the expression it stands for, a row
+ * each, typed where they're read; a row's trash is there as you point at it. `was`: what it was, to mark what's changed. */
+function Placeholders({ pairs, was, onChange }: { pairs: Pair[]; was?: Pair[]; onChange: (pairs: Pair[]) => void }) {
+  const diff = was && compared(was.map(([k]) => k), pairs.map(([k]) => k))
+  const put  = (i: number, at: 0 | 1, text: string) => onChange(pairs.map((p, j) => (j !== i ? p : at ? [p[0], text] : [text, p[1]]) as Pair))
+  const lost = (at: number) => diff?.gone.filter((g) => g.at === at).map((g) => g.label) ?? []
+  const ROW  = "grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-2 py-2.5 pr-9"
+  return (
+    <section className="flex flex-col gap-1.5 border-t pt-4 text-xs">
+      <div className="flex items-center justify-between">
+        <span className="font-medium">Placeholders</span>
+        <Button type="button" size="xs" variant="ghost" className="-mr-2 text-muted-foreground" onClick={() => onChange([...pairs, ["", ""]])}><Plus /> Add</Button>
+      </div>
+      {pairs.length === 0 ? <span className="text-muted-foreground">None.</span> : (
+        <div className="relative rounded-md border">
+          {pairs.map(([key, expr], i) => {
+            const old = was?.find(([k]) => k === key)
+            return (
+              <div key={i} className={cn("group/row relative border-b last:border-b-0", diff?.added[i] && "bg-added/10")}>
+                {lost(i).length > 0 && <Gone labels={lost(i)} className="-top-[5px]" />}
+                <div className={ROW}>
+                  <CodeInput aria-label="Placeholder name" value={key} placeholder="name" layout="w-full" className={BARE} render={(t) => <span className="text-code-slot">{t}</span>} onChange={(e) => put(i, 0, e.target.value)} />
+                  <CodeInput aria-label="Placeholder expression" value={expr} list={NAMES} placeholder="shallow_today / 60" layout="w-full" className={cn(BARE, old && old[1] !== expr && CHANGED_LINE)} onChange={(e) => put(i, 1, e.target.value)} />
+                </div>
+                <Out label={`Take out ${key || "the placeholder"}`} className="absolute top-1/2 right-1.5 -translate-y-1/2" onClick={() => onChange(pairs.filter((_, j) => j !== i))} />
+              </div>
+            )
+          })}
+          {lost(pairs.length).length > 0 && <Gone labels={lost(pairs.length)} className="-bottom-[5px]" />}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** A choice's options, as a table like the placeholders': its number, then its label, typed where it's read; the one
+ * `preselected` has a mark at its end, and clicking another's moves it. `was`: what it was, to mark what's changed. */
+function OptionsTable({ options, was, preselected, preselectChanged, onChange }: {
+  options: string[]
+  was?: string[]
+  preselected?: number
+  preselectChanged?: boolean
+  onChange: (options: string[], preselected: number | undefined) => void
+}) {
+  const diff = was && compared(was, options)
+  const lost = (at: number) => diff?.gone.filter((g) => g.at === at).map((g) => g.label) ?? []
+  const take = (i: number) => onChange(options.filter((_, j) => j !== i), preselected === undefined || preselected === i ? undefined : preselected > i ? preselected - 1 : preselected)
+  return (
+    <div className="relative rounded-md border text-xs">
+      {options.map((label, i) => (
+        <div key={i} className={cn("group/row relative border-b last:border-b-0", preselected === i && "bg-muted/50", diff?.added[i] && "bg-added/10")}>
+          {lost(i).length > 0 && <Gone labels={lost(i)} className="-top-[5px]" />}
+          <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 px-2 py-2.5 pr-16">
+            <span className="text-muted-foreground tabular-nums">{i}</span>
+            <Input aria-label={`Option ${i}`} value={label} placeholder="Label" className={BARE} onChange={(e) => onChange(options.map((o, j) => (j === i ? e.target.value : o)), preselected)} />
+          </div>
+          <span className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center">
+            <Out label={`Take out option ${i}`} onClick={() => take(i)} />
+            <Button type="button" size="icon-xs" variant="ghost" aria-label={preselected === i ? "Preselected: click to clear" : `Preselect option ${i}`} title={preselected === i ? "Preselected" : "Preselect"}
+                    onClick={() => onChange(options, preselected === i ? undefined : i)}
+                    className={cn(preselected === i ? cn("text-primary", preselectChanged && "shadow-[0_2px_0_0_var(--color-changed)]") : "text-muted-foreground opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100")}>
+              <CircleCheck />
+            </Button>
+          </span>
+        </div>
+      ))}
+      {options.length === 0 && <span className="block px-2 py-1.5 text-muted-foreground">None.</span>}
+      {lost(options.length).length > 0 && <Gone labels={lost(options.length)} className="-bottom-[5px]" />}
+    </div>
+  )
+}
+
+/** What a jev's or an LLM's question reads: its text and what fills it. */
+function ContextField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+  const { format, values } = contextOf(value)
+  return (
+    <div className="flex flex-col gap-3">
+      <TemplateField value={format} onChange={(t) => onChange({ format: t, values })} placeholder="{h:.1f} h shallow so far. Start a session?" />
+      <Placeholders pairs={values} onChange={(next) => onChange({ format, values: next })} />
+    </div>
+  )
+}
+
+/** A poke or a question to you, laid out as the popup is, each part changed where it's read: pictures and a
+ * sound beside its title and text, what fills its text, and (`ask`) the question's settings and options.
+ * `commit`: the params changed (a key's value undefined: taken out), the mistake if any. Under a dialog's
+ * `Staging`, every change waits there, marked, for its Save; a kind of question left is remembered, to come back to. */
+export function PopupFields({ ask, kind, params, commit, picks, pick }: {
+  ask?: boolean
+  kind: string
   params: Params
-  set: (key: string, value: unknown) => void
+  commit: (patch: Params) => Promise<string | null>
   picks: Picks
   pick: (which: keyof Picks, keys: string[]) => void
 }) {
+  const staged  = useStaged()  // in a dialog that keeps what's changed with its Save; else it's kept as it's changed
+  const shown   = staged ? { ...params, ...staged.patch } : params
+  const was     = contextOf(params.context)
+  const { format, values } = contextOf(shown.context)
+  const options = shown.options as string[] | string | undefined
+  type Source = "static" | "dynamic"
+  type Left = { options: string[] | string; default: unknown }
+  const left   = useRef<{ static?: Left; dynamic?: Left }>({})  // each kind's options and pick, from when it was left
+  const kindOf = (o: unknown): Source | null => (o === undefined ? null : Array.isArray(o) ? "static" : "dynamic")
+  const source = kindOf(options)
+  const lit    = (key: string) => !!staged?.lit(key)
+  const choose = (patch: Params): Promise<string | null> => {
+    if (!staged) return commit(patch)
+    Object.entries(patch).forEach(([key, value]) => staged.put(key, value, key === "context" ? { format: was.format, values: was.values } : params[key]))
+    return Promise.resolve(null)
+  }
+  const put = (nextFormat: string, nextValues: Pair[]) => void choose({ context: { format: nextFormat, values: nextValues } })
+  const to = (next: Source | null) => {  // text (null), or a choice from a list of either kind
+    if (source) left.current[source] = { options: options as Left["options"], default: shown.default }
+    const back = next && (left.current[next] ?? { options: next === "static" ? [""] : "", default: undefined })
+    void choose({ options: back?.options, default: back?.default })
+  }
+  const saved = kindOf(params.options)
   return (
     <>
-      <ContextField value={params.context} onChange={(v) => set("context", v)} />
-      <Field label="Title" hint={poke ? "optional" : undefined}><Text value={String(params.title ?? "")} onChange={(v) => set("title", v || undefined)} placeholder="Bedtime" /></Field>
-      <Row>
-        <Field label="Pictures" hint="one at random">
-          <KeysField kind="image" keys={picks.image} onChange={(keys) => pick("image", keys)} />
-        </Field>
-        <Field label="Sounds" hint="one at random">
-          <KeysField kind="sound" keys={picks.sound} onChange={(keys) => pick("sound", keys)} />
-        </Field>
-      </Row>
+      <section className="flex gap-4 border-t pt-4">
+        <div className="flex w-36 shrink-0 flex-col gap-2">
+          <Pictures keys={picks.image} onChange={(keys) => pick("image", keys)} />
+          <Sounds keys={picks.sound} onChange={(keys) => pick("sound", keys)} />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <Editable label="Title" value={String(shown.title ?? "")} placeholder="Title" changed={lit("title")} className="pb-1 text-lg font-medium"
+                    onSave={(t) => choose({ title: t.trim() || undefined })} />
+          <TemplateField value={format} changed={lit("context") && format !== was.format} onChange={(t) => put(t, values)} placeholder={ask ? "What do you want to ask?" : "Nothing said"} />
+        </div>
+      </section>
+      <Placeholders pairs={values} was={staged ? was.values : undefined} onChange={(next) => put(format, next)} />
+      {ask && (
+        <>
+          <section className="grid grid-cols-2 gap-x-6 border-t pt-4">
+            <Line label="Answer">
+              <Pick label="Answer" value={source ? "choice" : "text"} changed={!!staged && !!source !== !!saved} options={[["choice", "Choice"], ["text", "Text"]]}
+                    onPick={(v) => to(v === "text" ? null : left.current.static ? "static" : left.current.dynamic ? "dynamic" : "static")} />
+            </Line>
+            <Line label="Save to"><ExprField label="Save to" value={String(shown.result ?? "")} placeholder="answer" changed={lit("result")} onChange={(t) => void choose({ result: t.trim() ? t : undefined })} /></Line>
+            <Line label="Timeout">
+              <Editable label="Timeout" value={shown.timeout == null ? "" : String(shown.timeout)} placeholder={String(TIMEOUT[kind])} changed={lit("timeout")}
+                        onSave={async (t) => (await choose({ timeout: parseNumber(t) ?? undefined }))} /> s
+            </Line>
+            <Line label="Deferrable">
+              <Checkbox checked={shown.immediate !== true} onCheckedChange={(on) => void choose({ immediate: on === true ? undefined : true })} className={cn(lit("immediate") && "border-changed")} />
+            </Line>
+          </section>
+          {source && (
+            <section className="flex flex-col gap-1.5 border-t pt-4 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <span className="font-medium">Options</span>
+                  <Pick label="Options from" value={source} changed={!!staged && source !== saved} options={[["static", "Static list"], ["dynamic", "Dynamic list"]]} onPick={(v) => to(v as Source)} />
+                </span>
+                {source === "static" && <Button type="button" size="xs" variant="ghost" className="-mr-2 text-muted-foreground" onClick={() => void choose({ options: [...(options as string[]), ""] })}><Plus /> Add</Button>}
+              </div>
+              {source === "static" ? (
+                <>
+                  <OptionsTable options={options as string[]} was={staged && saved === "static" ? (params.options as string[]) : undefined}
+                                preselected={typeof shown.default === "number" ? shown.default : undefined} preselectChanged={lit("default")}
+                                onChange={(next, preselected) => void choose({ options: next, default: preselected })} />
+                  {typeof shown.default === "string" && (
+                    <Line label="Preselect"><ExprField label="Preselect" value={shown.default} placeholder="an option or its number" changed={lit("default")} onChange={(t) => void choose({ default: t.trim() ? t : undefined })} /></Line>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Line label="From"><ExprField label="Options" value={String(options ?? "")} placeholder="track.labels" changed={lit("options") && saved === "dynamic"} onChange={(t) => void choose({ options: t })} /></Line>
+                  <Line label="Preselect"><ExprField label="Preselect" value={String(shown.default ?? "")} placeholder="an option or its number" changed={lit("default")} onChange={(t) => void choose({ default: t.trim() ? t : undefined })} /></Line>
+                </>
+              )}
+            </section>
+          )}
+        </>
+      )}
     </>
   )
 }
 
-/** What's said: a text, with {name}s filled in from expressions as it's said. */
-function ContextField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
-  const context = typeof value === "string" ? { format: value, values: {} } : (value as { format?: string; values?: Record<string, string> }) ?? {}
-  const format = context.format ?? ""
-  const values = Object.entries(context.values ?? {})
-  const put = (nextFormat: string, nextValues: [string, string][]) =>
-    onChange(nextValues.length ? { format: nextFormat, values: Object.fromEntries(nextValues) } : nextFormat)
-  return (
-    <Field label="Text" hint="{name} filled from values below">
-      <Textarea value={format} onChange={(e) => put(e.target.value, values)} rows={2} className="min-h-14 text-sm" autoFocus
-                placeholder="{h:.1f} h shallow so far. Start a session?" />
-      {values.map(([name, expr], i) => (
-        <div key={i} className="flex items-center gap-1.5">
-          <Input value={name} onChange={(e) => put(format, values.map((v, j) => (j === i ? [e.target.value, v[1]] : v)))}
-                 className="h-8 w-24 font-mono text-xs" placeholder="h" />
-          <span className="text-xs text-muted-foreground">is</span>
-          <Input value={expr} onChange={(e) => put(format, values.map((v, j) => (j === i ? [v[0], e.target.value] : v)))}
-                 list={NAMES} className="h-8 font-mono text-xs" placeholder="shallow_today / 60" />
-          <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" onClick={() => put(format, values.filter((_, j) => j !== i))}><X /></Button>
-        </div>
-      ))}
-      <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => put(format, [...values, ["", ""]])}><Plus /> Value</Button>
-    </Field>
-  )
-}
+/** A label and what it sets, on a line. */
+const Line = ({ label, children }: { label: string; children: ReactNode }) => (
+  <label className="flex min-h-8 items-center gap-2 text-sm"><span className="w-20 shrink-0 text-muted-foreground">{label}</span>{children}</label>
+)
 
 type Criteria = Record<string, string | null>  // each label, and what it means
 type Question = { type: "noul" | "choice" | "score"; question: string; criteria?: Criteria | string; result: string }
@@ -603,7 +700,7 @@ function JevFields({ params, set }: { params: Params; set: (key: string, value: 
               <Text value={q.result} onChange={(v) => put(i, { result: v })} code />
             </Field>
             <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" disabled={questions.length === 1} className="mt-5"
-                    onClick={() => set("questions", questions.filter((_, j) => j !== i))}><X /></Button>
+                    onClick={() => set("questions", questions.filter((_, j) => j !== i))}><Trash2 /></Button>
           </Row>
           <Field label="Question"><Text value={q.question} onChange={(v) => put(i, { question: v })} placeholder={q.type === "noul" ? "Is it urgent?" : "What is it?"} /></Field>
           {q.type !== "noul" && (
@@ -659,8 +756,8 @@ function Answered({ name, at }: { name: string; at: { program: string; state: st
   )
 }
 
-/** A question, as its kind takes it: to you (its text, title, pictures, its options), to the
- *  LLM (what it reads; it answers as the variable it's saved to is typed). */
+/** A question, as its kind takes it: to you (laid out as the popup is, its settings and options under
+ *  it), to the LLM (what it reads; it answers as the variable it's saved to is typed). */
 function AskFields({ kind, params, set, picks, pick, at }: {
   kind: string
   at: { program: string; state: string }
@@ -669,94 +766,75 @@ function AskFields({ kind, params, set, picks, pick, at }: {
   picks: Picks
   pick: (which: keyof Picks, keys: string[]) => void
 }) {
-  const options = params.options as string[] | string | undefined
-  const listed = Array.isArray(options)
-  const usr = kind === "ask_usr", llm = kind === "ask_llm"
-  const answers = llm ? "typed" : options === undefined ? "none" : listed ? "options" : "expr"
   useEffect(() => {
     if (params.result === undefined) set("result", "answer")
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
-  const answer = (v: string) => {
-    set("options", v === "options" ? [""] : v === "expr" ? "" : undefined)
-    set("default", undefined)
-  }
-  const kinds: [string, string][] = [["options", "An option: its number, from 0"], ["expr", "An option, from a list"], ["none", "Text"]]
+  if (kind === "ask_usr") return <PopupFields ask kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />
   return (
     <>
-      {usr ? <Said params={params} set={set} picks={picks} pick={pick} /> : <ContextField value={params.context} onChange={(v) => set("context", v)} />}
-      {usr && <Field label="Answer"><Choice value={answers} options={kinds} onChange={answer} /></Field>}
-      {usr && listed && <OptionsField options={options} onChange={(next) => set("options", next)} />}
-      {usr && typeof options === "string" && (
-        <Field label="Options" hint="an expression: a list of texts">
-          <Text value={options} onChange={(v) => set("options", v)} code names placeholder="track.labels" />
-        </Field>
-      )}
-      <Row>
-        <Field label="Save answer to" hint={llm ? "its type is what the LLM answers" : undefined}>
-          <Text value={String(params.result ?? "")} onChange={(v) => set("result", v)} code />
-        </Field>
-      </Row>
-      {llm && <Answered name={String(params.result ?? "")} at={at} />}
-      <Row>
-        {usr && listed && typeof params.default !== "string" && (
-          <Field label="Picked already">
-            <Choice value={String(params.default ?? -1)} onChange={(v) => set("default", Number(v) === -1 ? undefined : Number(v))}
-                    options={[["-1", "none"], ...options.map((o, i): [string, string] => [String(i), `${i}: ${o || "…"}`])]} />
-          </Field>
-        )}
-        {usr && options !== undefined && (!listed || typeof params.default === "string") && (
-          <Field label="Picked already" hint="expression: an option or its number"><Text value={String(params.default ?? "")} onChange={(v) => set("default", v || undefined)} code names /></Field>
-        )}
-        <Field label="Timeout" hint={`s, default ${TIMEOUT[kind]}`}>
-          <Text value={params.timeout == null ? "" : String(params.timeout)} onChange={(v) => set("timeout", parseNumber(v) ?? undefined)} type="number" min={1} />
-        </Field>
-        {usr && (
-          <Field label="No “Later”">
-            <Switch checked={params.immediate === true} onCheckedChange={(on) => set("immediate", on || undefined)} />
-          </Field>
-        )}
-      </Row>
+      <ContextField value={params.context} onChange={(v) => set("context", v)} />
+      <div className="grid grid-cols-2 gap-x-8 border-t pt-4">
+        <Line label="Target"><CodeInput value={String(params.result ?? "")} onChange={(e) => set("result", e.target.value)} list={NAMES} layout="flex-1" className="h-7 text-xs" placeholder="answer" /></Line>
+        <Line label="Timeout">
+          <Input value={params.timeout == null ? "" : String(params.timeout)} onChange={(e) => set("timeout", parseNumber(e.target.value) ?? undefined)}
+                 type="number" min={1} placeholder={String(TIMEOUT[kind])} className="h-7 w-16 text-xs" /> s
+        </Line>
+      </div>
+      <Answered name={String(params.result ?? "")} at={at} />
     </>
   )
 }
 
-/** Your question's options, in order: each a text. */
-function OptionsField({ options, onChange }: { options: string[]; onChange: (options: string[]) => void }) {
-  const put = (i: number, option: string) => onChange(options.map((o, j) => (j !== i ? o : option)))
-  return (
-    <div className="flex flex-col gap-1.5">
-      {options.map((o, i) => (
-        <div key={i} className="flex items-center gap-1.5">
-          <span className="w-4 text-right text-xs text-muted-foreground tabular-nums">{i}</span>
-          <Input value={o} placeholder="Start" className="h-8 text-sm" onChange={(e) => put(i, e.target.value)} />
-          <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" disabled={options.length === 1}
-                  onClick={() => onChange(options.filter((_, j) => j !== i))}><X /></Button>
-        </div>
-      ))}
-      <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onChange([...options, ""])}>
-        <Plus /> Option
-      </Button>
-    </div>
-  )
-}
-
-/** Keys of the media library, shown as they are, and chosen in the library's window. */
-function KeysField({ kind, keys, onChange }: { kind: "image" | "sound"; keys: string[]; onChange: (keys: string[]) => void }) {
+/** Keys of the media library, found for what's shown of them. */
+function useItems(keys: string[]) {
   const [items, setItems] = useState<MediaItem[]>([])
-  const [picking, setPicking] = useState(false)
   useEffect(() => {
     if (!keys.length) return setItems([])
     window.proki.tool("get_media", { keys }).then((answer) => !answer.error && setItems(answer.media))
   }, [keys.join("\n")])  // eslint-disable-line react-hooks/exhaustive-deps
+  return items
+}
+
+/** A poke's pictures: every one in the pool as a thumbnail in a box of one size, scrolling, with Add under them (a big
+ * plus when there are none); a click chooses in the library's window. */
+function Pictures({ keys, onChange }: { keys: string[]; onChange: (keys: string[]) => void }) {
+  const [picking, setPicking] = useState(false)
+  const items = useItems(keys)
   return (
-    <div className="flex min-h-8 flex-wrap items-center gap-1.5">
-      {items.map((item) => kind === "image" ? (
-        <img key={item.key} src={file(item.file)} title={item.name} alt="" className="size-9 rounded-md border bg-muted/50 object-contain" />
+    <>
+      {items.length === 0 ? (
+        <button type="button" onClick={() => setPicking(true)} title="Add pictures"
+                className="flex h-40 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed bg-muted/40 text-xs text-muted-foreground hover:bg-muted">
+          <Plus className="size-6" />Add pictures
+        </button>
       ) : (
-        <span key={item.key} className="flex items-center gap-1 rounded-md border px-1.5 py-1 text-[11px]"><Music className="size-3" />{item.name}</span>
-      ))}
-      <Button type="button" size="sm" variant="outline" onClick={() => setPicking(true)}>{keys.length ? "Change…" : "Choose…"}</Button>
-      {picking && <MediaPicker kind={kind} keys={keys} onClose={() => setPicking(false)} onDone={(next) => { onChange(next); setPicking(false) }} />}
-    </div>
+        <div className="flex h-40 w-full flex-col overflow-hidden rounded-xl border bg-muted/40">
+          <div className="grid min-h-0 flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto p-1.5">
+            {items.map((item) => (
+              <button key={item.key} type="button" onClick={() => setPicking(true)} title={item.name} className="aspect-square rounded-md hover:bg-muted">
+                <img src={file(item.file)} alt={item.name} className="size-full object-contain" />
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setPicking(true)} className="flex shrink-0 items-center justify-center gap-1 border-t py-1.5 text-xs text-muted-foreground hover:bg-muted">
+            <Plus className="size-3.5" />Add pictures
+          </button>
+        </div>
+      )}
+      {picking && <MediaPicker kind="image" keys={keys} onClose={() => setPicking(false)} onDone={(next) => { onChange(next); setPicking(false) }} />}
+    </>
+  )
+}
+
+/** A poke's sounds: one button, saying how many there are. */
+function Sounds({ keys, onChange }: { keys: string[]; onChange: (keys: string[]) => void }) {
+  const [picking, setPicking] = useState(false)
+  return (
+    <>
+      <Button type="button" size="sm" variant="outline" className="w-full text-muted-foreground" onClick={() => setPicking(true)}>
+        <Music /> {keys.length ? (keys.length === 1 ? "1 sound" : `${keys.length} sounds`) : "Add sound"}
+      </Button>
+      {picking && <MediaPicker kind="sound" keys={keys} onClose={() => setPicking(false)} onDone={(next) => { onChange(next); setPicking(false) }} />}
+    </>
   )
 }

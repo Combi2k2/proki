@@ -457,7 +457,7 @@ function Helping({ programs, onGo }: { programs: Reference["programs"]; onGo: Go
           <button key={p.name} onClick={() => onGo("programs", p.name)} title={`See how ${title} works`}
                   className="-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
             <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate">{title}</span>
+            <span className="truncate font-mono">{title}</span>
             <span className={cn("ml-auto shrink-0 text-xs", now.busy ? "font-medium text-brand" : "text-muted-foreground")}>{now.busy ? now.text : "Ready"}</span>
           </button>
         )

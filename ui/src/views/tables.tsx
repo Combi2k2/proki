@@ -5,7 +5,7 @@
 // own. The kind you looked at is kept.
 
 import { useEffect, useMemo, useState } from "react"
-import { ArrowDown, ArrowUp, Check, Search, Table2, X } from "lucide-react"
+import { ArrowDown, ArrowUp, Search, Table2 } from "lucide-react"
 import { PageHeader } from "@/components/page"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
@@ -15,7 +15,8 @@ import type { Type, Weighed } from "@/lib/proki"
 import { recallJson, rememberJson } from "@/lib/remember"
 import { cn } from "@/lib/utils"
 import { TypeIcon } from "@/views/fields"
-import { atomic, Inspect, Opens } from "@/views/inspect"
+import { Inspect } from "@/views/inspect"
+import { atomic, Opens, Truth } from "@/views/value-parts"
 
 const STAMPS = ["created_at", "updated_at"]  // every record's, last
 type Column = { key: string; desc: string; type: Type | undefined }
@@ -131,9 +132,7 @@ export function TablesView() {
 function Cell({ value, type, onOpen }: { value: unknown; type: Type | undefined; onOpen: (value: unknown) => void }) {
   if (value == null || (typeof value === "object" && !Object.keys(value).length)) return <span className="text-muted-foreground/60">–</span>
   if (!atomic(value)) return <Opens value={value} onOpen={() => onOpen(value)} />
-  if (typeof value === "boolean") return value
-    ? <Check aria-label="yes" className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-    : <X aria-label="no" className="size-3.5 text-red-600 dark:text-red-400" />
+  if (typeof value === "boolean") return <Truth value={value} />
   if (type === "time" && typeof value === "number") {
     const at = new Date(value * 60_000)
     return <time dateTime={at.toISOString()} className="whitespace-nowrap tabular-nums">{at.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>

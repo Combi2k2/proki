@@ -15,7 +15,7 @@ import { recall, remember } from "@/lib/remember"
 import { Expr } from "@/views/code"
 import { Deck } from "@/views/deck"
 import { Playground } from "@/views/playground"
-import { SYNTAX } from "@/views/programs"
+import { SYNTAX } from "@/views/resources"
 
 const STEPS: { title: string; about: string; icon: typeof Timer; label: string; go?: View; session?: boolean }[] = [
   { title: "Add what you're working on", about: "Make a group for a project, then list its tasks. Proki suggests which one to do next.", icon: ListTodo, label: "Open tasks", go: "tasks" },
