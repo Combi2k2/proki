@@ -189,6 +189,29 @@ def test_a_signal_of_a_program(tools):
     assert error and "unknown name 'hour'" in said
 
 
+def test_what_is_taken_out_takes_its_kept_value_and_past_with_it(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+    from proki.core.signals import Variable
+    db = storage.connect(tmp_path / "proki.db")
+    monkeypatch.setattr(Variable, "store", storage.VariableDB(db))
+    monkeypatch.setattr(Stream, "storage", storage.HistoryDB(db))
+    tools = Tools(Engine(settings.SHIPPED_DIR, variables=Variable.store), Shipped(settings.SHIPPED_DIR, storage.StateDB(db)))
+    rows  = {"type": "array", "items": {"type": "object", "properties": {"city": {"type": "string"}}}}
+    assert not call(tools, "add_variable", name="trips", type=rows, value=None)[0]
+    assert not call(tools, "add_record", name="trips", fields={"city": "Hue"})[0]
+    assert not call(tools, "add_variable", name="goal", type="number", value=5)[0]
+    assert not call(tools, "set_value", name="goal", value=7)[0]
+    assert db.execute("SELECT count(*) FROM variables WHERE name = 'goal'").fetchone() == (1,)
+    Stream.storage.save("busy", datetime.now(UTC), 1)
+    assert not call(tools, "add_signal", name="busy", expr="1", backfill=10, persist=True)[0]
+    assert not call(tools, "apply_changes", changes=[{"op": "remove", "kind": "variable", "data": {"name": "trips"}},
+                                                     {"op": "remove", "kind": "variable", "data": {"name": "goal"}},
+                                                     {"op": "remove", "kind": "signal", "data": {"name": "busy"}}])[0]
+    assert db.execute("SELECT count(*) FROM sqlite_master WHERE name IN ('records_trips', 'trips_fields', 'trips_context')").fetchone() == (0,)
+    assert db.execute("SELECT count(*) FROM signal_history WHERE name = 'busy'").fetchone() == (0,)
+    assert db.execute("SELECT count(*) FROM variables WHERE name = 'goal'").fetchone() == (0,)
+
+
 def test_the_media_tools(tmp_path):
     from proki.services.media import Library
 

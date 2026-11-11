@@ -3,11 +3,17 @@ A spec is found by its fields, and a branch or an action by its place among its 
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from proki import editor, playground
+from proki.core.records import Records
+from proki.core.signals import Signal, Stream, Variable
 from proki.engine import Engine
 from proki.model import Spec
 from proki.model.model import Model
 from proki.programs.shipped import Shipped
+from proki.storage import HistoryDB, VariableDB, drop_records
 from proki.tools.base import Tool
 
 IDENT = {  # the fields a change finds its spec by
@@ -58,13 +64,13 @@ def tools(engine: Engine, shipped: Shipped) -> list[Tool]:
              {"changes": {"type": "array", "items": {"type": "object", "properties": {
                  "op": {"type": "string", "enum": ["add", "update", "remove"]}, "kind": {"type": "string", "enum": list(Spec.kinds)},
                  "data": {"type": "object"}}, "required": ["op", "kind", "data"]}}},
-             lambda args: model.apply([(c["op"], c["kind"], c["data"]) for c in args["changes"]]), ("changes",)),
+             lambda args: pruned(model, lambda: model.apply([(c["op"], c["kind"], c["data"]) for c in args["changes"]])), ("changes",)),
         Tool("unused", "What nothing depends on: each variable, signal and rule no program's way out depends on, "
                        "nor the app, nor a metric, down any chain, and each action that only sets them; as the "
                        "changes that take them out, as apply_changes takes them.", {},
              lambda args: {"changes": [{"op": op, "kind": kind, "data": data} for op, kind, data in editor.unused(engine)]}, readonly=True),
         Tool("remove_unused", "Takes out what nothing depends on (as `unused` lists it), checked once: all of it, or none.", {},
-             lambda args: model.apply(editor.unused(engine))),
+             lambda args: pruned(model, lambda: model.apply(editor.unused(engine)))),
         Tool("program_specs", "One program's specs, each kind a list in order (a branch's or an action's place "
                               "among its state's, `at`, is its order there), or with name null the global scope's "
                               "(inputs, and the variables, signals and rules no program brings). `default`: Proki "
@@ -82,9 +88,24 @@ def tools(engine: Engine, shipped: Shipped) -> list[Tool]:
              lambda args: cycle(model, args.get("seconds"))),
         Tool("reset_program", "A program back to its default, and what it brings (name null: the global "
                               "scope).", {"name": NAME},
-             lambda args: shipped.revert(model, args["name"]), ("name",)),
+             lambda args: pruned(model, lambda: shipped.revert(model, args["name"])), ("name",)),
     ]
     return made + [tool for kind, cls in Spec.kinds.items() for tool in of(model, kind, cls)]
+
+
+def pruned(model: Model, change: Callable[[], Any]) -> Any:
+    """`change` made to the specs, and what it gives. Each variable or signal it takes out (removed,
+    renamed, moved) has what was kept of it forgotten: a variable's value, a table's records, fields and contexts, a signal's past."""
+    def kept() -> dict[str, Stream | None]:
+        return {spec.full(): Stream.registry.get(spec.full()) for spec in [*model.specs.variables, *model.specs.signals]}
+    before = kept()
+    done   = change()
+    for name in before.keys() - kept().keys():
+        stream = before[name]
+        if isinstance(stream, Records):                                              drop_records(stream.db, name.replace(".", "_"))  # a table you made
+        elif isinstance(stream, Variable) and isinstance(Variable.store, VariableDB):  Variable.store.clear(name, stream.type)
+        if isinstance(stream, Signal) and isinstance(Stream.storage, HistoryDB):     Stream.storage.clear(name)
+    return done
 
 
 def cycle(model: Model, seconds: float | None) -> dict:
@@ -109,7 +130,7 @@ def of(model: Model, kind: str, cls: type) -> list[Tool]:
         Tool(f"add_{kind}",    f"Add {a} {kind}. {cls.DOCS}", shape["properties"],
              lambda args: model.add(kind, args), tuple(shape["required"])),
         Tool(f"update_{kind}", f"Change {a} {kind}, found by its fields: `changes` says the new values.", {**ident, "changes": changes},
-             lambda args: model.update(kind, {k: v for k, v in args.items() if k != "changes"}, args["changes"]), (*found, "changes")),
-        Tool(f"remove_{kind}", f"Remove {a} {kind}, found by its fields, and what it owns.", ident,
-             lambda args: model.remove(kind, args), found, undoable=True),
+             lambda args: pruned(model, lambda: model.update(kind, {k: v for k, v in args.items() if k != "changes"}, args["changes"])), (*found, "changes")),
+        Tool(f"remove_{kind}", f"Remove {a} {kind}, found by its fields, and what it owns; a variable's kept value and a signal's past go with it.", ident,
+             lambda args: pruned(model, lambda: model.remove(kind, args)), found, undoable=True),
     ]

@@ -144,6 +144,15 @@ class VariableDB:
             self.db.execute("INSERT OR REPLACE INTO variables (name, value, updated_at) VALUES (?, ?, ?)",
                             (name, json.dumps(kept), datetime.now(UTC).isoformat()))
 
+    def clear(self, name: str, type: Type | None = None) -> None:
+        """Its kept value gone, with the tables its lists of objects were kept in, as `type` says."""
+        with self.db:
+            for path in list_paths(type):
+                made = list_table(name, path)
+                self.db.execute(f'DROP TABLE IF EXISTS "{made}"')
+                self.tables.discard(made)
+            self.db.execute("DELETE FROM variables WHERE name = ?", (name,))
+
     def made(self, name: str, path: str) -> None:
         """The table for one of its lists, made if it's missing."""
         if (made := list_table(name, path)) in self.tables:  return
@@ -176,6 +185,11 @@ class HistoryDB:
         with self.db:
             self.db.execute("DELETE FROM signal_history WHERE name = ? AND t <= ? AND t < "
                             "(SELECT MAX(t) FROM signal_history WHERE name = ? AND t <= ?)", (name, cut, name, cut))
+
+    def clear(self, name: str) -> None:
+        """Its every value gone."""
+        with self.db:
+            self.db.execute("DELETE FROM signal_history WHERE name = ?", (name,))
 
 
 class SpecDB:
@@ -348,6 +362,13 @@ def record_tables(db: sqlite3.Connection, kind: str) -> tuple[Table[Field], Tabl
     class Fields(Table[Field]):         NAME, KEY = f"{kind}_fields", "key"
     class Contexts(Table[Preface]):     NAME, KEY = f"{kind}_context", "channel"
     return Fields(db), Contexts(db)
+
+
+def drop_records(db: sqlite3.Connection, kind: str) -> None:
+    """A kind of record gone, as `record_tables` made it: its records, its fields of yours and its contexts."""
+    with db:
+        for table in (f"records_{kind}", f"{kind}_fields", f"{kind}_context"):
+            db.execute(f'DROP TABLE IF EXISTS "{table}"')
 
 
 def write(db: sqlite3.Connection, sql: str, args: Iterable[Any]) -> sqlite3.Cursor:
