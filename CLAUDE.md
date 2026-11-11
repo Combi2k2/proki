@@ -22,6 +22,7 @@ Load the skill **before** the work, not after. When none of these fits, use `fin
 | build, change or explain an automation, or touch the MCP tools | `proki-automation` (the project's own, `skills/proki-automation/`) |
 | start a feature bigger than a fix | `planning-and-task-breakdown`, then `incremental-implementation` |
 | hunt a bug or a failing test | `systematic-debug` |
+| audit the UI, or judge a screen | read `docs/NF-007-ui-audit.md` (the user's checklist), run it in the app |
 | finish a change, before committing | `code-simplification`, then `git-commit` |
 
 Redundant logic is this codebase's recurring cost: the same walk, parse or lookup written twice in two

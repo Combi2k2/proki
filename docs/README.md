@@ -40,6 +40,7 @@ a minute. Older plans and audits are in git history, before the commit that adde
 | [NF-004](NF-004-release.md) | Installers and releases | 🟡 |
 | [NF-005](NF-005-platforms.md) | Platforms | 🟡 |
 | [NF-006](NF-006-ports.md) | Local ports | ✅ |
+| [NF-007](NF-007-ui-audit.md) | UI audit: the checklist and each screen's flow | 📌 |
 
 *✅ ready · 🟡 needs polish · ⚪ not reviewed · 📌 planned · 🔍 exploring.* A planned or
 exploring item gets its file once its approach is settled.
