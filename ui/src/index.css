@@ -2,6 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource/monaspace-neon/latin-400.css";
+@import "@fontsource/monaspace-neon/latin-500.css";
+@import "@fontsource/monaspace-neon/latin-600.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -11,8 +14,13 @@
     --color-code-string: var(--code-string);
     --color-code-number: var(--code-number);
     --color-code-call: var(--code-call);
+    --color-code-punct: var(--code-punct);
+    --color-code-slot: var(--code-slot);
+    --color-added: var(--added);
+    --color-removed: var(--removed);
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
+    --font-mono: 'Monaspace Neon', monospace;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -30,6 +38,7 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
+    --color-changed: var(--changed);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
@@ -69,7 +78,7 @@
     --secondary: oklch(0.269 0 0);
     --secondary-foreground: oklch(0.985 0 0);
     --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
+    --muted-foreground: oklch(0.78 0 0);
     --accent: oklch(0.269 0 0);
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
@@ -85,11 +94,16 @@
     --metric: var(--brand);
     --focused: oklch(0.74 0.12 165);
     --shallow: oklch(0.8 0.12 80);
-    --code-keyword:  oklch(0.76 0.13 330);
-    --code-constant: oklch(0.72 0.13 250);
-    --code-string:   oklch(0.76 0.1 50);
-    --code-number:   oklch(0.84 0.08 150);
-    --code-call:     oklch(0.87 0.09 100);
+    --code-keyword:  #c792ea;  /* the Material theme's, as Python reads in it */
+    --code-constant: #f78c6c;
+    --code-string:   #89ddff;
+    --code-number:   #c3e88d;
+    --code-call:     #82aaff;
+    --code-punct:    #89ddff;
+    --code-slot:     #f07178;
+    --changed:       oklch(0.7 0.15 250);  /* what's changed and not kept yet: blue; added: green; taken out: red */
+    --added:         oklch(0.78 0.15 150);
+    --removed:       oklch(0.68 0.2 25);
     --type-any:     oklch(0.72 0.03 257);
     --type-string:  oklch(0.72 0.15 255);
     --type-integer: oklch(0.76 0.16 148);
@@ -130,6 +144,7 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     }
+  code, pre, kbd, samp, .font-mono { font-variant-ligatures: none; }
   h1, h2, h3 { text-wrap: balance; }
   :focus-visible { outline-color: var(--ring); }
 }
