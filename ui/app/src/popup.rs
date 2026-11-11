@@ -83,12 +83,14 @@ pub fn show_next(app: &AppHandle) {
     let Some(popup) = popup(app) else { return };
     let _ = popup.emit_to("popup", "show", shown);
     place(&popup);
+    crate::tray::touch();
     let _ = popup.show(); // in front, but the app you're in keeps your keys
 }
 
 /// What's shown leaves the screen (its alarm, if it rings, stops with it).
 fn hidden(app: &AppHandle) {
     proki(app).queue.lock().unwrap().showing = None;
+    crate::tray::touch();
     if let Some(popup) = popup(app) {
         let _ = popup.emit_to("popup", "show", Value::Null);
         let _ = popup.hide();

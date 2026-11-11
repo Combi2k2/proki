@@ -249,21 +249,26 @@ pub fn open_main(app: &AppHandle, path: &str) {
         let _ = main.set_focus();
         return;
     }
-    let built = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("main.html".into()))
-        .title("Proki")
-        .inner_size(1180.0, 720.0)
-        .min_inner_size(720.0, 480.0)
-        .accept_first_mouse(true)
-        // the view to open, read by the page as it starts (main.tsx): kept on a reload
-        .initialization_script(&format!("if (!location.hash) location.hash = {};", json!(hash)));
-    #[cfg(target_os = "macos")]
-    let built = built.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
-    match built.build() {
-        Ok(main) => {
-            let _ = main.set_focus();
+    // Built from a task, not here: on Windows a window made inside a command or an event handler never
+    // finishes loading (it stays blank), and the tray's buttons and menu both call this from one.
+    let (app, hash) = (app.clone(), hash.to_string());
+    tauri::async_runtime::spawn(async move {
+        let built = WebviewWindowBuilder::new(&app, "main", WebviewUrl::App("main.html".into()))
+            .title("Proki")
+            .inner_size(1180.0, 720.0)
+            .min_inner_size(720.0, 480.0)
+            .accept_first_mouse(true)
+            // the view to open, read by the page as it starts (main.tsx): kept on a reload
+            .initialization_script(&format!("if (!location.hash) location.hash = {};", json!(hash)));
+        #[cfg(target_os = "macos")]
+        let built = built.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
+        match built.build() {
+            Ok(main) => {
+                let _ = main.set_focus();
+            }
+            Err(e) => eprintln!("the main window: {e}"),
         }
-        Err(e) => eprintln!("the main window: {e}"),
-    }
+    });
 }
 
 pub fn quit(app: &AppHandle) {
@@ -426,9 +431,9 @@ fn main() {
     };
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {})) // one proki: a second one quits
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| open_main(app, "today"))) // one proki: a second one quits, and shows this one's window
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--autostart"]))) // at login it stays in the tray
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             engine,
@@ -446,7 +451,10 @@ fn main() {
             popup::resize,
         ])
         .setup(move |app| {
-            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
+            #[cfg(target_os = "macos")]
+            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;      // black: the menu bar tints it
+            #[cfg(not(target_os = "macos"))]
+            let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/64x64.png"))?;     // in colour: black vanishes on a dark taskbar
             TrayIconBuilder::with_id("proki")
                 .icon(icon)
                 .icon_as_template(true)
@@ -468,6 +476,9 @@ fn main() {
             tray::make(app.handle())?;
             start_engine(app.handle());
             tauri::async_runtime::spawn(bus::connect(app.handle().clone()));
+            if !std::env::args().any(|a| a == "--autostart") {
+                open_main(app.handle(), "today"); // started by you: there's a window to see, not only a tray icon
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -476,7 +487,7 @@ fn main() {
     app.run(|app, event| match event {
         RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(), // its windows closed: it keeps running, in the Dock and the tray
         #[cfg(target_os = "macos")]
-        RunEvent::Reopen { has_visible_windows: false, .. } => open_main(app, "today"), // its Dock icon clicked
+        RunEvent::Reopen { has_visible_windows: false, .. } if !tray::used_within(Duration::from_millis(1500)) => open_main(app, "today"), // its Dock icon clicked, not the tray's panel
         RunEvent::Exit => tauri::async_runtime::block_on(stop(app)), // quit from the Dock or with Cmd-Q too
         _ => {}
     });

@@ -15,6 +15,17 @@ const WIDTH: f64 = 280.0;
 const HEIGHT: f64 = 230.0;
 
 static HIDDEN: Mutex<Option<Instant>> = Mutex::new(None); // when the panel last hid as it lost focus
+static TOUCHED: Mutex<Option<Instant>> = Mutex::new(None); // when the panel last gained or lost focus, or was shown
+
+/// The panel or the popup just came or went: the app being activated then is theirs, not the Dock icon's.
+pub fn touch() {
+    *TOUCHED.lock().unwrap() = Some(Instant::now());
+}
+
+/// Whether the panel or the popup was in use within `span`.
+pub fn used_within(span: Duration) -> bool {
+    TOUCHED.lock().unwrap().is_some_and(|at| at.elapsed() < span)
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct State {
@@ -48,6 +59,9 @@ pub fn make(app: &AppHandle) -> tauri::Result<()> {
     let panel = panel.build()?;
     let window = panel.clone();
     panel.on_window_event(move |event| {
+        if let WindowEvent::Focused(_) = event {
+            *TOUCHED.lock().unwrap() = Some(Instant::now());
+        }
         if matches!(event, WindowEvent::Focused(false)) {
             let _ = window.hide();
             *HIDDEN.lock().unwrap() = Some(Instant::now());
@@ -96,6 +110,7 @@ pub fn toggle(app: &AppHandle, rect: Rect, position: PhysicalPosition<f64>) {
         #[cfg(not(target_os = "macos"))]
         let _ = panel.set_position(at.to_physical::<f64>(scale));
     }
+    *TOUCHED.lock().unwrap() = Some(Instant::now());
     let _ = panel.show();
     let _ = panel.set_focus();
 }

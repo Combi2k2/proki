@@ -1,5 +1,5 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
   font-synthesis: none;
   color-scheme: light dark;
@@ -31,13 +31,13 @@
   }
 }
 * { box-sizing: border-box; }
-html, body, #root { margin: 0; width: 100%; min-height: 100%; }
+html, body, #root { margin: 0; width: 100%; height: 100%; overflow: hidden; }  /* the panel is the window's size: the page never scrolls */
 body { user-select: none; }
 button { font: inherit; color: inherit; cursor: default; border: 0; background: none; }
 button:disabled { opacity: .4; }
 button:focus-visible { outline: 2px solid var(--tray-selection); outline-offset: -2px; }
 .tray-panel {
-  width: 280px; max-width: 100vw; height: 230px; padding: 0 5px;
+  width: 100%; height: 100%; padding: 0 5px;
   position: relative; display: flex; flex-direction: column;
   border-radius: 8px; background: var(--tray-surface); overflow: hidden;
 }
@@ -50,7 +50,7 @@ html[data-native-menu="true"] .tray-panel { background: transparent; }
 .recording[data-recording="true"] { color: var(--tray-red); }
 .recording > span { width: 8px; height: 8px; background: currentColor; border-radius: 50%; }
 .recording:hover:enabled { background: var(--tray-line); }
-.tray-body { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 4px; flex: 1; padding: 5px 0; }
+.tray-body { display: grid; grid-template-columns: minmax(0, 1fr) 96px; align-items: center; gap: 4px; flex: 1; min-height: 0; padding: 5px 0; }
 .tray-actions { min-width: 0; }
 .tray-actions button, .startup button, .tray-footer button { width: 100%; min-height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 9px; border-radius: 4px; text-align: left; white-space: nowrap; }
 .tray-actions button:hover:enabled, .startup button:hover:enabled, .tray-footer button:hover:enabled { background: var(--tray-selection); color: #fff; }
