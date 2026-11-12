@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { Reference, Type } from "@/lib/proki"
 import { exprText, parseExpr } from "@/lib/typed"
-import { Editable } from "@/views/in-place"
+import { Editable, Pick } from "@/views/in-place"
 import { kindOf, schemaOf, TypeIcon } from "@/views/fields"
 import { Making } from "@/views/inspect"
 import { Opens } from "@/views/value-parts"
@@ -35,6 +35,53 @@ export const rowField = (params: Record<string, unknown>, set: (key: string, val
   value: how === "expr" ? exprText(params[key]) : String(params[key] ?? ""),
   onSave: async (t) => (set(key, how === "expr" ? parseExpr(t) ?? undefined : t.trim() || undefined), null),
 })
+
+/** The pages an open can go to: [its view, what it's called, and what it can open in it (none: nothing): its name and an example]. */
+const PAGES: [string, string, [string, string]?][] = [
+  ["today", "Today"], ["tasks", "Tasks", ["Group", "work.group.id"]], ["notes", "Notes"], ["media", "Media"],
+  ["apps", "Apps"], ["metrics", "Metrics"], ["programs", "Automations", ["Automation", "'task_planner'"]], ["tables", "Tables"],
+  ["manual", "Help"], ["settings", "Settings"],
+]
+
+/** An open's path as a page and what's opened in it: `'tasks'`, `'tasks/' + str(work.group.id)`, `'tasks/12'`. Null: it's some other expression. */
+function pathOf(path: string): { view: string; more: string } | null {
+  const t = path.trim()
+  if (!t) return { view: "", more: "" }
+  const [, plain] = /^'(\w+)'$/.exec(t) ?? []
+  const [, called, expr] = /^'(\w+)\/'\s*\+\s*str\((.*)\)$/s.exec(t) ?? []
+  const [, fixed, item]  = /^'(\w+)\/([^']*)'$/.exec(t) ?? []
+  const view = plain ?? called ?? fixed
+  if (!PAGES.some(([v]) => v === view)) return null
+  return { view, more: expr ?? (item === undefined ? "" : /^\d+$/.test(item) ? item : `'${item}'`) }
+}
+const pathFrom = (view: string, more: string) => (more.trim() ? `'${view}/' + str(${more.trim()})` : `'${view}'`)
+
+/** An open's rows: its page, picked from the main ones in a box like a field, and what to open in it where it has more than one thing. */
+function OpenRows({ field }: { field: Field }) {
+  const path  = field("path", "text")
+  const shown = pathOf(path.value)
+  if (!shown) return <RowFields rows={[["Page", "path", "text"]]} field={field} />
+  const card = PAGES.find(([v]) => v === shown.view)?.[2]
+  const set  = (view: string, more: string) => void path.onSave?.(pathFrom(view, more))
+  return (
+    <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-t pt-4 text-xs">
+      <dt className="py-1.5 text-muted-foreground">Page</dt>
+      <dd>
+        <Pick label="Page" value={shown.view} arrow changed={path.changed} className="w-full justify-between rounded-md bg-muted px-2 py-1.5 text-xs hover:no-underline"
+              options={PAGES.map(([v, title]) => [v, title])} onPick={(v) => set(v, "")}>
+          {PAGES.find(([v]) => v === shown.view)?.[1] ?? <span className="text-muted-foreground">Choose a page</span>}
+        </Pick>
+      </dd>
+      {card && (
+        <>
+          <dt className="py-1.5 text-muted-foreground">{card[0]}</dt>
+          <dd><Editable label={card[0]} code long clamp list={NAMES} placeholder={`${card[1]}, or leave empty`} className="w-full min-w-0 rounded-md bg-muted px-2 py-1.5 text-xs"
+                        value={shown.more} changed={path.changed} onSave={async (t) => (set(shown.view, t), null)} onType={(t) => set(shown.view, t)} /></dd>
+        </>
+      )}
+    </dl>
+  )
+}
 
 /** A list as the engine knows it: its type, and the record it is, if it's one. */
 function useList(name: string) {
@@ -91,7 +138,7 @@ export function ActionRows({ kind, field }: { kind: string; field: Field }) {
     )
     return null
   }
-  return <RowFields rows={rows} field={field} aside={aside} />
+  return kind === "open" ? <OpenRows field={field} /> : <RowFields rows={rows} field={field} aside={aside} />
 }
 
 /** Rows: each a label and a shaded box, read as one line and opened in full to change. `hints`: what an empty one says; `boxes`: a row's own box class; `aside`: beside a box; `label`: the labels' width; `joiner`: a word at the labels' end, in the code font, as "is" joins a name to what it stands for. */

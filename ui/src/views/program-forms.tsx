@@ -275,7 +275,6 @@ export function ActionForm({ spec, at, taken, onSave, onCancel, onDirty }: {
       {kind === "ask_usr" && <PopupFields ask kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />}
       {kind === "ask_llm" && <AskLlm params={params} put={set} at={at} />}
       {kind === "ask_jev" && <AskJev params={params} put={set} />}
-      {kind === "lock" && <p className="text-xs text-muted-foreground">Locks the screen.</p>}
     </Form>
   )
 }
