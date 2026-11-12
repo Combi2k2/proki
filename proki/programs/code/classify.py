@@ -1,7 +1,7 @@
 """What's in focus: the apps and websites you use, each tracked or not, and labeled.
 
     track.labels                    every label, in your order: name, desc, group, depth. Yours
-    track.all                       every app seen
+    track.all                       every app seen; set it to add, change or take out apps
     track.now                       the app in focus: key, track, label, source, set_at, conf
     track.now.label == 'Videos'     its label, by name
     track.pin = track.now           the one asked about, whatever's in focus (None: let go)
@@ -176,6 +176,12 @@ class Apps:
         self.db.create(self.rows[key])
         if {"label", "source"} & changed.keys():  self.index = None
 
+    def forget(self, key: str) -> None:
+        """Its row gone (seen again: kept again, as new)."""
+        self.rows.pop(key, None)
+        self.db.delete(key)
+        self.index = None
+
     def label(self, app: str, url: str | None) -> str | None:
         """A window's label, by name (None: none)."""
         return label.name if (label := self.find(key_of(app, url))) else None
@@ -272,10 +278,20 @@ class Track(Linked):
             if (key := self.pinned or self.focus) is not None:
                 self.reask[key] = until or 0
 
+        def _all(apps: list[dict] | None) -> None:
+            given = {app.get("key"): app for app in apps or []}
+            if not all(isinstance(key, str) and key for key in given):
+                raise VariableError("each app in track.all has a key, its name or host")
+            for key in [k for k in self.apps.rows if k not in given]:
+                self.apps.forget(key)
+            for key, app in given.items():
+                if self.apps.get(key) is None:  self.apps.keep(key, clock())
+                self.keep(self.app(key) | app)  # what's left out stays as it is
+
         self.apps.make()
         fields = {
             "labels" : self.apps.labels,
-            "all"    : Linked("track.all", self.all, None, "every app seen, tracked or not", {"type": "array", "items": APP}),
+            "all"    : Linked("track.all", self.all, _all, "every app seen, tracked or not: set it to add, change or take out apps", {"type": "array", "items": APP}),
             "now"    : Linked("track.now", lambda: self.app(self.focus), _set, "the app in focus (None: none, you're away, or it's Proki's or the system's)", APP),
             "pin"    : Linked("track.pin", lambda: self.app(self.pinned), _pin, "the app asked about, whatever's in focus: set it to pin one (None: none)", APP),
             "since"  : Linked("track.since", self.dwell, None, "minutes the one in focus has been", "number"),

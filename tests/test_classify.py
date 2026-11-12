@@ -129,6 +129,17 @@ def test_every_app_seen_is_kept_tracked_or_not(track):
     assert read("track") == {name: read(f"track.{name}") for name in ("labels", "all", "now", "pin", "since", "depth", "reask")}
 
 
+def test_the_apps_seen_are_set_as_a_list(track):
+    track.focus_on(("Krita", None), 0)
+    kept = [app for app in read("track.all") if app["key"] != "Krita"]
+    Stream.registry["track.all"].set([*kept, {"key": "Quillpad", "track": False, "label": "Videos"}])
+    apps = {app["key"]: app for app in read("track.all")}
+    assert "Krita" not in apps and "Krita" not in {app.key for app in track.apps.db.read()}  # taken out, for good
+    assert (apps["Quillpad"]["track"], apps["Quillpad"]["label"], apps["Quillpad"]["source"]) == (False, "Videos", "usr")  # added, yours
+    with pytest.raises(VariableError):
+        Stream.registry["track.all"].set([{"track": True}])
+
+
 def test_its_label_by_name_its_depth_a_similar_ones(track):
     track.focus_on(("Google Chrome", "https://www.youtube.com/watch"), 0)
     assert (read("track.now")["label"], read("track.now")["source"], read("track.depth")) == ("Videos", "dev", 0)

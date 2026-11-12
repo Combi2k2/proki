@@ -333,3 +333,13 @@ def test_links_say_what_writes_a_name_and_what_reads_it(tmp_path):
     assert {"from": "proki"} in ask(e, op="links", name="work.tasks")["writes"]          # the app's: it keeps it
     assert {"from": "proki"} not in count["writes"]
     assert "error" in ask(e, op="links", name="nothing")
+
+
+def test_an_object_is_written_and_read_as_its_fields_are():
+    e      = Engine(settings.SHIPPED_DIR)
+    froms  = lambda name: {w["from"] for w in ask(e, op="links", name=name)["writes"]}
+    bys    = lambda name: {r["by"] for r in ask(e, op="links", name=name)["reads"]}
+    assert froms("track") == {"proki", "user", "auto"} and {"app", "action", "condition"} <= bys("track")  # its fields': track.pin's automations
+    assert "app" in bys("track.all") and "app" not in bys("track.reask")                                  # a list the app keeps, it shows; not a number
+    pin = ask(e, op="links", name="track.pin")["writes"]
+    assert all(w in ask(e, op="links", name="track")["writes"] for w in pin)
