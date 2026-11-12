@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 
 const KEYWORDS  = new Set(["and", "or", "not", "in", "is", "if", "else", "lambda", "for"])
 const CONSTANTS = new Set(["True", "False", "None"])
-const TOKEN     = /('(?:[^'\\]|\\.)*'?|"(?:[^"\\]|\\.)*"?)|((?:\d+\.?\d*(?:e[+-]?\d+)?|\.\d+)(?:[KMB](?!\w))?)|([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)|(\s+)|([^\s\w'"]+)/gi
+const TOKEN     = /('(?:[^'\\]|\\.)*'?|"(?:[^"\\]|\\.)*"?)|((?:\d+\.?\d*(?:e[+-]?\d+)?|\.\d+)(?:[KMB](?!\w))?)|([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)|(\s+)|([()[\]{}])|([^\s\w'"()[\]{}]+)/gi
 const COLOUR    = {
   keyword:  "text-code-keyword",
   constant: "text-code-constant",
@@ -17,6 +17,7 @@ const COLOUR    = {
   number:   "text-code-number",
   call:     "text-code-call",
   name:     "text-foreground",
+  bracket:  "text-code-bracket",
   operator: "text-code-punct",
 } as const
 
@@ -38,11 +39,11 @@ export const useKnown = () => useSyncExternalStore(hear, () => KNOWN)
 export function colour(text: string) {
   if (text.trim() === "–") return <span className="text-muted-foreground">{text}</span>  // nothing there
   return [...text.matchAll(TOKEN)].map((m, i) => {
-    const [all, string, number, word, space] = m
+    const [all, string, number, word, space, bracket] = m
     if (space) return all
     const kind = string ? "string" : number ? "number" : word
       ? KEYWORDS.has(word) ? "keyword" : CONSTANTS.has(word) ? "constant" : /^\s*\(/.test(text.slice(m.index + all.length)) ? "call" : "name"
-      : "operator"
+      : bracket ? "bracket" : "operator"
     const named = kind === "name" ? KNOWN.get(all) : undefined
     return <span key={i} className={named ? undefined : COLOUR[kind]} style={named ? { color: named } : undefined}>{all}</span>
   })

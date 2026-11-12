@@ -16,13 +16,15 @@ export const typing = (e: Event) => void (document.activeElement?.matches("input
  * the start), changed where it is: Enter or leaving it saves (the mistake, if any, under it),
  * Escape puts it back. `className` is its box, the same read or changed: a click anywhere in it changes it.
  * A `long` `code` wraps and stays coloured as it's typed. */
-export function Editable({ label, value, onSave, code, list, long, placeholder = "–", title, editing, changed, boxed, className }: {
+export function Editable({ label, value, onSave, onType, code, list, long, clamp, placeholder = "–", title, editing, changed, boxed, className }: {
   label: string
   value: string
   onSave?: (text: string) => Promise<string | null | undefined>
+  onType?: (text: string) => void  // told of each change as it is typed, and of the text put back by Escape: the dialog's Save is there at once
   code?: boolean
   list?: string     // the names it suggests, as a page's list of them
   long?: boolean    // a few lines, Shift-Enter between them
+  clamp?: boolean   // read as one line, cut with …; changed, in full
   boxed?: boolean   // in a table's cell: a pointer over it shades it, no underline
   placeholder?: string
   title?: string    // why it can't be changed, when it can't
@@ -35,6 +37,7 @@ export function Editable({ label, value, onSave, code, list, long, placeholder =
   const [error, setError] = useState("")
   const [caret, setCaret] = useState(0)  // where it's typed, for the names it offers
   const box = useRef<HTMLTextAreaElement>(null)
+  const before = useRef(value)  // as it was when the change began
   const look = cn("min-w-0 break-words", code && "font-mono")
   const read = !value ? placeholder : code ? colour(value) : value
   if (!onSave) return <span title={title} className={cn(look, className, !value && "text-muted-foreground")}>{read}</span>
@@ -46,12 +49,12 @@ export function Editable({ label, value, onSave, code, list, long, placeholder =
     if (!mistake) setText(null)
   }
   const keys = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) (e.preventDefault(), done())
-    if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), setText(null), setError(""))
+    if (e.key === "Enter" && !e.shiftKey && !(long && onType)) (e.preventDefault(), done())  // held with Save: Enter breaks the line
+    if (e.key === "Escape") (e.preventDefault(), e.stopPropagation(), onType?.(before.current), setText(null), setError(""))
   }
   if (text === null) return (
-    <button type="button" onClick={() => setText(value)} title="Click to change" aria-label={`${label}: ${value || placeholder}, change`}
-            className={cn(look, "max-w-full cursor-text rounded-sm text-left", className, boxed ? HELD : "decoration-muted-foreground decoration-dotted underline-offset-4 hover:underline", !value && "text-muted-foreground", changed && CHANGED)}>
+    <button type="button" onClick={() => (before.current = value, setText(value))} title="Click to change" aria-label={`${label}: ${value || placeholder}, change`}
+            className={cn(look, "max-w-full cursor-text rounded-sm text-left", clamp && "block line-clamp-1", className, boxed ? HELD : "decoration-muted-foreground decoration-dotted underline-offset-4 hover:underline", !value && "text-muted-foreground", changed && CHANGED)}>
       {read}
     </button>
   )
@@ -89,10 +92,10 @@ export function Editable({ label, value, onSave, code, list, long, placeholder =
             </Popover>
             {text.slice(start)}
           </span>
-          <textarea {...field} ref={box} className={cn(field.className, area, "overflow-hidden text-transparent caret-foreground")} onChange={(e) => (setText(e.target.value), typed(e))} onSelect={typed} />
+          <textarea {...field} ref={box} className={cn(field.className, area, "overflow-hidden text-transparent caret-foreground")} onChange={(e) => (setText(e.target.value), onType?.(e.target.value), typed(e))} onSelect={typed} />
         </span>
-      ) : long ? <textarea {...field} onChange={(e) => setText(e.target.value)} />
-            : <input {...field} list={list} onChange={(e) => setText(e.target.value)} />}
+      ) : long ? <textarea {...field} onChange={(e) => (setText(e.target.value), onType?.(e.target.value))} />
+            : <input {...field} list={list} onChange={(e) => (setText(e.target.value), onType?.(e.target.value))} />}
       {error && <span className="font-sans text-[11px] font-normal break-words text-destructive">{error}</span>}
     </span>
   )
@@ -109,7 +112,7 @@ export type Staged = {
   patch: Record<string, unknown>
   put: (key: string, value: unknown, was: unknown) => void  // a value back to `was` is no change
   lit: (key: string) => boolean                             // changed, not kept yet
-  field: (key: string, was: string, on?: boolean) => { value: string; changed?: boolean; onSave?: (text: string) => Promise<null> }  // an Editable's props
+  field: (key: string, was: string, on?: boolean) => { value: string; changed?: boolean; onSave?: (text: string) => Promise<null>; onType?: (text: string) => void }  // an Editable's props
   dirty: boolean            // something's changed, not kept yet
   error: string             // what the last Save was refused with
   save: () => Promise<void>  // keep what's changed
@@ -147,6 +150,7 @@ export function Staging({ onSave, reserve = true, onCancel, children }: {
     field: (key: string, was: string, on = true) => !on ? { value: was } : {
       value: (patch[key] as string | undefined) ?? was, changed: key in patch,
       onSave: async (text: string) => (put(key, text, was), null),
+      onType: (text: string) => put(key, text, was),
     },
   } as Staged
   const dirty = Object.keys(patch).length > 0

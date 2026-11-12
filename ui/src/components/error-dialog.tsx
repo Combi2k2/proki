@@ -5,7 +5,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-const UNRESOLVABLE = /failed to fetch|networkerror|load failed|timed out|timeout|connection|unreachable|not running|no response/i
+const UNRESOLVABLE = /failed to fetch|networkerror|load failed|timed out|connection (refused|reset|lost|failed)|unreachable|not running|no response/i
 
 /** Whether the person can do nothing about `message`: Proki itself isn't answering. */
 export const unresolvable = (message: string) => UNRESOLVABLE.test(message)

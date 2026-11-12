@@ -17,8 +17,11 @@ import { BARE, CodeInput, Template } from "@/views/code"
 import { Criteria, TypeField } from "@/views/fields"
 import { CHANGED_LINE, Editable, Pick, useStaged } from "@/views/in-place"
 import { file, MediaPicker } from "@/views/media"
+import { ActionRows, ACTION_ROWS, NAMES, rowField } from "@/views/action-rows"
 
-export const NAMES = "proki-names"  // the names a field suggests: a <datalist> the page fills
+export { NAMES }
+
+
 const ASKS = ["ask_usr", "ask_jev", "ask_llm"]
 
 const TIMEOUT: Record<string, number> = { ask_usr: 120, ask_jev: 10, ask_llm: 10 }  // seconds, unless it says
@@ -45,18 +48,6 @@ export const Tinted = ({ icon: Icon, tint }: { icon: LucideIcon; tint: string })
 export type Save = (data: Record<string, unknown>) => Promise<string | null>
 
 // --- values, as they're typed ---------------------------------------------------------------
-
-/** A variable's value as it's typed: empty is unknown, true / false, a number, else an expression. */
-export function valueText(value: unknown): string {
-  return value === null || value === undefined ? "" : String(value)
-}
-
-export function parseValue(text: string): boolean | number | string | null {
-  const t = text.trim()
-  if (t === "") return null
-  if (t === "true" || t === "false") return t === "true"
-  return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : t
-}
 
 /** A rule's side: a number, else an expression. */
 export const parseSide = (text: string) => (/^-?\d+(\.\d+)?$/.test(text.trim()) ? Number(text.trim()) : text.trim())
@@ -288,66 +279,17 @@ export function ActionForm({ spec, at, taken, onSave, onCancel, onDirty }: {
       {!spec && (
         <DialogHeader>
           <DialogTitle>
-            <Pick label="Kind" value={kind} className="gap-2 text-base"
+            <Pick label="Kind" value={kind} arrow className="gap-2 text-base"
                   options={Object.entries(ACTIONS).map(([k, [said, Icon, tint]]) => [k, <><Tinted icon={Icon} tint={tint} />{said}</>])}
                   onPick={(k) => { if (name === free(kind, taken)) setName(free(k, taken)); setKind(k); setParams({}) }} />
           </DialogTitle>
           <DialogDescription asChild><div><Editable label="Description" value={desc} long placeholder="No description" onSave={async (t) => (setDesc(t), null)} className="text-sm text-muted-foreground" /></div></DialogDescription>
         </DialogHeader>
       )}
-      {(kind === "set" || kind === "add" || kind === "sub" || kind === "append" || kind === "remove") && (
-        <>
-          {kind === "append" ? (
-            <>
-              <Row>
-                <Field label="List" hint="a variable that's a list: notes, work.groups">
-                  <Text value={String(params.name ?? "")} onChange={(v) => set("name", v)} code names autoFocus placeholder="note" />
-                </Field>
-                <Field label="Item">
-                  <Choice value={typeof params.expr === "string" ? "value" : "object"} onChange={(v) => set("expr", v === "value" ? "" : { "": "" })}
-                          options={[["object", "an object, field by field"], ["value", "a value, an expression"]]} />
-                </Field>
-              </Row>
-              {typeof params.expr === "string" ? (
-                <Field label="Value" hint="expression">
-                  <Text value={params.expr} onChange={(v) => set("expr", v)} code names placeholder="time + 60" />
-                </Field>
-              ) : (
-                <FieldsField value={(params.expr as Record<string, string> | undefined) ?? { "": "" }} onChange={(v) => set("expr", v)} />
-              )}
-            </>
-          ) : kind === "remove" ? (
-            <Row>
-              <Field label="List" hint="a variable that's a list of objects, each with an id">
-                <Text value={String(params.name ?? "")} onChange={(v) => set("name", v)} code names autoFocus placeholder="note" />
-              </Field>
-              <Field label="Id" hint="expression: the item's id">
-                <Text value={String(params.id ?? "")} onChange={(v) => set("id", v || undefined)} code names placeholder="todo.id" />
-              </Field>
-            </Row>
-          ) : (
-            <Row>
-              <Field label="Variable" hint="or a place in it: work.tasks[at].status">
-                <Text value={String(params.name ?? "")} onChange={(v) => set("name", v)} code names autoFocus placeholder="pokes" />
-              </Field>
-              <Field label={{ set: "To", add: "By", sub: "By" }[kind]} hint="expression">
-                <Text value={valueText(params.expr)} onChange={(v) => set("expr", parseValue(v) ?? undefined)} code names placeholder="pokes + 1" />
-              </Field>
-            </Row>
-          )}
-          <Field label="Only when" hint="expression; empty: always">
-            <Text value={String(params.when ?? "")} onChange={(v) => set("when", v || undefined)} code names placeholder="answer == 0" />
-          </Field>
-        </>
-      )}
+      {kind in ACTION_ROWS && <ActionRows kind={kind} field={rowField(params, set)} />}
       {kind === "poke" && <PopupFields kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />}
       {kind === "ask_jev" && <JevFields params={params} set={set} />}
       {ASKS.includes(kind) && kind !== "ask_jev" && <AskFields kind={kind} params={params} set={set} picks={picks} pick={pick} at={at} />}
-      {kind === "open" && (
-        <Field label="Page" hint="its path, an expression: a view (today, tasks, notes, ...), then what in it">
-          <Text value={String(params.path ?? "")} onChange={(v) => set("path", v || undefined)} code names placeholder="'tasks/' + str(work.group.id)" />
-        </Field>
-      )}
       {kind === "lock" && <p className="text-xs text-muted-foreground">Locks the screen.</p>}
     </Form>
   )
@@ -378,31 +320,10 @@ export function cleaned(kind: string, params: Params): Params {
   return kept
 }
 
-/** A new record's fields, each an expression's value. */
-function FieldsField({ value, onChange }: { value: Record<string, string>; onChange: (value: Record<string, string>) => void }) {
-  const rows = Object.entries(value)
-  const put = (next: [string, string][]) => onChange(Object.fromEntries(next))
-  return (
-    <Field label="Fields" hint="each an expression">
-      {rows.map(([key, expr], i) => (
-        <div key={i} className="flex items-center gap-1.5">
-          <Input value={key} onChange={(e) => put(rows.map((r, j) => (j === i ? [e.target.value, r[1]] : r)))}
-                 className="h-8 w-28 font-mono text-xs" placeholder="content" />
-          <span className="text-xs text-muted-foreground">is</span>
-          <CodeInput value={expr} onChange={(e) => put(rows.map((r, j) => (j === i ? [r[0], e.target.value] : r)))}
-                     list={NAMES} layout="flex-1" className="h-8 text-xs" placeholder="'Todo'" />
-          <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" onClick={() => put(rows.filter((_, j) => j !== i))}><Trash2 /></Button>
-        </div>
-      ))}
-      <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => put([...rows.filter(([k]) => k !== ""), ["", ""]])}><Plus /> Field</Button>
-    </Field>
-  )
-}
-
-type Pair = [string, string]
+export type Pair = [string, string]
 
 /** What's said, as the popup shows it: its text with {name}s filled from expressions. */
-const contextOf = (value: unknown) => {
+export const contextOf = (value: unknown) => {
   const context = typeof value === "string" ? { format: value, values: {} } : (value as { format?: string; values?: Record<string, string> | Pair[] }) ?? {}
   return { format: context.format ?? "", values: (Array.isArray(context.values) ? context.values : Object.entries(context.values ?? {})) as Pair[] }
 }
@@ -445,7 +366,7 @@ function ExprField({ label, value, placeholder, onChange, changed }: { label: st
 
 /** What fills a text's {name}s, as a table like the resource dialog's: a name, then the expression it stands for, a row
  * each, typed where they're read; a row's trash is there as you point at it. `was`: what it was, to mark what's changed. */
-function Placeholders({ pairs, was, onChange }: { pairs: Pair[]; was?: Pair[]; onChange: (pairs: Pair[]) => void }) {
+export function Placeholders({ pairs, was, onChange }: { pairs: Pair[]; was?: Pair[]; onChange: (pairs: Pair[]) => void }) {
   const diff = was && compared(was.map(([k]) => k), pairs.map(([k]) => k))
   const put  = (i: number, at: 0 | 1, text: string) => onChange(pairs.map((p, j) => (j !== i ? p : at ? [p[0], text] : [text, p[1]]) as Pair))
   const lost = (at: number) => diff?.gone.filter((g) => g.at === at).map((g) => g.label) ?? []

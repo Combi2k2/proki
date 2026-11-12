@@ -415,10 +415,13 @@ function Fresh({ string, onDone }: { string: boolean; onDone: (value?: unknown) 
 }
 
 /** A new record row: the fields you set asked for, those that start by themselves filled in. */
-function Making({ record, type, sample, onAdd, onClose }: { record?: string; type?: Type; sample: unknown[]; onAdd: (row: Record<string, unknown>) => void; onClose: () => void }) {
+export function Making({ record, type, sample, onAdd, onClose, title = "New row", action = "Add", initial, names }: {
+  initial?: Record<string, unknown>; names?: string;  // names: each field is an expression, suggesting from the datalist of that id
+ record?: string; type?: Type; sample: unknown[]; onAdd: (row: Record<string, unknown>) => void; onClose: () => void; title?: string; action?: string
+}) {
   type Ask = { key: string; type?: Type; ask: boolean; initial?: unknown }
   const [asks, setAsks] = useState<Ask[] | null>(null)
-  const [given, setGiven] = useState<Record<string, unknown>>({})
+  const [given, setGiven] = useState<Record<string, unknown>>(initial ?? {})
   useEffect(() => {
     ;(async () => {
       const read = record ? await window.proki.fields({ op: "read", record }) : null
@@ -431,19 +434,21 @@ function Making({ record, type, sample, onAdd, onClose }: { record?: string; typ
     })()
   }, [record, type, sample])
   if (!asks) return null
-  const made = Object.fromEntries(asks.filter((a) => !a.ask && a.initial !== undefined).map((a) => [a.key, a.initial]))
+  const made = names ? {} : Object.fromEntries(asks.filter((a) => !a.ask && a.initial !== undefined).map((a) => [a.key, a.initial]))
   return (
     <Dialog open onOpenChange={(to) => !to && onClose()}>
       <DialogContent over className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-sm">New row</DialogTitle>
+          <DialogTitle className="text-sm">{title}</DialogTitle>
           <DialogDescription className="sr-only">Fill in its fields.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col text-xs">
           {asks.filter((a) => a.ask).map((a) => (
             <div key={a.key} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-3 border-b py-1.5 last:border-b-0">
               <span className="flex min-w-0 items-center gap-1.5"><TypeIcon type={a.type} /><code className="truncate font-medium">{a.key}</code></span>
-              {emptyOf(a.type)
+              {names ? <Editable label={a.key} code long list={names} placeholder="expression" className="w-full rounded-md bg-muted px-2 py-1.5 text-xs"
+                                 value={String(given[a.key] ?? "")} onType={(t) => setGiven({ ...given, [a.key]: t })} onSave={async (t) => (setGiven({ ...given, [a.key]: t.trim() || undefined }), null)} />
+              : emptyOf(a.type)
                 ? <Collection value={given[a.key]} type={a.type} title={a.key} onPut={async (v) => (setGiven({ ...given, [a.key]: v }), null)} />
                 : <Scalar value={given[a.key] ?? null} string={said(a.type) === "string"} flag={said(a.type) === "boolean"} onPut={async (v) => (setGiven({ ...given, [a.key]: v }), null)} />}
             </div>
@@ -451,7 +456,7 @@ function Making({ record, type, sample, onAdd, onClose }: { record?: string; typ
         </div>
         <div className="flex justify-end gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="button" size="sm" onClick={() => onAdd({ ...made, ...given })}>Add</Button>
+          <Button type="button" size="sm" onClick={() => onAdd({ ...made, ...given })}>{action}</Button>
         </div>
       </DialogContent>
     </Dialog>

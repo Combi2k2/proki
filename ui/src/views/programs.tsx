@@ -11,7 +11,7 @@
 // program still runs. A state renamed takes its new name in the transitions to it, and as the
 // program's start; a transition to a state not there yet makes it.
 
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
@@ -27,9 +27,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from "@/components/ui/switch"
 import { GLOBAL, type ActionSpec, type BranchSpec, type Change, type GlobalSpecs, type ProgramDetail, type ProgramSpecs, type Reference, type Scope, type Where } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { ACTIONS, ActionForm, BranchForm, cleaned, PopupFields, type Picks, NAMES, parseValue, StateForm, Tinted, valueText, type Save } from "@/views/program-forms"
+import { ACTIONS, ActionForm, BranchForm, cleaned, PopupFields, type Picks, StateForm, Tinted, type Save } from "@/views/program-forms"
+import { ActionRows, ACTION_ROWS } from "@/views/action-rows"
+import { exprText, parseExpr } from "@/lib/typed"
 import { Expr } from "@/views/code"
-import { Editable, Pick, Staging, typing } from "@/views/in-place"
+import { Editable, Pick, Staging, typing, type Staged } from "@/views/in-place"
 import { Discard } from "@/components/discard"
 import { Truth } from "@/views/value-parts"
 import { forgetGraph, GraphView } from "@/views/program-graph"
@@ -656,17 +658,6 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
 
 // --- what a scope can use -------------------------------------------------------------------
 
-/** What each kind of action says in its dialog, a row each, changed where it's read: [label, the
- * param, how it's read]. A kind not here (a poke, a question) is changed in its form. */
-const ACTION_ROWS: Record<string, [string, string, "text" | "expr"][]> = {
-  set:    [["Variable", "name", "text"], ["To", "expr", "expr"], ["Only when", "when", "text"]],
-  add:    [["Variable", "name", "text"], ["By", "expr", "expr"], ["Only when", "when", "text"]],
-  sub:    [["Variable", "name", "text"], ["By", "expr", "expr"], ["Only when", "when", "text"]],
-  remove: [["List", "name", "text"], ["Id", "id", "text"], ["Only when", "when", "text"]],
-  open:   [["Page", "path", "text"]],
-  lock:   [],
-}
-
 /** An action, over the state's dialog: its kind, what it's for, and what it does, each part changed
  * where it is. A kind with more to it (a poke, a question) shows its form here. `update`: sends
  * the changes (the mistake, if any); `form`: the kind's own, for those. */
@@ -681,18 +672,24 @@ function ActionSeen({ spec, update, remove, form, close }: {
     window.proki.tool("get_picks", { id: spec.id }).then((answer) => !answer.error && setPicks({ image: answer.media.filter((m: { kind: string }) => m.kind === "image").map((m: { key: string }) => m.key),
                                                                                               sound: answer.media.filter((m: { kind: string }) => m.kind === "sound").map((m: { key: string }) => m.key) }))
   }, [spec.id, popup])
-  const rows   = spec.kind === "append" ? (typeof spec.params.expr === "string" ? [["List", "name", "text"], ["Value", "expr", "text"]] as [string, string, "text"][] : undefined) : ACTION_ROWS[spec.kind]
+  const rows   = ACTION_ROWS[spec.kind]
   const inline = popup || !!rows  // else the kind's own form, with its own Save
+  const [refused, setRefused] = useState("")
+  const shown    = (st: Staged) => (st.patch.kind as string | undefined) ?? spec.kind  // the kind, as changed and not kept yet
+  const switchTo = async (k: string, st: Staged) => {  // between kinds with rows: held with the rest until Save; else at once
+    if (k in ACTION_ROWS && spec.kind in ACTION_ROWS) return st.put("kind", k, spec.kind)
+    setRefused((await send({ kind: k, params: popup && (k === "poke" || k === "ask_usr") ? cleaned(k, spec.params) : {} })) ?? "")
+  }
   const send   = (patch: Record<string, unknown>) => update({ name: spec.name, desc: spec.desc, kind: spec.kind, params: spec.params, ...patch })
   const commit = (patch: Record<string, unknown>) => send({ params: cleaned(spec.kind, { ...spec.params, ...patch }) })
   const keep   = async (patch: Record<string, unknown>) => {  // everything held, at once
-    const { desc, picks: picked, ...held } = patch
-    const read   = new Map((rows ?? []).map(([, key, how]) => [key, how]))
-    const params = Object.fromEntries(Object.entries(held).map(([key, value]) => [key, !read.has(key) ? value : read.get(key) === "expr" ? parseValue(value as string) ?? undefined : (value as string).trim() || undefined]))
+    const { desc, picks: picked, kind: to = spec.kind, ...held } = patch as { desc?: string; picks?: Picks; kind?: string }
+    const read   = new Map((ACTION_ROWS[to] ?? []).map(([, key, how]) => [key, how]))
+    const params = Object.fromEntries(Object.entries(held).map(([key, value]) => [key, !read.has(key) ? value : read.get(key) === "expr" ? parseExpr(value as string) ?? undefined : (value as string).trim() || undefined]))
     const { options } = params
     if (options === "") return "Say where the options come from."
     if (Array.isArray(options) && options.every((o) => !String(o).trim())) return "Add at least one option."
-    const mistake = await send({ ...(desc === undefined ? {} : { desc }), params: cleaned(spec.kind, { ...spec.params, ...params }) })
+    const mistake = await send({ ...(desc === undefined ? {} : { desc }), kind: to, params: cleaned(to, { ...(to === spec.kind ? spec.params : Object.fromEntries(Object.entries(spec.params).filter(([k]) => ACTION_ROWS[to]?.some(([, key]) => key === k)))), ...params }) })
     if (mistake || !picked) return mistake
     const { image, sound } = picked as Picks
     await window.proki.tool("set_picks", { id: spec.id, keys: [...image, ...sound] })
@@ -707,9 +704,9 @@ function ActionSeen({ spec, update, remove, form, close }: {
             <>
               <DialogHeader>
                 <DialogTitle className="pr-24">
-                  <Pick label="Kind" value={spec.kind} className="gap-2 text-base"
+                  <Pick label="Kind" value={shown(st)} arrow className="gap-2 text-base"
                         options={Object.entries(ACTIONS).map(([k, [name, Of, on]]) => [k, <><Tinted icon={Of} tint={on} />{name}</>])}
-                        onPick={(k) => void send({ kind: k, params: popup && (k === "poke" || k === "ask_usr") ? cleaned(k, spec.params) : {} })} />
+                        onPick={(k) => switchTo(k, st)} />
                 </DialogTitle>
                 <DialogDescription asChild>
                   <div>
@@ -722,20 +719,13 @@ function ActionSeen({ spec, update, remove, form, close }: {
               {popup ? (
                 <PopupFields ask={spec.kind === "ask_usr"} kind={spec.kind} params={spec.params} commit={commit} picks={(st.patch.picks as Picks | undefined) ?? picks}
                              pick={(which, keys) => st.put("picks", { ...((st.patch.picks as Picks | undefined) ?? picks), [which]: keys }, picks)} />
-              ) : rows ? (
-                <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 border-t pt-4 text-xs">
-                  {rows.map(([label, key, how]) => (
-                    <Fragment key={key}>
-                      <dt className="text-muted-foreground">{label}</dt>
-                      <dd><Editable label={label} code long list={NAMES} placeholder={key === "when" ? "always" : "–"} className="w-full"
-                                    {...st.field(key, how === "expr" ? valueText(spec.params[key]) : String(spec.params[key] ?? ""))} /></dd>
-                    </Fragment>
-                  ))}
-                </dl>
+              ) : ACTION_ROWS[shown(st)] ? (
+                <ActionRows kind={shown(st)} field={(key, how) => st.field(key, how === "expr" ? exprText(spec.params[key]) : String(spec.params[key] ?? ""))} />
               ) : form}
             </>
           )}
         </Staging>
+        {refused && <ErrorDialog message={refused} onClose={() => setRefused("")} />}
       </DialogContent>
     </Dialog>
   )
