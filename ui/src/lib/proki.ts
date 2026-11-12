@@ -104,6 +104,7 @@ export type Weighed = {
   records: string[]
   fields: Field[]
   own: string[]   // the record's own fields
+  code: { key: string; desc: string; worked: Type }[]   // its fields Proki works out, never changed
   rows: { id: number | string; name: string; values: Record<string, unknown> }[]
   contexts: { jev: string; llm: string }   // what every question is read under
 }

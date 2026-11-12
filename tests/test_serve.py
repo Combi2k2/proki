@@ -244,6 +244,7 @@ async def test_the_fields_through_the_bus():
     read   = await fields({"op": "read"})
     assert ranked(read) == ["Due soon", "Someday"]  # the weightiest first
     assert read["rows"][0]["values"]["pressing"] > 0 and "ready" in read["own"] and "work.groups" in read["records"]
+    assert ("ready", "boolean") in [(f["key"], f["worked"]) for f in read["code"]]  # worked out by its code, listed apart
     score = next(f for f in read["fields"] if f["key"] == "score")
     assert score["shipped"] and score["type"] == "number" and score["srcs"][0]["from"] == "expr"
     assert next(f for f in read["fields"] if f["key"] == "spent")["srcs"] == [{"from": "auto", "initial": 0}]

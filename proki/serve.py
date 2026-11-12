@@ -30,9 +30,10 @@ for the tasks', how they weigh them. A change is checked first, then everything'
 with it (`reload`):
 
     {"op": "read"}                                                → {"records": [...], "fields": [...], "own": [...],
-                                                                     "rows": [...], "contexts": {"jev": ..., "llm": ...}}
+                                                                     "code": [...], "rows": [...], "contexts": {"jev": ..., "llm": ...}}
                                                                      each field with its type, whether proki came with
-                                                                     it, and the programs that set it; each record with
+                                                                     it, and the programs that set it; the ones its code
+                                                                     works out; each record with
                                                                      its fields' values (the ready tasks, the
                                                                      weightiest first)
     {"op": "define", "field": {"key": "official", "srcs": [...]}} → {}       a new one, or one changed
@@ -213,6 +214,7 @@ def on_fields(request: dict, work: Work, reload: Callable[[], None]) -> dict:
             "records" : records.kinds(),
             "fields"  : [asdict(f) | {"worked": f.type, "shipped": f.key in table.shipped, "setters": setters(table, f.key), "places": placed(table, f.key)} for f in table.fields.values()],
             "own"     : [*STAMPS, *table.code],
+            "code"    : [{"key": k, "desc": desc, "worked": t} for k, (t, desc, _) in table.code.items()],
             "rows"    : [{"id": row["id"], "name": str(row.get("name") or row["id"]), "values": {k: row.get(k) for k in keys}} for row in table.current()],
             "contexts": {channel: table.context(channel) for channel in ASKS},
         }
