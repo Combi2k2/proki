@@ -129,7 +129,7 @@ function QuestionRow({ id, cols, mark, children, onOpen, onDelete }: { id: numbe
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }}
-         className={cn("group/row relative border-b bg-background last:border-b-0 hover:bg-muted/50", mark === "added" && "bg-added/10", mark === "changed" && "bg-changed/10", isDragging && "z-10 shadow-lg ring-1 ring-foreground/10")}>
+         className={cn("group/row relative border-t hover:bg-muted/50", mark === "added" && "bg-added/10", mark === "changed" && "bg-changed/10", isDragging && "z-10 shadow-lg ring-1 ring-foreground/10")}>
       <button type="button" {...attributes} {...listeners} aria-label="Move the question" className="absolute top-1/2 left-1.5 -translate-y-1/2 cursor-grab touch-none text-muted-foreground hover:text-foreground">
         <GripVertical className="size-3.5" />
       </button>
@@ -213,7 +213,7 @@ export function AskJev({ params, put, was }: { params: Params; put: Put; was?: P
                   onClick={() => (put("questions", [...questions, { type: "noul", question: "", result: free() }]), setOpen(questions.length))}><Plus /> Question</Button>
         </div>
         <div className="rounded-md border">
-          <div className={cn(COLS, "border-b bg-muted/40 py-1 pr-9 pl-7 text-muted-foreground")}><span>Kind</span><span>Question</span><span>Saved to</span></div>
+          <div className={cn(COLS, "bg-muted/40 py-1 pr-9 pl-7 text-muted-foreground")}><span>Kind</span><span>Question</span><span>Saved to</span></div>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={moved}>
             <SortableContext items={questions.map((_, i) => i + 1)} strategy={verticalListSortingStrategy}>
               {questions.map((x, i) => (
