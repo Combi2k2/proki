@@ -42,7 +42,7 @@ export function Expr({ children, className, ...props }: { children: string } & O
 const SIZE = "text-base md:text-sm"  // the field's own, before the caller's
 
 /** A field with no box: its text, a line under it as you point at it. */
-export const BARE = "h-7 rounded-none border-0 border-b border-transparent bg-transparent px-0 text-xs shadow-none dark:bg-transparent hover:border-dotted hover:border-muted-foreground focus-visible:border-solid focus-visible:border-ring focus-visible:ring-0"
+export const BARE = "h-7 rounded-none border-0 border-b border-transparent bg-transparent px-0 text-xs md:text-xs shadow-none dark:bg-transparent hover:border-dotted hover:border-muted-foreground focus-visible:border-solid focus-visible:border-ring focus-visible:ring-0"
 
 /** A field to type an expression in, coloured. `layout`: where the field sits (its width, flex), on its box.
  * `render`: how the text is drawn, as an expression's colours by default. */
@@ -90,36 +90,43 @@ const Slots = ({ text, string }: { text: string; string?: boolean }) => (
   <>{text.split(SLOT).map((part, i) => (i % 2 ? <Slot key={i} inner={part.slice(1, -1)} /> : string && part ? <span key={i} className="text-code-string">{part}</span> : part))}</>
 )
 
-/** How tall the text typed in `ref`'s field is, measured as `dep` (what it holds) changes and as it's resized. A field that draws its text under a transparent
- * one must never be shorter than this: it would scroll its own text, and the two would no longer lie over each other. Give the box a spacer this high. */
-export function useFit(ref: RefObject<HTMLTextAreaElement | null>, dep: unknown) {
+/** How tall the text typed in a field needs, measured on `clone`: an unseen copy of the field, no taller than its padding, as wide as the field (it never touches the
+ * field itself, so nothing it does can change what it measures). A field that draws its text under a transparent one must never be shorter than this: it would scroll
+ * its own text, and the two would no longer lie over each other. Give the box a spacer this high. */
+export function useFit(clone: RefObject<HTMLTextAreaElement | null>, dep: unknown) {
   const [fit, setFit] = useState(0)
   useLayoutEffect(() => {
-    const el = ref.current
+    const el = clone.current
     if (!el) return
-    const measure = () => { const kept = el.style.height; el.style.height = "0px"; setFit(el.scrollHeight); el.style.height = kept; el.scrollTop = 0 }
+    const measure = () => setFit(el.scrollHeight)
     measure()
     const watch = new ResizeObserver(measure)
     watch.observe(el)
     return () => watch.disconnect()
-  }, [ref, dep])
+  }, [clone, dep])
   return fit
 }
+
+/** The unseen copy of a field that `useFit` measures: the same text and the same look as the field. */
+export const FitClone = ({ clone, value, className }: { clone: RefObject<HTMLTextAreaElement | null>; value: string; className: string }) => (
+  <textarea ref={clone} aria-hidden tabIndex={-1} readOnly value={value} className={cn(className, "pointer-events-none invisible absolute top-0 left-0 h-0 min-h-0 resize-none overflow-hidden border-0")} />
+)
 
 /** A text to type, its {name} slots drawn as code as they're typed; only the colour differs, so the
  * caret stays where the letters are. It grows with what's typed. The line under it shows as you point
  * at it. */
 export function Template({ value, className, strings, ...props }: { value: string; strings?: boolean } & ComponentProps<typeof Textarea>) {
   const box  = cn("col-start-1 row-start-1 min-h-14 w-full px-0 py-1 leading-relaxed break-words whitespace-pre-wrap", strings ? "font-mono text-xs" : "text-sm")
-  const area = useRef<HTMLTextAreaElement>(null)
-  const fit  = useFit(area, value)
+  const clone = useRef<HTMLTextAreaElement>(null)
+  const fit   = useFit(clone, value)
   return (
-    <div className="grid">
+    <div className="relative grid">
       <div aria-hidden className={cn(box, "pointer-events-none", className)}>
         <Slots text={value} string={strings} />{"\n"}
       </div>
       <div aria-hidden style={{ height: fit }} className="col-start-1 row-start-1" />
-      <textarea ref={area} value={value} spellCheck={false} {...props}
+      <FitClone clone={clone} value={value} className={box} />
+      <textarea value={value} spellCheck={false} {...props}
                 className={cn(box, "m-0 block resize-none overflow-hidden border-0 bg-transparent text-transparent caret-foreground outline-none placeholder:text-muted-foreground", !strings && "border-b border-transparent hover:border-dotted hover:border-muted-foreground focus:border-solid focus:border-ring", className)} />
     </div>
   )

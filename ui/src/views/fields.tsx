@@ -193,7 +193,7 @@ function LlmForm({ field, now, was, st, post }: { field: Field; now: Source; was
   return (
     <div className="flex flex-col gap-4 border-t pt-4">
       <TemplateBox label="Prompt" value={now.context ?? ""} changed={"context" in st.patch} onChange={(e) => st.put("context", e.target.value, was.context ?? "")} placeholder="How many hours will this take?" className="min-h-24" />
-      <Waiting params={{ timeout: now.timeout }} was={{ timeout: was.timeout }} put={(_, v) => st.put("timeout", v, was.timeout)} wait={10} save={false} />
+      <Waiting params={{ timeout: now.timeout }} was={{ timeout: was.timeout }} put={(_, v) => st.put("timeout", v, was.timeout)} wait={60} save={false} />
       <div className="flex flex-col gap-3 border-t pt-4 text-xs">
         <div style={cols} className="grid items-center gap-x-3 gap-y-2">
           <Label text="Answer schema" />
@@ -736,18 +736,18 @@ function AddRow({ grid, onAdd, onClose }: { grid: string; onAdd: (key: string, d
   const [key, setKey]     = useState("")
   const [desc, setDesc]   = useState("")
   const [error, setError] = useState("")
-  const keys = async (e: KeyboardEvent) => {
-    if (e.key === "Escape") return onClose()
-    if (e.key !== "Enter" || !key.trim()) return
+  const add = async () => {  // Enter, or leaving the row: a name makes the field, none drops the row
+    if (!key.trim()) return onClose()
     const said = await onAdd(key.trim(), desc.trim())
     setError(said)
     if (!said) onClose()
   }
+  const keys = (e: KeyboardEvent) => (e.key === "Escape" ? onClose() : e.key === "Enter" && (e.preventDefault(), void add()))
   return (
-    <div className="border-b py-1 pr-9 pl-2 last:border-b-0" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && !key.trim() && onClose()}>
+    <div className="border-b py-1 pr-9 pl-2 last:border-b-0" onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && void add()}>
       <div className={grid}>
-        <Input {...PLAIN} autoFocus value={key} onChange={(e) => setKey(e.target.value)} onKeyDown={keys} placeholder="new_field" aria-label="Name" className={cn(BARE, "font-mono")} />
-        <Input value={desc} onChange={(e) => setDesc(e.target.value)} onKeyDown={keys} placeholder="Description" aria-label="Description" className={BARE} />
+        <Input {...PLAIN} autoFocus value={key} onChange={(e) => setKey(e.target.value)} onKeyDown={keys} placeholder="new_field" aria-label="Name" className={cn(BARE, "font-mono font-semibold")} />
+        <Input value={desc} onChange={(e) => setDesc(e.target.value)} onKeyDown={keys} placeholder="Description" aria-label="Description" className={cn(BARE, "text-muted-foreground")} />
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
