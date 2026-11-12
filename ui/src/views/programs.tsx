@@ -27,20 +27,20 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from "@/components/ui/switch"
 import { GLOBAL, type ActionSpec, type BranchSpec, type Change, type GlobalSpecs, type ProgramDetail, type ProgramSpecs, type Reference, type Scope, type Where } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { ACTIONS, ActionForm, BranchForm, cleaned, contextOf, PopupFields, type Picks, StateForm, Tinted, type Save } from "@/views/program-forms"
+import { ACTIONS, ActionForm, cleaned, contextOf, PopupFields, type Picks, StateForm, Tinted, type Save } from "@/views/program-forms"
 import { ActionRows, ACTION_ROWS } from "@/views/action-rows"
 import { AskJev, AskLlm, START } from "@/views/ask-actions"
 import { exprText, parseExpr } from "@/lib/typed"
 import { Expr } from "@/views/code"
 import { Editable, Pick, Staging, typing, type Staged } from "@/views/in-place"
 import { Discard } from "@/components/discard"
-import { Truth } from "@/views/value-parts"
+import { TransitionForm, Way } from "@/views/transition"
 import { forgetGraph, GraphView } from "@/views/program-graph"
 import { action } from "@/views/program-inspect"
 import { NewProgram, ProgramDialog, TagChip } from "@/views/program-new"
 import { useDrag } from "@/views/tasks"
 import { friendly, humane, light } from "@/lib/friendly"
-import { Apply, Block, CHANGED, FLASH, GO, Line, Path, Running, revert, useSpecs, bus } from "@/views/scope-shared"
+import { Apply, Block, CHANGED, FLASH, GO, Line, Path, Running, revert, useLeave, useSpecs, bus } from "@/views/scope-shared"
 import { Corner } from "@/views/resources"
 
 const depth = (p: Path) => (p.program === null ? 0 : p.state === null ? 1 : 2)
@@ -507,7 +507,18 @@ function StateMain({ name, state, specs, detail, reference, change, act, setErro
                    before={(data) => specs.states.some((s) => s.name === data.goto) ? []
                      : [{ op: "add", kind: "state", data: { program: name, name: data.goto, desc: "", every: 1 } }]}
                    line={(b: BranchSpec, i: number) => <Way branch={b} live={live.next[i]} alone={branches.length === 1} onGo={go} />}
-                   form={(b, onSave, onCancel) => <BranchForm spec={b} states={specs.states.map((s) => s.name)} onSave={onSave} onCancel={onCancel} />} />
+                   form={(b, onSave, onCancel, onDirty) => {
+                     const i = b ? branches.indexOf(b) : branches.length
+                     return <TransitionForm spec={b} at={at} index={i} states={specs.states.map((s) => s.name)} live={live.next[i]} onSave={onSave} onCancel={onCancel} onDirty={onDirty} />
+                   }}
+                   seen={(b, how) => (
+                     <Dialog open onOpenChange={(o) => !o && how.close()}>
+                       <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg" onEscapeKeyDown={typing}>
+                         {how.form}
+                         <Corner what="transition" name={`${branches.indexOf(b) + 1}`} onDelete={how.remove} />
+                       </DialogContent>
+                     </Dialog>
+                   )} />
         </>
       ) : (
         <>
@@ -528,37 +539,6 @@ function StateMain({ name, state, specs, detail, reference, change, act, setErro
           </Block>
         </>
       )}
-    </>
-  )
-}
-
-/** A transition: what it's for, then each condition under it, marked whether it holds now (a
- * rule: more likely than not to fire), the rules with what they're for; and where it goes (click:
- * go there). What doesn't hold is greyed; `alone`, the state's only one, with no conditions: always. */
-function Way({ branch, live, alone, onGo }: { branch: BranchSpec; live?: ProgramDetail["states"][number]["next"][number]; alone?: boolean; onGo: (state: string) => void }) {
-  return (
-    <>
-      <span className="grid min-w-0 flex-1 grid-cols-[0.875rem_minmax(0,10rem)_minmax(0,1fr)] items-center gap-x-2 gap-y-1 pl-1">
-        {branch.desc && <span className="col-span-2 col-start-2 text-foreground">{branch.desc}</span>}
-        {branch.when.length === 0 && <span className="col-start-2 text-muted-foreground">{alone ? "always" : "else"}</span>}
-        {branch.when.map((w) => {
-          const rule  = live?.rules.find((r) => r.name === w)
-          const holds = rule ? (rule.chance == null ? null : rule.chance >= 0.5) : live?.conds.find((c) => c.expr === w)?.value
-          return (
-            <span key={w} className={cn("contents", holds !== true && "text-muted-foreground")}>
-              <Truth value={holds} />
-              <Expr className="truncate" title={w}>{w}</Expr>
-              <span className="min-w-0 text-muted-foreground">{rule?.desc}</span>
-            </span>
-          )
-        })}
-      </span>
-      <span className="flex w-28 shrink-0">
-        <button type="button" onClick={(e) => (e.stopPropagation(), onGo(branch.goto))} aria-label={`Go to the state ${humane(branch.goto)}`}
-                className="flex min-h-6 min-w-0 items-center gap-1 rounded-full border bg-background px-2 text-xs hover:border-foreground/30 hover:bg-muted">
-          <ArrowRight aria-hidden className="size-3 shrink-0" /><span className="truncate font-mono">{humane(branch.goto)}</span>
-        </button>
-      </span>
     </>
   )
 }
@@ -607,7 +587,7 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
   }, [kind, at.program, at.state])
   const kept = JSON.stringify(items)
   useEffect(() => setOrder(null), [kept])
-  const dropped = async (e: DragEndEvent) => {
+  const moved = async (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return
     const from = Number(e.active.id) - 1, to = Number(e.over.id) - 1
     setRefused(null)
@@ -615,12 +595,14 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
     const why = await change([{ op: "remove", kind, data: { ...at, at: from } }, { op: "add", kind, data: { ...items[from], at: to } }])
     if (why) (setOrder(null), setRefused({ at: from, why }))
   }
+  const leave = useLeave(moved, (e) => act([{ op: "remove", kind, data: { ...at, at: Number(e.active.id) - 1 } }]))  // dropped beyond the dialog: deleted
   const shown = order ?? items.map((_, i) => i)
 
   return (
     <Block title={title} add={open === "new" ? undefined : () => (dirty.current = false, setOpen("new"))}>
       {items.length === 0 && open !== "new" && <p className="text-xs text-muted-foreground">{empty}</p>}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dropped}>
+      <div ref={leave.ref} className="flex flex-col gap-1.5">
+      <DndContext sensors={sensors} collisionDetection={closestCenter} {...leave.props}>
         <SortableContext items={shown.map((i) => i + 1)} strategy={verticalListSortingStrategy}>
           {shown.map((i) => open === i ? (
             <div key={i}>{form(items[i], (data) => saved(data, [{ op: "update", kind, data: { ...at, at: i, changes: data } }])(), close)}</div>
@@ -631,7 +613,9 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
             </Line>
           ))}
         </SortableContext>
+        {leave.ghost((id) => line(items[id - 1], id - 1))}
       </DndContext>
+      </div>
       {refused && <ErrorDialog message={`Not moved: ${refused.why}`} onClose={() => setRefused(null)} />}
       {seen && viewing !== null && items[viewing] && seen(items[viewing], {
         update: (changes) => change([{ op: "update", kind, data: { ...at, at: viewing, changes } }]),
@@ -649,7 +633,7 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
                 {made}
               </DialogContent>
             </Dialog>
-            <Discard open={leaving} onOpenChange={setLeaving} title="Drop this action?" description="What you've set up isn't saved yet." action="Drop it" onDrop={close} />
+            <Discard open={leaving} onOpenChange={setLeaving} title={`Drop this ${kind === "action" ? "action" : "transition"}?`} description="What you've set up isn't saved yet." action="Drop it" onDrop={close} />
           </>
         )
       })()}

@@ -23,7 +23,7 @@ import { LABELS, Waiting } from "@/views/ask-actions"
 
 type Change = (request: object) => Promise<string>
 
-const SOURCES: Record<SourceName, { means: string; icon: LucideIcon; chip: string; fresh: Source }> = {
+export const SOURCES: Record<SourceName, { means: string; icon: LucideIcon; chip: string; fresh: Source }> = {
   expr:    { means: "Computed from other fields", icon: Sigma,     chip: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
              fresh: { from: "expr", expr: "" } },
   jev:     { means: "Asked to jev", icon: KeySquare, chip: "bg-violet-500/15 text-violet-700 dark:text-violet-300",

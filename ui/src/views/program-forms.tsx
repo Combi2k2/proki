@@ -175,49 +175,6 @@ export function StateForm({ spec, onSave, onCancel }: { spec?: StateSpec; onSave
   )
 }
 
-/** A transition: where it goes, and when. Each line of `when` is a rule's name or a condition. A
- * state not there yet is made. */
-export function BranchForm({ spec, states, onSave, onCancel }: {
-  spec?: { goto: string; when: string[]; desc: string }
-  states: string[]
-  onSave: Save
-  onCancel: () => void
-}) {
-  const [goto, setGoto] = useState(spec?.goto ?? "")
-  const [when, setWhen] = useState<string[]>(spec?.when ?? [])
-  const [desc, setDesc] = useState(spec?.desc ?? "")
-  return (
-    <Form onCancel={onCancel} onSave={() => onSave({ goto: goto.trim(), when: when.map((w) => w.trim()).filter(Boolean), desc })}>
-      <Row>
-        <Field label="Go to" hint={goto.trim() && !states.includes(goto.trim()) ? "a new state" : undefined}>
-          <Text value={goto} onChange={setGoto} code autoFocus list="states" placeholder={states[0] ?? "waiting"} />
-          <datalist id="states">{states.map((s) => <option key={s} value={s} />)}</datalist>
-        </Field>
-        <Field label="Description"><Text value={desc} onChange={setDesc} placeholder="you came back" /></Field>
-      </Row>
-      <Field label="When" hint="all must hold: a condition or a rule; none = else">
-        <Lines values={when} onChange={setWhen} placeholder="answer == 0" add="Condition" />
-      </Field>
-    </Form>
-  )
-}
-
-/** A list of lines, each its own field: add one, take one out. */
-function Lines({ values, onChange, placeholder, add }: { values: string[]; onChange: (values: string[]) => void; placeholder: string; add: string }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      {values.map((v, i) => (
-        <div key={i} className="flex gap-1.5">
-          <Text value={v} onChange={(next) => onChange(values.map((w, j) => (j === i ? next : w)))} code names placeholder={placeholder}
-                autoFocus={i === values.length - 1 && v === ""} />
-          <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" onClick={() => onChange(values.filter((_, j) => j !== i))}><Trash2 /></Button>
-        </div>
-      ))}
-      <Button type="button" size="sm" variant="outline" className="w-fit" onClick={() => onChange([...values, ""])}><Plus /> {add}</Button>
-    </div>
-  )
-}
-
 // --- an action ------------------------------------------------------------------------------
 
 type Params = Record<string, unknown>

@@ -2,6 +2,8 @@
 // scope from any page, and the small parts both draw.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
+import { DragOverlay, type DragEndEvent, type DragMoveEvent, type DragStartEvent } from "@dnd-kit/core"
 import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react"
@@ -101,6 +103,35 @@ export function Block({ title, add, children }: { title: string; add?: () => voi
   )
 }
 
+/** A sortable list's drag, with leaving: dragged beyond its dialog, the one carried turns red with a bin (`out`) and is `gone` as it's dropped; else `moved`.
+ * `props`: for the list's DndContext; `ref`: on the list; `ghost`: what's carried, from the id of the one (as it's drawn in the list). */
+export function useLeave(moved: (e: DragEndEvent) => void, gone: (e: DragEndEvent) => void) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [out, setOut]       = useState(false)
+  const [active, setActive] = useState<number | null>(null)
+  const beyond = (e: { activatorEvent: Event; delta: { x: number; y: number } }) => {
+    const { clientX, clientY } = e.activatorEvent as PointerEvent
+    const box = (ref.current?.closest('[role="dialog"]') ?? ref.current)?.getBoundingClientRect()
+    return !!box && (clientX + e.delta.x < box.left || clientX + e.delta.x > box.right || clientY + e.delta.y < box.top || clientY + e.delta.y > box.bottom)
+  }
+  const props = {
+    onDragStart:  (e: DragStartEvent) => (setOut(false), setActive(Number(e.active.id))),
+    onDragMove:   (e: DragMoveEvent) => setOut(beyond(e)),
+    onDragCancel: () => (setOut(false), setActive(null)),
+    onDragEnd:    (e: DragEndEvent) => (setActive(null), (beyond(e) ? gone : moved)(e)),
+  }
+  const ghost = (draw: (id: number) => ReactNode) => createPortal(  // over the page, so it's seen beyond the dialog
+    <DragOverlay dropAnimation={out ? null : undefined}>
+      {active !== null && (
+        <div className={cn("flex items-center gap-2 rounded-lg border bg-card py-1.5 pr-3 pl-3 text-xs shadow-lg ring-1 ring-foreground/10", out && "border-destructive bg-destructive/15 text-destructive ring-destructive/40")}>
+          <div className="flex min-w-0 flex-1 items-center gap-2">{draw(active)}</div>
+          {out && <span className="flex shrink-0 items-center gap-1 font-medium"><Trash2 className="size-3.5" /> Drop to delete</span>}
+        </div>
+      )}
+    </DragOverlay>, document.body)
+  return { ref, props, ghost }
+}
+
 /** A line of a list, carried by its grip: what it says (click it to edit), then its pencil and its
  * bin; `named`, what it is, as its buttons say it; `refused`: shaken, as a drop that wasn't kept;
  * `lit`: flashed, as a dialog's chip comes to it. */
@@ -113,7 +144,7 @@ export function Line({ id, named, refused, lit, plain, children, onEdit, onDelet
   return (
     <div ref={(el) => void (setNodeRef(el), box.current = el)} style={{ transform: CSS.Translate.toString(transform), transition }}
          className={cn("group flex items-center gap-2 rounded-lg border bg-card py-1.5 pr-3 pl-1 text-xs hover:bg-muted/50",
-                       isDragging && "relative z-10 shadow-lg ring-1 ring-foreground/10", refused && "animate-shake ring-2 ring-destructive/50",
+                       isDragging && "opacity-40", refused && "animate-shake ring-2 ring-destructive/50",
                        lit && "animate-[flash_2.4s_ease-out] ring-2 ring-brand/60")}>
       <button {...attributes} {...listeners} aria-label={`Move ${named}`} className="cursor-grab touch-none text-muted-foreground hover:text-foreground">
         <GripVertical className="size-3.5" />
