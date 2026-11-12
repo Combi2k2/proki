@@ -720,7 +720,7 @@ function ActionSeen({ spec, update, remove, form, close }: {
                   </div>
                 </DialogDescription>
               </DialogHeader>
-              <Corner what="action" name={said} inPlace onDelete={() => (remove(), close())} />
+              <Corner what="action" name={said} onDelete={() => (remove(), close())} />
               {popup ? (
                 <PopupFields ask={spec.kind === "ask_usr"} kind={spec.kind} params={spec.params} commit={commit} picks={(st.patch.picks as Picks | undefined) ?? picks}
                              pick={(which, keys) => st.put("picks", { ...((st.patch.picks as Picks | undefined) ?? picks), [which]: keys }, picks)} />
@@ -729,7 +729,7 @@ function ActionSeen({ spec, update, remove, form, close }: {
                   {rows.map(([label, key, how]) => (
                     <Fragment key={key}>
                       <dt className="text-muted-foreground">{label}</dt>
-                      <dd><Editable label={label} code list={NAMES} placeholder={key === "when" ? "always" : "–"}
+                      <dd><Editable label={label} code long list={NAMES} placeholder={key === "when" ? "always" : "–"} className="w-full"
                                     {...st.field(key, how === "expr" ? valueText(spec.params[key]) : String(spec.params[key] ?? ""))} /></dd>
                     </Fragment>
                   ))}

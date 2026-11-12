@@ -1,9 +1,9 @@
 // Text changed where it's read: no input box until you click it.
 
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, useRef, useState, type ReactNode } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { colour, useKnown } from "@/views/code"
 
@@ -14,14 +14,16 @@ export const typing = (e: Event) => void (document.activeElement?.matches("input
 
 /** Text read as it is; given `onSave`, underlined as you point at it, and clicked (`editing`: from
  * the start), changed where it is: Enter or leaving it saves (the mistake, if any, under it),
- * Escape puts it back. */
-export function Editable({ label, value, onSave, code, list, long, placeholder = "–", title, editing, changed, className }: {
+ * Escape puts it back. `className` is its box, the same read or changed: a click anywhere in it changes it.
+ * A `long` `code` wraps and stays coloured as it's typed. */
+export function Editable({ label, value, onSave, code, list, long, placeholder = "–", title, editing, changed, boxed, className }: {
   label: string
   value: string
   onSave?: (text: string) => Promise<string | null | undefined>
   code?: boolean
   list?: string     // the names it suggests, as a page's list of them
   long?: boolean    // a few lines, Shift-Enter between them
+  boxed?: boolean   // in a table's cell: a pointer over it shades it, no underline
   placeholder?: string
   title?: string    // why it can't be changed, when it can't
   editing?: boolean
@@ -31,9 +33,11 @@ export function Editable({ label, value, onSave, code, list, long, placeholder =
   useKnown()
   const [text, setText]   = useState<string | null>(editing ? value : null)  // null: not being changed
   const [error, setError] = useState("")
-  const look = cn("min-w-0 break-words", code && "font-mono", className)
+  const [caret, setCaret] = useState(0)  // where it's typed, for the names it offers
+  const box = useRef<HTMLTextAreaElement>(null)
+  const look = cn("min-w-0 break-words", code && "font-mono")
   const read = !value ? placeholder : code ? colour(value) : value
-  if (!onSave) return <span title={title} className={cn(look, !value && "text-muted-foreground")}>{read}</span>
+  if (!onSave) return <span title={title} className={cn(look, className, !value && "text-muted-foreground")}>{read}</span>
   const done = async () => {
     if (text === null) return
     if (text === value) return setText(null)
@@ -47,15 +51,47 @@ export function Editable({ label, value, onSave, code, list, long, placeholder =
   }
   if (text === null) return (
     <button type="button" onClick={() => setText(value)} title="Click to change" aria-label={`${label}: ${value || placeholder}, change`}
-            className={cn(look, "max-w-full cursor-text rounded-sm text-left decoration-muted-foreground decoration-dotted underline-offset-4 hover:underline", !value && "text-muted-foreground", changed && CHANGED)}>
+            className={cn(look, "max-w-full cursor-text rounded-sm text-left", className, boxed ? HELD : "decoration-muted-foreground decoration-dotted underline-offset-4 hover:underline", !value && "text-muted-foreground", changed && CHANGED)}>
       {read}
     </button>
   )
   const field = { "aria-label": label, value: text, autoFocus: true, placeholder, onBlur: done, onKeyDown: keys, ...(code && PLAIN),
+                  onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => e.currentTarget.setSelectionRange(text.length, text.length),  // typed on at its end
                   className: cn(look, "w-full border-0 border-b border-ring bg-transparent p-0 outline-none", long && "field-sizing-content resize-none") }
+  const area  = "col-start-1 row-start-1 w-full whitespace-pre-wrap"  // the colours under, the text typed over, line for line
+  const word  = /[\w.]*$/.exec(text.slice(0, caret))?.[0] ?? ""
+  const names = list && word ? [...document.querySelectorAll<HTMLOptionElement>(`#${list} option`)].map((o) => o.value).filter((n) => n.startsWith(word) && n !== word).slice(0, 6) : []
+  const typed = (e: { currentTarget: HTMLTextAreaElement }) => setCaret(e.currentTarget.selectionStart)
+  const start = caret - word.length
+  const put   = (n: string) => {  // a name chosen: in place of the word typed so far, the caret after it
+    setText(text.slice(0, start) + n + text.slice(caret))
+    setCaret(start + n.length)
+    requestAnimationFrame(() => box.current?.setSelectionRange(start + n.length, start + n.length))
+  }
   return (
-    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-      {long ? <textarea {...field} onChange={(e) => setText(e.target.value)} />
+    <span className={cn("flex min-w-0 flex-1 flex-col gap-0.5", className)}>
+      {long && code ? (
+        <span className="grid">
+          <span aria-hidden className={cn(look, area, "pointer-events-none border-b border-transparent")}>{colour(text)}{"\n"}</span>
+          <span aria-hidden className={cn(look, area, "pointer-events-none invisible border-b border-transparent")}>{/* the same text unseen: where the word begins, for the names to hang from */}
+            {text.slice(0, start)}
+            <Popover open={names.length > 0}>
+              <PopoverAnchor asChild><span className="inline-block h-[1lh] w-0 align-top" /></PopoverAnchor>
+              <PopoverContent align="start" sideOffset={2} onOpenAutoFocus={(e) => e.preventDefault()} onCloseAutoFocus={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}
+                              className="visible z-[80] w-auto min-w-36 gap-0 p-1 font-mono text-xs">
+                {names.map((n) => (
+                  <button key={n} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => put(n)}
+                          className="flex w-full cursor-default items-center rounded-md py-1 pr-3 pl-1.5 text-left hover:bg-accent hover:text-accent-foreground">
+                    <span className="text-muted-foreground">{word}</span>{n.slice(word.length)}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+            {text.slice(start)}
+          </span>
+          <textarea {...field} ref={box} className={cn(field.className, area, "overflow-hidden text-transparent caret-foreground")} onChange={(e) => (setText(e.target.value), typed(e))} onSelect={typed} />
+        </span>
+      ) : long ? <textarea {...field} onChange={(e) => setText(e.target.value)} />
             : <input {...field} list={list} onChange={(e) => setText(e.target.value)} />}
       {error && <span className="font-sans text-[11px] font-normal break-words text-destructive">{error}</span>}
     </span>
@@ -64,6 +100,7 @@ export function Editable({ label, value, onSave, code, list, long, placeholder =
 
 /** The look of what's been changed and not kept yet: a blue line under it (a field with a line of its
  * own: that line, blue). A row added is light green; one taken out leaves a red arrow where it was. */
+export const HELD         = "-mx-1 rounded px-1 hover:bg-muted"  // a table's cell that opens or changes: shaded under the pointer
 export const CHANGED      = "underline decoration-solid decoration-changed decoration-2 underline-offset-4"
 export const CHANGED_LINE = "border-solid border-changed hover:border-solid hover:border-changed focus:border-changed focus-visible:border-changed"
 
@@ -126,13 +163,14 @@ export function Staging({ onSave, reserve = true, onCancel, children }: {
 
 /** A value picked from a list: read as it is, with an arrow as you point at it; clicked, the list opens
  * and a choice is `onPick`ed. `changed`: lit, not kept yet. `children`: how the value reads (its label,
- * else). No `onPick`: read only. */
-export function Pick({ label, value, options, onPick, changed, className, children }: {
+ * else). No `onPick`: read only. `arrow`: the arrow always there, not only as you point. */
+export function Pick({ label, value, options, onPick, changed, arrow, className, children }: {
   label: string
   value: string
   options: [string, ReactNode][]  // each value, and how it reads
   onPick?: (value: string) => void
   changed?: boolean
+  arrow?: boolean
   className?: string
   children?: ReactNode
 }) {
@@ -145,7 +183,7 @@ export function Pick({ label, value, options, onPick, changed, className, childr
         <button type="button" aria-label={`${label}: ${value}, change`}
                 className={cn("group/pick inline-flex max-w-full min-w-0 cursor-pointer items-center gap-1 rounded-sm text-left decoration-muted-foreground decoration-dotted underline-offset-4 hover:underline", changed && CHANGED, className)}>
           <span className="inline-flex min-w-0 items-center gap-1.5">{shown}</span>
-          <ChevronDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/pick:opacity-100 group-data-[state=open]/pick:opacity-100" />
+          <ChevronDown aria-hidden className={cn("size-3.5 shrink-0 text-muted-foreground group-hover/pick:opacity-100 group-data-[state=open]/pick:opacity-100", !arrow && "opacity-0")} />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto min-w-36 gap-0 p-1">

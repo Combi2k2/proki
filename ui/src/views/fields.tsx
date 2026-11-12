@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from "react"
 import {
-  Bot, Box, Brackets, CircleHelp, Clock, Hash, KeySquare, Plus, Radical, Sigma, ToggleRight, Trash2, Type as TextIcon, User, Workflow, X,
+  Bot, Box, Brackets, ChartLine, CircleHelp, Clock, Hash, KeySquare, PawPrint, Plus, Radical, Scale, Sigma, ToggleRight, Trash2, Type as TextIcon, User, Variable, Workflow, X,
   type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -16,7 +16,7 @@ import type { Field, Source, SourceName, Type, Weighed } from "@/lib/proki"
 import { Confirm } from "@/components/confirm"
 import { CHANGED, Editable, Pick, type Staged, Staging, Term, typing, useStaged } from "@/views/in-place"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { BARE, CodeInput, Template } from "@/views/code"
+import { BARE, Template } from "@/views/code"
 import { Collection, emptyOf } from "@/views/inspect"
 import { goToPlace, Places } from "@/views/places"
 import { AddButton, Detail, takeover } from "@/views/scope-shared"
@@ -33,7 +33,6 @@ const SOURCES: Record<SourceName, { means: string; icon: LucideIcon; chip: strin
   user:    { means: "Set by you, per record",     icon: User,      chip: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300", fresh: { from: "user" } },
   auto:    { means: "Set by a program",           icon: Workflow,  chip: "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300", fresh: { from: "auto" } },
 }
-export const AUTO = SOURCES.auto.chip  // the automations' tint, as a chip of theirs
 const PLAIN = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const  // names and formulas, as typed
 const NAMES = Object.keys(SOURCES) as SourceName[]
 const GRID  = "grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_10.5rem] items-center gap-3"  // a table: room for three sources, what it is takes the rest
@@ -132,17 +131,13 @@ function SourceDialog({ field, weighed, index, fresh, onChange, onClose }: { fie
   )
   return (
     <Dialog open onOpenChange={(to) => !to && onClose()}>
-      <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg" onEscapeKeyDown={typing}>
+      <DialogContent className={cn("max-h-[85vh] overflow-x-hidden overflow-y-auto", was.from === "expr" ? "sm:max-w-md" : "sm:max-w-lg")} onEscapeKeyDown={typing}>
         <TooltipProvider delayDuration={300}>
           <Staging onSave={save}>
             {(st) => {
               const now = { ...was, ...st.patch } as Source
-              const text = (key: keyof Source, placeholder: string, code?: boolean) => (
-                <Editable label={String(key)} long code={code} placeholder={placeholder} {...st.field(key, String(was[key] ?? ""))} />
-              )
               const post = (
-                <CodeInput aria-label="Post-processing" value={"expr" in st.patch ? String(st.patch.expr) : was.expr || "res"}
-                           onChange={(e) => st.put("expr", e.target.value, was.expr || "res")} />
+                <Editable label="Post-processing" code long className="w-full rounded-md bg-muted px-2 py-1.5 text-xs" {...st.field("expr", was.expr || "res")} />
               )
               return (
                 <>
@@ -161,9 +156,14 @@ function SourceDialog({ field, weighed, index, fresh, onChange, onClose }: { fie
                       ? <Places places={field.places} onVisit={(p) => (takeover(), goToPlace(p))} />
                       : <p className="text-xs text-muted-foreground">No automation yet.</p>
                   )}
+                  {was.from === "expr" && (  // as a signal's expression reads: the formula alone, in its shaded box
+                    <>
+                    <datalist id="record-names">{named.names.map((n) => <option key={n} value={n} />)}</datalist>
+                    <Editable label="Formula" code long list="record-names" placeholder="me.estimate > 60" className="w-full rounded-md bg-muted px-2 py-1.5 text-xs" {...st.field("expr", String(was.expr ?? ""))} />
+                    </>
+                  )}
                   {was.from === "jev" && <JevForm now={now} was={was} st={st} named={named} post={post} />}
-                  <dl hidden={was.from === "jev" || was.from === "llm"} className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 border-t pt-4 text-xs">
-                    {was.from === "expr" && <><Term>Formula</Term><dd>{text("expr", "me.estimate > 60", true)}</dd></>}
+                  <dl hidden={was.from !== "auto"} className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 border-t pt-4 text-xs">
                     {was.from === "auto" && (
                       <>
                         <Term hint="empty: the next source">Starts as</Term>
@@ -293,6 +293,16 @@ export function RecordFields({ record, children }: { record: string; children?: 
                       onOpen={(source) => setOpen(source === null ? null : { key: field.key, source })}
                       onRenamed={(key) => setOpen((o) => o && { ...o, key })} />
           ))}
+          {weighed.code.map((f) => (  // worked out by Proki's code: read here, never changed
+            <div key={f.key} className={cn(GRID, "border-b py-1.5 pr-9 pl-2 last:border-b-0")}>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <TypeIcon type={f.worked} />
+                <code title={f.key} className="truncate text-xs font-semibold">{f.key}</code>
+              </span>
+              <span title={f.desc} className="truncate text-xs text-muted-foreground">{f.desc || "–"}</span>
+              <span><Pill by="proki" means="Worked out by Proki, as it works" /></span>
+            </div>
+          ))}
           {adding && <AddRow grid={GRID} onClose={() => setAdding(false)} onAdd={async (key, desc) => {  // set by you, until it's given other sources
             const said = await change({ op: "define", field: { key, desc, srcs: [{ from: "user" }] } })
             if (!said) setOpen({ key, source: 0 })
@@ -333,6 +343,22 @@ export function Chip({ name, active, onClick, onRemove, ...drag }: {
 /** A chip's look, and its icon: a source's, or what reads a name. */
 export const TAG = "inline-flex h-5 items-center gap-1 rounded-full px-2 font-mono text-xs font-medium whitespace-nowrap select-none"
 export const Mark = ({ icon: Icon }: { icon: LucideIcon }) => <Icon aria-hidden className="size-3 shrink-0" strokeWidth={2.25} />
+
+export type Reader = keyof typeof READERS
+
+const READERS = {  // what reads a name: its icon, its tint, what it means
+  auto:     [Workflow,  SOURCES.auto.chip,                                      "Read by an automation: a transition's condition, or an action"],
+  rule:     [Scale,     "bg-rose-500/15 text-rose-700 dark:text-rose-300",       "Read by a rule, to work out its chance"],
+  signal:   [ChartLine, "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",       "Read by a signal, to work out its value"],
+  variable: [Variable,  "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300", "Read by a variable, to start from"],
+  proki:    [PawPrint,  "bg-violet-500/15 text-violet-700 dark:text-violet-300", "Read by the app itself"],
+} satisfies Record<string, [LucideIcon, string, string]>
+
+/** What reads it (or writes it), as a chip like a source's: its icon and its kind; `means` for its hover, else what the kind means. */
+export function Pill({ by, means }: { by: Reader; means?: string }) {
+  const [icon, tint, said] = READERS[by]
+  return <span title={means ?? said} className={cn(TAG, tint)}><Mark icon={icon} />{by}</span>
+}
 
 /** An open field, as a variable's dialog shows one: its name and what it is, changed where they
  * are; its type; its sources in order (a chip each, clicked to open it, dragged to reorder, a new one added
@@ -432,8 +458,7 @@ function Editor({ field, weighed, onRenamed, onChange }: {
 }
 
 /** A type, said; where the dialog stages (`editable`), its kind picked from a list as you point at it, and
- * what's inside it changed under it, both kept with the dialog's Save. `own`: the one you gave (none:
- * worked out). */
+ * what's inside it changed under it, both kept with the dialog's Save. `own`: the one you gave, if any. */
 export function TypeChange({ type, own, editable, kinds = TYPES, at = "type" }: { type?: Type; own?: Type; editable?: boolean; kinds?: string[]; at?: string }) {
   const staged = useStaged()
   const was    = own ?? type ?? "any"
@@ -443,12 +468,9 @@ export function TypeChange({ type, own, editable, kinds = TYPES, at = "type" }: 
   if (!editable || !staged) return name(type)
   return (
     <div className="flex flex-col gap-2">
-      <span className="flex items-center gap-1.5">
-        <Pick label="Type" value={kindOf(now)} changed={draft !== undefined} options={kinds.map((t) => [t, <><TypeIcon type={t} />{t}</>])}
-              onPick={(k) => staged.put(at, typed(picked(k, schemaOf(now))), was)}>{name(now)}</Pick>
-        {!own && type && type !== "any" && draft === undefined && <span className="text-muted-foreground">(worked out)</span>}
-      </span>
-          </div>
+      <Pick label="Type" value={kindOf(now)} changed={draft !== undefined} options={kinds.map((t) => [t, <><TypeIcon type={t} />{t}</>])}
+            onPick={(k) => staged.put(at, typed(picked(k, schemaOf(now))), was)}>{name(now)}</Pick>
+    </div>
   )
 }
 
@@ -535,7 +557,7 @@ export function kindOf(t: Type | undefined): string {
 }
 
 /** A type as a schema, a short name as the one it stands for. */
-const schemaOf = (t: Type): Schema => (typeof t === "string" ? SCHEMAS[t === "array" ? "list" : t] ?? {} : t)
+export const schemaOf = (t: Type): Schema => (typeof t === "string" ? SCHEMAS[t === "array" ? "list" : t] ?? {} : t)
 
 /** A schema of a kind, from the one it was: the same kind, as it was (its options, what's
  *  proki's); another, a fresh one, what it means kept. */
@@ -580,8 +602,9 @@ export function StagedFields({ name, type, own, at = "type" }: { name: string; t
 }
 
 /** The fields of an object type (or of each item of a list of objects), as a table like a record's: a row each, its name and what it
- * is, the row's trash as you point at it, a click opening the field; a new one added under them with its description. */
-export function SchemaFields({ name, type, onChange }: { name: string; type: Type; onChange: (type: Type) => void }) {
+ * is, the row's trash as you point at it, a click opening the field; a new one added under them with its description. No `onChange`:
+ * read only. `onOpen`: what a field's click opens instead (the app's own objects: the field's own dialog). */
+export function SchemaFields({ name, type, onChange, onOpen }: { name: string; type: Type; onChange?: (type: Type) => void; onOpen?: (key: string) => void }) {
   const [open, setOpen]     = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const schema = schemaOf(type)
@@ -591,7 +614,7 @@ export function SchemaFields({ name, type, onChange }: { name: string; type: Typ
   const props  = Object.entries((holder.properties ?? {}) as Record<string, Schema>)
   const put    = (next: [string, Schema][]) => {
     const inner = { ...holder, properties: Object.fromEntries(next) }
-    onChange(typed(list ? { ...schema, items: inner } : inner))
+    onChange?.(typed(list ? { ...schema, items: inner } : inner))
   }
   const at     = (key: string, to: string, s: Schema) => put(props.map(([k, old]) => (k === key ? [to, s] : [k, old])))
   const add    = async (key: string, desc: string) => props.some(([k]) => k === key) ? `${key} is already there`
@@ -600,18 +623,18 @@ export function SchemaFields({ name, type, onChange }: { name: string; type: Typ
   const spec   = props.find(([k]) => k === open)
   return (
     <section className="flex flex-col gap-1.5 border-t pt-4">
-      <Heading text="Fields" onAdd={adding ? undefined : () => setAdding(true)} />
+      <Heading text="Fields" onAdd={adding || !onChange ? undefined : () => setAdding(true)} />
       <div className="rounded-md border">
         <div className={cn(row, "border-b bg-muted/40 py-1 pr-9 pl-2 text-xs text-muted-foreground")}><span>Name</span><span>What it is</span></div>
         {props.map(([key, s]) => (
           <div key={key} className="group/row relative border-b last:border-b-0">
-            <div role="button" tabIndex={0} onClick={() => setOpen(key)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen(key)}
+            <div role="button" tabIndex={0} onClick={() => (onOpen ?? setOpen)(key)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (onOpen ?? setOpen)(key)}
                  className={cn(row, "cursor-pointer py-1.5 pr-9 pl-2 text-xs hover:bg-muted/60")}>
               <span className="flex min-w-0 items-center gap-1.5"><TypeIcon type={s as Type} /><code className="truncate font-semibold">{key}</code></span>
               <span className="truncate text-muted-foreground">{String(s.description ?? "") || "–"}</span>
             </div>
-            <Button type="button" size="icon-xs" variant="ghost" aria-label={`Delete ${key}`} title="Delete" onClick={() => put(props.filter(([k]) => k !== key))}
-                    className="absolute top-1/2 right-1.5 -translate-y-1/2 text-destructive opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"><Trash2 /></Button>
+            {onChange && <Button type="button" size="icon-xs" variant="ghost" aria-label={`Delete ${key}`} title="Delete" onClick={() => put(props.filter(([k]) => k !== key))}
+                    className="absolute top-1/2 right-1.5 -translate-y-1/2 text-destructive opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"><Trash2 /></Button>}
           </div>
         ))}
         {props.length === 0 && !adding && <p className="px-2 py-1.5 text-xs text-muted-foreground">None.</p>}
@@ -625,24 +648,24 @@ export function SchemaFields({ name, type, onChange }: { name: string; type: Typ
                 <TypeIcon type={spec[1] as Type} className="size-4" />
                 <span className="flex min-w-0 items-baseline">
                   <span className="shrink-0">{`${name}${list ? "[i]" : ""}.`}</span>
-                  <Editable label="Name" value={spec[0]} className="truncate text-foreground" onSave={async (t) => {
+                  <Editable label="Name" value={spec[0]} className="truncate text-foreground" onSave={onChange && (async (t) => {
                     const to = t.trim()
                     if (!to || (to !== spec[0] && props.some(([k]) => k === to))) return `${to || "A field"} is already there`
                     at(spec[0], to, spec[1])
                     setOpen(to)
                     return null
-                  }} />
+                  })} />
                 </span>
               </DialogTitle>
               <DialogDescription asChild>
-                <div><Editable label="Description" long placeholder="No description" value={String(spec[1].description ?? "")} onSave={async (t) => (at(spec[0], spec[0], { ...spec[1], description: t }), null)} /></div>
+                <div><Editable label="Description" long placeholder="No description" value={String(spec[1].description ?? "")} onSave={onChange && (async (t) => (at(spec[0], spec[0], { ...spec[1], description: t }), null))} /></div>
               </DialogDescription>
             </DialogHeader>
             <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t pt-4 text-xs">
               <dt className="text-muted-foreground">Type</dt>
               <dd>
                 <Pick label="Type" value={kindOf(spec[1])} options={TYPES.map((t) => [t, <><TypeIcon type={t} />{t}</>])}
-                      onPick={(k) => at(spec[0], spec[0], { ...picked(k, spec[1]), ...(spec[1].description ? { description: spec[1].description } : {}) })}>
+                      onPick={onChange && ((k) => at(spec[0], spec[0], { ...picked(k, spec[1]), ...(spec[1].description ? { description: spec[1].description } : {}) }))}>
                   <span style={{ color: `var(--type-${kindOf(spec[1])})` }}>{kindOf(spec[1])}</span>
                 </Pick>
               </dd>
@@ -651,7 +674,7 @@ export function SchemaFields({ name, type, onChange }: { name: string; type: Typ
                   <dt className="text-muted-foreground">Item</dt>
                   <dd>
                     <Pick label="Item" value={kindOf((spec[1].items ?? {}) as Type)} options={TYPES.filter((t) => t !== "list").map((t) => [t, <><TypeIcon type={t} />{t}</>])}
-                          onPick={(k) => at(spec[0], spec[0], { ...spec[1], items: picked(k, (spec[1].items ?? {}) as Schema) })}>
+                          onPick={onChange && ((k) => at(spec[0], spec[0], { ...spec[1], items: picked(k, (spec[1].items ?? {}) as Schema) }))}>
                       <span style={{ color: `var(--type-${kindOf((spec[1].items ?? {}) as Type)})` }}>{kindOf((spec[1].items ?? {}) as Type)}</span>
                     </Pick>
                   </dd>
@@ -659,7 +682,7 @@ export function SchemaFields({ name, type, onChange }: { name: string; type: Typ
               )}
             </dl>
             <SchemaFields name={`${name}${list ? "[i]" : ""}.${spec[0]}`} type={spec[1] as Type}
-                          onChange={(t) => at(spec[0], spec[0], { ...schemaOf(t), ...(spec[1].description ? { description: spec[1].description } : {}) })} />
+                          onChange={onChange && ((t) => at(spec[0], spec[0], { ...schemaOf(t), ...(spec[1].description ? { description: spec[1].description } : {}) }))} />
           </DialogContent>
         </Dialog>
       )}

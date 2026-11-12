@@ -97,12 +97,12 @@ export function SpanField({ label, name, was, editable }: { label: string; name:
   const put  = (text: string) => st?.put(name, text, kept)
   return (
     <span className="flex items-baseline gap-2 whitespace-nowrap">
-      <span className="w-8 shrink-0">
-        <Editable label={label} placeholder="none" changed={!!st?.lit(name)} value={now.n}
+      <span className="w-11 shrink-0">
+        <Editable label={label} placeholder="none" changed={!!st?.lit(name)} value={now.n} className="block w-full rounded-md bg-muted px-1 py-0.5 text-center"
                   onSave={editable ? async (t) => /^(\d+(\.\d+)?)?$/.test(t.trim()) ? (put(spanOf(t, now.n === "" ? "minute" : now.unit)), null) : "A number" : undefined} />
       </span>
       {now.n !== "" && (
-        <Pick label="Unit" value={now.unit} changed={!!st?.lit(name)} options={SPANS.map(([u]) => [u, u])}
+        <Pick label="Unit" value={now.unit} changed={!!st?.lit(name)} arrow={editable} options={SPANS.map(([u]) => [u, u])}
               onPick={editable ? (u) => put(spanOf(now.n, u as Unit)) : undefined}>
           {now.unit}{now.n === "1" ? "" : "s"}
         </Pick>

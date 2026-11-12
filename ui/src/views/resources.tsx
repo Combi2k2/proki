@@ -2,7 +2,7 @@
 // that says what it is, its value, what writes it and what reads it, and changed where it's read.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import { ChartLine, ChevronRight, CircleGauge, Eye, EyeOff, PawPrint, Pencil, Scale, Trash2, Variable, Workflow, type LucideIcon } from "lucide-react"
+import { ChevronRight, CircleGauge, Eye, EyeOff, Pencil, Trash2 } from "lucide-react"
 import { Confirm } from "@/components/confirm"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -13,10 +13,10 @@ import { recall, recallJson, remember, rememberJson } from "@/lib/remember"
 import { cn } from "@/lib/utils"
 import { NAMES, parseSide, parseSpan, parseValue, SpanField, valueText, type Save } from "@/views/program-forms"
 import { Expr } from "@/views/code"
-import { AUTO, Chip, fieldKeys, ItemChange, kindOf, Mark, RecordFields, said, SCALARS, StagedFields, TAG, TypeChange, TypeIcon } from "@/views/fields"
+import { Chip, fieldKeys, Pill, type Reader, ItemChange, kindOf, RecordFields, said, SCALARS, SchemaFields, schemaOf, StagedFields, TypeChange, TypeIcon } from "@/views/fields"
 import { Editable, Pick, Staging, Term, typing, useStaged } from "@/views/in-place"
 import { shown, SYMBOL } from "@/views/program-inspect"
-import { APPS, Collection, emptyOf, Inspect } from "@/views/inspect"
+import { Collection, emptyOf, Inspect } from "@/views/inspect"
 import { same } from "@/views/value-draft"
 import { collection, Flag, Opens, Scalar, Truth } from "@/views/value-parts"
 import { goToPlace, Places } from "@/views/places"
@@ -53,6 +53,8 @@ type Tab = Kind | "input"
 
 const TABS: [Tab, string][] = [["input", "Inputs"], ["signal", "Signals"], ["variable", "Variables"], ["rule", "Rules"]]
 
+const INPUTS = ["running", "app_name", "app_title", "tab_url", "label", "depth", "keys_pressed", "mouse_move", "mouse_click", "mouse_scroll", "time", "daytime", "weekday", "dd", "mm", "yy"]  // the inputs in this order: what's measured, then when
+
 const SCOPES: [Scope, string][] = [["special", "Special"], ["global", "Global"], ["program", "Program"], ["state", "State"]]
 
 /** What a scope can use: the inputs, or one kind at a time, by the scope it's from, from the
@@ -68,7 +70,7 @@ function Kept({ own, where, reference, change, act }: {
 }) {
   const [tab, setTab] = useState<Tab>(() => recall("programs.kind", TABS.map(([k]) => k), "signal"))
   const [open, setOpen] = useState<Scope[]>([where.scope])  // the scopes open, any of them at once
-  const [adding, setAdding] = useState<Scope | null>(null)
+  const [adding, setAdding] = useState<{ tab: Tab; scope: Scope } | null>(null)  // a new one being made, from which tab and scope
   const [hidden, setHidden] = useState(() => recall("programs.hidden", ["shown", "kept"], "kept") === "shown")
   const [hid, setHid]       = useState<string[]>(() => recallJson("programs.hid", []))  // each line hidden, as kind:name
   const any    = hid.filter((k) => k.startsWith(`${tab}:`)).length
@@ -77,17 +79,19 @@ function Kept({ own, where, reference, change, act }: {
   return (
     <section className="flex flex-1 flex-col gap-2">
       <Names reference={reference} own={all.map((s) => s.name)} />
-      <div className="flex gap-1 rounded-lg bg-muted p-1">
+      <div className="sticky top-0 z-10 -mx-3 -mt-3 bg-background px-3 pt-3 pb-1">  {/* pinned under the header as the lists scroll */}
+       <div className="flex gap-1 rounded-lg bg-muted p-1">
         {TABS.map(([k, title]) => (
-          <button key={k} aria-pressed={tab === k} onClick={() => (setTab(k), setAdding(null), remember("programs.kind", k))}
+          <button key={k} aria-pressed={tab === k} onClick={() => (setTab(k), remember("programs.kind", k))}
                   className={cn("flex-1 rounded-md py-0.5 text-xs text-muted-foreground", tab === k && "bg-background font-medium text-foreground shadow-xs")}>
             {title}
           </button>
         ))}
+       </div>
       </div>
       {TABS.map(([t]) => (  // each tab's lists stay in place, the other tabs' hidden, so a dialog opened from one stays as you browse
         <div key={t} hidden={t !== tab} className="flex flex-col gap-2">
-          <Lists tab={t} active={t === tab} own={own} where={where} reference={reference} change={change} act={act} open={open} setOpen={setOpen} adding={adding} setAdding={setAdding}
+          <Lists tab={t} active={t === tab} own={own} where={where} reference={reference} change={change} act={act} open={open} setOpen={setOpen} adding={adding?.tab === t ? adding.scope : null} setAdding={(scope) => setAdding(scope && { tab: t, scope })}
                  hidden={hidden} hid={hid} setHid={setHid} />
         </div>
       ))}
@@ -150,23 +154,23 @@ function Lists({ tab, active, own, where, reference, change, act, open, setOpen,
         const { mine, outer } = tab === "input" ? { mine: [], outer: [] } : of(scope)
         const here = { ...where, scope }
         const shut = !open.includes(scope)
-        const inputs = reference.inputs.filter((i) => hidden || !veiled(i.name))
+        const inputs = reference.inputs.filter((i) => hidden || !veiled(i.name)).sort((a, b) => INPUTS.indexOf(a.name) - INPUTS.indexOf(b.name))
         const lines = tab === "input" ? (inputs.length ? [<Inputs key="inputs" inputs={inputs} veiled={veiled} veil={veil} />] : []) : [
-          ...mine.map((s, i) => (
+          ...mine.map((s, i): [string, ReactNode] => [full(s), (
             <KeptLine key={`${s.scope}:${i}`} veiled={veiled(full(s))} onVeil={() => veil(full(s))} kind={kind} spec={s} where={here} full={full(s)}
                       row={(rows[kind] as Row[]).find((r) => r.name === full(s))}
                       onSave={(data) => change([{ op: "update", kind, data: { ...found(s), changes: data } }])}
                       onDelete={() => act([{ op: "remove", kind, data: found(s) }])} />
-          )),
-          ...outer.map((r) => (r as ObjectRow).fields
+          )]),
+          ...outer.map((r): [string, ReactNode] => [r.name, (r as ObjectRow).fields
             ? <ObjectLine key={r.name} object={r as ObjectRow} label={r.name} veiled={veiled(r.name)} onVeil={() => veil(r.name)} />
-            : <Outer key={r.name} kind={kind} row={r} scope={scope} program={where.program} veiled={veiled(r.name)} onVeil={() => veil(r.name)} />),
-        ]
+            : <Outer key={r.name} kind={kind} row={r} scope={scope} program={where.program} veiled={veiled(r.name)} onVeil={() => veil(r.name)} />]),
+        ].sort((a, b) => a[0].localeCompare(b[0])).map(([, line]) => line)
         if (scope === "special" && !lines.length) return null  // nothing to add to it: shown only with something in it
         return (
           <div key={scope} className="flex flex-col gap-0.5">
             <div className="group flex items-center gap-1">
-              <button onClick={() => (setOpen(shut ? [...open, scope] : open.filter((o) => o !== scope)), setAdding(null))}
+              <button onClick={() => setOpen(shut ? [...open, scope] : open.filter((o) => o !== scope))}
                       aria-expanded={!shut} className="flex flex-1 items-center gap-1.5 rounded-md px-1 py-1 text-left hover:bg-background">
                 <ChevronRight strokeWidth={3} className={cn("size-3.5 transition-transform", !shut && "rotate-90")} />
                 <span className={cn("text-xs font-medium", shut && "text-muted-foreground")}>{title}</span>
@@ -179,7 +183,7 @@ function Lists({ tab, active, own, where, reference, change, act, open, setOpen,
             </div>
             {(
               <div hidden={shut} className="flex flex-col gap-0.5 pl-3">
-                {active && adding === scope && <Defining kind={kind} where={here} onSave={add(scope)} onClose={() => setAdding(null)} />}
+                {adding === scope && <Defining kind={kind} where={here} onSave={add(scope)} onClose={() => setAdding(null)} />}
                 {lines.length === 0 && <p className="px-1 text-xs text-muted-foreground">None.</p>}
                 {lines}
               </div>
@@ -219,11 +223,15 @@ type ObjectRow   = VarDetail & { fields?: ObjectField[] }
 /** A record or an object variable, as any line is: its value as `{…}`, a click on it opens its dialog, where its fields are. */
 function ObjectLine({ object, label, veiled, onVeil }: { object: ObjectRow; label: string; veiled?: boolean; onVeil: () => void }) {
   const [viewing, setViewing] = useState(false)
-  const fields = object.fields ?? []
-  const value  = (object as { scope?: Scope }).scope === "special" ? Object.fromEntries(fields.map((f) => [f.name.slice(object.name.length + 1), f.value])) : object.value  // the app's own (work, track): its fields'
+  const fields  = object.fields ?? []
+  const special = (object as { scope?: Scope }).scope === "special"  // the app's own (work, track): each field a value of its own
+  const value   = special ? Object.fromEntries(fields.map((f) => [f.name.slice(object.name.length + 1), f.value])) : object.value  // the app's own (work, track): its fields'
   return (
     <PanelLine icon={<TypeIcon type={object.type ?? "object"} />} label={label} name={object.name} desc={object.desc} type={object.type ?? "object"} dim={veiled} onOpen={() => setViewing(true)}>
-      <Value value={value} name={object.name} type={object.type ?? "object"} record={(object as { scope?: Scope }).scope === "special" ? undefined : object.name} />
+      <Value value={value} name={object.name} type={object.type ?? "object"} record={special ? undefined : object.name}
+             opens={special ? (key, v, t) => (
+               <span className="flex *:w-auto *:justify-start"><Value value={v} name={`${object.name}.${key}`} type={t} record={`${object.name}.${key}`} /></span>
+             ) : undefined} />
       <Veil name={object.name} veiled={veiled} onClick={onVeil} />
       {viewing && <Viewing object={object} label={label} value={value} onClose={() => setViewing(false)} />}
     </PanelLine>
@@ -235,23 +243,15 @@ function ObjectLine({ object, label, veiled, onVeil }: { object: ObjectRow; labe
  * clicked to see what it is. */
 function Viewing({ object, label, value, onClose }: { object: ObjectRow; label: string; value: unknown; onClose: () => void }) {
   const [seen, setSeen] = useState<ObjectField | null>(null)
-  const short = (f: VarDetail) => f.name.slice(object.name.length + 1)
+  const fields = object.fields ?? []
+  const short  = (f: VarDetail) => f.name.slice(object.name.length + 1)
   return (
     <Seen kind="variable" row={object as Row} name={label} full={object.name} desc={object.desc} type={object.type ?? "object"} value={value}
           locked="it's kept by the app" onClose={onClose}>
-      <section className="flex flex-col border-t pt-4">
-        <span className="mb-1.5 text-xs font-medium">Fields</span>
-        {(object.fields ?? []).map((f) => (
-          <div key={f.name} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-3 border-b py-1.5 text-xs last:border-b-0">
-            <button onClick={() => setSeen(f)} className="flex min-w-0 items-center gap-1.5 rounded text-left hover:bg-muted">
-              <TypeIcon type={f.type} /><code className="truncate font-medium underline decoration-dotted underline-offset-2">{short(f)}</code>
-            </button>
-            <span className="text-muted-foreground">{f.desc || "–"}</span>
-          </div>
-        ))}
-      </section>
+      <SchemaFields name={label} type={{ type: "object", properties: Object.fromEntries(fields.map((f) => [short(f), { ...schemaOf(f.type ?? "any"), description: f.desc }])) } as Type}
+                    onOpen={(key) => setSeen(fields.find((f) => short(f) === key) ?? null)} />
       {seen && (
-        <Seen kind="variable" row={seen as Row} name={seen.name} full={seen.name} desc={seen.desc} type={seen.type} value={seen.value} settable={collection(seen.value)} locked="it's kept by the app" onClose={() => setSeen(null)} />
+        <Seen kind="variable" row={{ ...seen, scope: "special" } as Row} name={seen.name} full={seen.name} desc={seen.desc} type={seen.type} value={seen.value} settable={collection(seen.value)} locked="it's kept by the app" onClose={() => setSeen(null)} />
       )}
     </Seen>
   )
@@ -332,7 +332,6 @@ type Rec = Record<string, unknown>
 /** A variable's value kept as `after`. A table's records are kept by the changes that make it (one taken out, added, changed or moved: as the board
  * itself does them), anything else as one value. */
 async function keepValue(name: string, before: unknown, after: unknown): Promise<string | null> {
-  if (name === APPS) return keepApps(before, after)
   const read = Array.isArray(after) ? await window.proki.fields({ op: "read", record: name }) : null
   if (!read || read.error || !read.records.includes(name)) return setValue(name, after)
   const keys  = new Set(read.fields.map((f) => f.key))
@@ -372,31 +371,8 @@ async function keepValue(name: string, before: unknown, after: unknown): Promise
   return null
 }
 
-/** The apps seen (track.all), kept as `after`: each one's track and label, as the apps' own page changes them (a label by its name). */
-async function keepApps(before: unknown, after: unknown): Promise<string | null> {
-  const read = await window.proki.apps({ op: "read" })
-  if (read.error) return read.error
-  const ids = new Map(read.labels.map((l) => [l.name, l.id]))
-  for (const row of after as Rec[]) {
-    const old    = (before as Rec[]).find((r) => r.key === row.key)
-    const change: Rec = {}
-    if (row.track !== old?.track) change.track = row.track
-    if (row.label !== old?.label) {
-      const id = ids.get(String(row.label))
-      if (id === undefined) return `No label called ${JSON.stringify(row.label)}`
-      change.label = id
-    }
-    if (Object.keys(change).length) {
-      const done = await window.proki.apps({ op: "change", key: row.key as string, ...change })
-      if (done.error) return done.error
-    }
-  }
-  window.dispatchEvent(new Event(CHANGED))
-  return null
-}
-
 /** How to set a variable's value, when you can (it has a `user` write): none otherwise. Asked once `active`. */
-function useSetter(name: string | undefined, active: boolean, value: unknown): ((to: unknown) => Promise<string | null>) | undefined {
+export function useSetter(name: string | undefined, active: boolean, value: unknown): ((to: unknown) => Promise<string | null>) | undefined {
   const [yours, setYours] = useState(false)
   useEffect(() => {
     if (!name || !active) return
@@ -512,7 +488,7 @@ function Seen({ kind, row, spec, name, full, desc, type, value, settable: open =
             <div><Editable label="Description" long placeholder="No description" {...st.field("desc", desc ?? "", !!save)} /></div>
           </DialogDescription>
         </DialogHeader>
-        <Corner what={kind} name={name} locked={locked} kept={kept ?? (links?.reads.length ? "something reads it (Read by): take that out first" : undefined)} inPlace={!!save} onEdit={onEdit}
+        <Corner what={kind} name={name} locked={locked} kept={kept ?? (links?.reads.length ? "something reads it (Read by): take that out first" : undefined)} onEdit={onEdit}
                 gone={{ variable: kindOf(type) === "list" && (type as { items?: { type?: string } }).items?.type === "object" ? "Its records go with it." : "Its saved value goes with it.",
                         signal: "Its saved history goes with it." }[kind as string]}
                 onDelete={onDelete && !links?.reads.length ? () => (onDelete(), onClose()) : undefined} />
@@ -537,7 +513,7 @@ function Seen({ kind, row, spec, name, full, desc, type, value, settable: open =
           )}
           {kind === "variable" && lasts && <><Term>Kept</Term><dd>{lasts}</dd></>}
         </dl>
-        {kind === "variable" ? <RecordFields record={full}>{children ?? (save && !kept ? <StagedFields name={name} type={type} own={own} /> : <Shape type={type} />)}</RecordFields> : <Shape type={type} />}
+        {kind === "variable" ? <RecordFields record={full}>{children ?? (save && !kept ? <StagedFields name={name} type={type} own={own} /> : <SchemaFields name={name} type={type ?? "any"} />)}</RecordFields> : <SchemaFields name={name} type={type ?? "any"} />}
         {links && <Linked links={links} worked={worked} rule={kind === "rule"} measured={kind === "input"} user={user} onLeave={onLeave ?? onClose} />}
         </>}
         </Staging>
@@ -562,7 +538,7 @@ const sent = (patch: Record<string, unknown>) => Object.assign({}, ...Object.ent
 /** A signal's expression, changed where it's read; kept with the dialog's Save. */
 function Formula({ expr }: { expr: string }) {
   const st = useStaged()
-  return <Editable label="Expression" code list={NAMES} placeholder="Expression" className="rounded-md bg-muted px-2 py-1.5 text-xs" {...(st?.field("expr", expr) ?? { value: expr })} />
+  return <Editable label="Expression" code long list={NAMES} placeholder="Expression" className="w-full rounded-md bg-muted px-2 py-1.5 text-xs" {...(st?.field("expr", expr) ?? { value: expr })} />
 }
 
 /** A rule's own rows in its dialog: when it fires, how soft it is and where it votes, each changed where it's read, kept with the
@@ -582,9 +558,9 @@ function Fires({ rule, ruled }: { rule: Reference["rules"][number]; ruled?: Rule
       <dd className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 break-words">
         {ruled ? (
           <>
-            <Editable label="Left side" code list={NAMES} placeholder="Left side" {...f("lhs", String(ruled.lhs))} />
+            <Editable label="Left side" code long list={NAMES} placeholder="Left side" {...f("lhs", String(ruled.lhs))} />
             <ComparedBy cmp={ruled.cmp} />
-            <Editable label="Right side" code list={NAMES} placeholder="Right side" {...f("rhs", String(ruled.rhs))} />
+            <Editable label="Right side" code long list={NAMES} placeholder="Right side" {...f("rhs", String(ruled.rhs))} />
           </>
         ) : <Expr>{`${rule.lhs} ${SYMBOL[rule.cmp]} ${rule.rhs}`}</Expr>}
       </dd>
@@ -765,57 +741,16 @@ function Chips({ title, rows, empty, onOpen }: { title: string; rows: Entry[]; e
   )
 }
 
-type Reader = keyof typeof READERS
 
-const READERS = {  // what reads a name: its icon, its tint, what it means
-  auto:     [Workflow,  AUTO,                                                   "Read by an automation: a transition's condition, or an action"],
-  rule:     [Scale,     "bg-rose-500/15 text-rose-700 dark:text-rose-300",       "Read by a rule, to work out its chance"],
-  signal:   [ChartLine, "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",       "Read by a signal, to work out its value"],
-  variable: [Variable,  "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300", "Read by a variable, to start from"],
-  proki:    [PawPrint,  "bg-violet-500/15 text-violet-700 dark:text-violet-300", "Read by the app itself"],
-} satisfies Record<string, [LucideIcon, string, string]>
-
-/** What reads it, as a chip like a source's: its icon and its kind. */
-function Pill({ by }: { by: Reader }) {
-  const [icon, tint, means] = READERS[by]
-  return <span title={means} className={cn(TAG, tint)}><Mark icon={icon} />{by}</span>
-}
-
-/** Where in the automations: a row each, its automation, its state, and its action (or
- * transition), with its icon; a row clicked goes there. */
-/** The fields of a record, or of each item of a list of records, as its type says: each its name,
- * its type and what it is (nothing for any other type). */
-function Shape({ type }: { type?: Type }) {
-  const schema = typeof type === "object" ? type as { type?: string; properties?: Record<string, Record<string, unknown>>; items?: { type?: string; properties?: Record<string, Record<string, unknown>> } } : undefined
-  const props  = schema?.type === "object" ? schema.properties : schema?.type === "array" && schema.items?.type === "object" ? schema.items.properties : undefined
-  if (!props) return null
-  return (
-    <section className="flex flex-col border-t pt-4">
-      <span className="mb-1.5 text-xs font-medium">{schema?.type === "array" ? "Each item's fields" : "Fields"}</span>
-      {Object.entries(props).map(([key, inner]) => (
-        <div key={key} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-3 border-b py-1.5 text-xs last:border-b-0">
-          <span title={said(inner as Type)} className="flex min-w-0 items-center gap-1.5"><TypeIcon type={inner as Type} /><code className="truncate font-medium">{key}</code></span>
-          <span className="text-muted-foreground">{String(inner.description ?? "") || "–"}</span>
-        </div>
-      ))}
-    </section>
-  )
-}
-
-/** A dialog's Edit and Delete, by its close button; one that can't be done is greyed, and says why
- * on hover (`locked`: neither can, `kept`: it can't be deleted). `gone`: what's lost with it, as Delete asks.
- * `inPlace`: changed where it is, no Edit. */
-export function Corner({ what, name, locked, kept, gone, inPlace, onEdit, onDelete }: {
-  what: string; name: string; locked?: string; kept?: string; gone?: string; inPlace?: boolean; onEdit?: () => void; onDelete?: () => void
+/** A dialog's Delete, by its close button, greyed when it can't be done and saying why on hover (`locked`: it's read-only,
+ * `kept`: it can't be deleted); `gone`: what's lost with it, as Delete asks. `onEdit`: where it's changed, elsewhere (its automation). */
+export function Corner({ what, name, locked, kept, gone, onEdit, onDelete }: {
+  what: string; name: string; locked?: string; kept?: string; gone?: string; onEdit?: () => void; onDelete?: () => void
 }) {
   const why = locked ? `This ${what} is read-only: ${locked}` : `This ${what} can't be deleted: ${kept}`
   return (
     <div className="absolute top-2 right-10 flex">
-      {!inPlace && (
-        <span title={onEdit ? "Edit" : why}>
-          <Button size="icon-sm" variant="ghost" aria-label={`Edit the ${what} ${name}`} disabled={!onEdit} onClick={onEdit}><Pencil /></Button>
-        </span>
-      )}
+      {onEdit && <Button size="icon-sm" variant="ghost" aria-label={`Edit the ${what} ${name}`} title="Edit, in its automation" onClick={onEdit}><Pencil /></Button>}
       {onDelete ? (
         <Confirm title={`Delete the ${what} “${name}”?`} description={[gone, "This can't be undone."].filter(Boolean).join(" ")} action={`Delete ${what}`} onConfirm={onDelete}>
           <Button size="icon-sm" variant="ghost" aria-label={`Delete the ${what} ${name}`} title="Delete"><Trash2 /></Button>
@@ -843,6 +778,7 @@ function Veil({ name, veiled, onClick }: { name: string; veiled?: boolean; onCli
 function Defining({ kind, where, onSave, onClose }: { kind: Kind; where: Where; onSave: Save; onClose: () => void }) {
   const dirty = useRef(false)
   const kept = (e: Event) => dirty.current && e.preventDefault()  // Escape or a click outside closes it only untouched
+  const away = (e: Event) => ((e.target as Element | null)?.closest?.("[data-bubble-panel]") ? e.preventDefault() : kept(e))  // browsing the panel never closes it
   const made = async (patch: Record<string, unknown>) => {
     const given = sent(patch)
     const type  = (given.type as Type | undefined) ?? "any"
@@ -862,7 +798,7 @@ function Defining({ kind, where, onSave, onClose }: { kind: Kind; where: Where; 
   const rule = { lhs: "", cmp: "gt", rhs: "", softness: 0, level: 1 }
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent onEscapeKeyDown={(e) => (typing(e), kept(e))} onInteractOutside={kept}
+      <DialogContent onEscapeKeyDown={(e) => (typing(e), kept(e))} onInteractOutside={away}
                      className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg sm:has-[[data-record]]:max-w-2xl">
         <Staging onCancel={onClose} onSave={made}>
           {(st) => {
@@ -991,8 +927,9 @@ const chance = (c: number | null | undefined) => (c == null ? "–" : `${Math.ro
 
 /** A value beside its name, short enough to line up: yes or no as a mark, a big number in K, M
  * or B, a text whole; a list or a record, what it holds, opened as a table. */
-export function Value({ value, rule, name, full, onPut, string, type, record }: {
+export function Value({ value, rule, name, full, onPut, string, type, record, opens }: {
   value: unknown; rule?: boolean; name?: string; full?: boolean; onPut?: (value: unknown) => Promise<string | null>; string?: boolean; type?: Type; record?: string
+  opens?: (key: string, value: unknown, type?: Type) => ReactNode  // an object whose fields are values of their own: how each opens
 }) {
   const [open, setOpen] = useState(false)
   const yours = useSetter(record, open && !onPut && !rule, value)  // from the panel: kept to you if you can
@@ -1001,7 +938,7 @@ export function Value({ value, rule, name, full, onPut, string, type, record }: 
   if (!rule && held !== undefined) return (
     <span className="flex w-20 shrink-0 justify-end font-mono">
       <Opens value={held} onOpen={() => setOpen(true)} />
-      <Inspect title={name ?? "value"} type={type} value={held} open={open} onOpenChange={setOpen} edit={onPut ?? yours} record={record} />
+      <Inspect title={name ?? "value"} type={type} value={held} open={open} onOpenChange={setOpen} edit={onPut ?? yours} record={record} opens={opens} />
     </span>
   )
   if (full && onPut && !rule) return <Scalar value={value} string={string} onPut={onPut} />

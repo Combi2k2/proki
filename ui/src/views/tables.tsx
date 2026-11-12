@@ -1,76 +1,66 @@
-// Tables: each kind of record (a task, a group, yours), its records as a table, a row each and a
-// column a field: its id first, then its fields as you made them, then what proki works out for
-// it, then when it was made and changed. A column's head sorts by it, again the other way; the
-// search keeps the rows with it anywhere. A list or a record in a cell opens, as a table of its
-// own. The kind you looked at is kept.
+// Tables: each kind of record (a task, a group, yours), and each other list of records (every app seen),
+// picked from a list, its records as the same table a list of records opens as anywhere: a row each and
+// a column a field, changed where it's read, rows added, moved and taken out, all kept with Save. The
+// search keeps the rows with it anywhere. The table you looked at is kept.
 
-import { useEffect, useMemo, useState } from "react"
-import { ArrowDown, ArrowUp, Search, Table2 } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Search } from "lucide-react"
 import { PageHeader } from "@/components/page"
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { Type, Weighed } from "@/lib/proki"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type { Reference, Type, VarDetail, Weighed } from "@/lib/proki"
 import { recallJson, rememberJson } from "@/lib/remember"
-import { cn } from "@/lib/utils"
-import { TypeIcon } from "@/views/fields"
-import { Inspect } from "@/views/inspect"
-import { atomic, Opens, Truth } from "@/views/value-parts"
+import { schemaOf } from "@/views/fields"
+import { Inspect, matches } from "@/views/inspect"
+import { useSetter } from "@/views/resources"
 
-const STAMPS = ["created_at", "updated_at"]  // every record's, last
-type Column = { key: string; desc: string; type: Type | undefined }
+/** A list whose items are records: one with fields of its own. */
+const tabled = (type?: Type) => typeof type === "object" && (type as { type?: string; items?: { properties?: object } }).type === "array" && !!(type as { items?: { properties?: object } }).items?.properties
+
+const STAMPS = { id: { type: "integer" }, created_at: { type: "number", format: "time" }, updated_at: { type: "number", format: "time" } }  // every record's own
 
 export function TablesView() {
-  const [kinds, setKinds]   = useState<string[]>([])
-  const [kind, setKind]     = useState(() => recallJson("tables.kind", ""))
-  const [read, setRead]     = useState<Weighed | null>(null)
-  const [error, setError]   = useState("")
-  const [query, setQuery]   = useState("")
-  const [order, setOrder]   = useState<{ key: string; down: boolean } | null>(null)
-  const [opened, setOpened] = useState<{ title: string; value: unknown } | null>(null)
+  const [kinds, setKinds] = useState<string[]>([])
+  const [kind, setKind]   = useState(() => recallJson("tables.kind", ""))
+  const [read, setRead]   = useState<Weighed | null>(null)
+  const [error, setError] = useState("")
+  const [query, setQuery] = useState("")
+  const [lists, setLists] = useState<VarDetail[]>([])  // the other lists of records: variables, set as a whole
 
-  useEffect(() => {
-    let live = true
-    window.proki.fields({ op: "read", ...(kind ? { record: kind } : {}) }).then((answer) => {
-      if (!live) return
-      if (answer.error) return setError(answer.error)
-      setError("")
-      setKinds(answer.records)
-      setRead(answer)
-      if (!kind || !answer.records.includes(kind)) setKind(answer.records.includes("work.tasks") ? "work.tasks" : answer.records[0] ?? "")
-    })
-    return () => void (live = false)
+  const load = useCallback(async () => {
+    const [asked, known] = await Promise.all([window.proki.fields({ op: "read", ...(kind ? { record: kind } : {}) }), window.proki.tool("reference") as Promise<Reference>])
+    const answer = asked.error && kind ? await window.proki.fields({ op: "read" }) : asked  // a list that isn't a kind of record: the kinds, from the tasks'
+    if (answer.error) return setError(answer.error)
+    setError("")
+    const flat = known.variables.flatMap((v) => [v, ...((v as { fields?: VarDetail[] }).fields ?? [])])
+    const more = flat.filter((v) => tabled(v.type) && !answer.records.includes(v.name))
+    setLists(more)
+    const all  = [...answer.records, ...more.map((v) => v.name)]
+    setKinds(all.sort())
+    setRead(answer)
+    if (!kind || (!answer.records.includes(kind) && !more.some((v) => v.name === kind))) setKind(answer.records.includes("work.tasks") ? "work.tasks" : answer.records[0] ?? "")
   }, [kind])
+  useEffect(() => void load(), [load])
 
-  const columns = useMemo<Column[]>(() => {
-    if (!read) return []
-    const fields = read.fields.map((f) => ({ key: f.key, desc: f.desc, type: f.worked }))
-    const worked = read.own.filter((k) => k !== "id" && !STAMPS.includes(k)).map((key) => ({ key, desc: "worked out by Proki", type: undefined }))
-    return [{ key: "id", desc: "", type: "integer" }, ...fields, ...worked, ...STAMPS.map((key) => ({ key, desc: key === "created_at" ? "made" : "last changed", type: "time" }))]
-  }, [read])
+  const list   = lists.find((v) => v.name === kind)
+  const value  = useMemo(() => list ? (Array.isArray(list.value) ? list.value : []) : read?.rows.map((r) => r.values) ?? [], [list, read])
+  const fields = useMemo(() => read?.fields ?? [], [read])
+  const type   = useMemo(() => list?.type ?? ({ type: "array", items: { type: "object", properties: {
+    ...STAMPS, ...Object.fromEntries(fields.map((f) => [f.key, { ...schemaOf(f.worked ?? "any"), description: f.desc }])) } } }) as Type, [list, fields])
+  const count  = list ? Object.keys((type as { items: { properties: object } }).items.properties).length : fields.length
+  const setter = useSetter(kind || undefined, !!kind, value)
+  const keep   = setter && (async (to: unknown) => (await setter(to)) ?? (await load(), null))
+  const found  = query ? value.filter((r) => matches(r, query)).length : value.length
 
-  const rows = useMemo(() => {
-    const found = (read?.rows ?? []).filter((r) => !query || JSON.stringify(Object.values(r.values)).toLowerCase().includes(query.toLowerCase()))
-    if (!order) return found
-    const at = (r: (typeof found)[number]) => r.values[order.key]
-    return [...found].sort((a, b) => {
-      const [x, y] = [at(a), at(b)]
-      if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1  // none last, either way
-      const by = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true })
-      return order.down ? -by : by
-    })
-  }, [read, query, order])
-
-  const pick = (to: string) => (setKind(to), rememberJson("tables.kind", to), setOrder(null), setQuery(""))
-  const sort = (key: string) => setOrder((o) => (o?.key === key ? (o.down ? null : { key, down: true }) : { key, down: false }))
+  const pick = (to: string) => (setRead(null), setQuery(""), setKind(to), rememberJson("tables.kind", to))
 
   return (
     <div className="flex h-full flex-col gap-4 px-8 pt-7 pb-6">
       <PageHeader title="Tables" beside={kinds.length > 0 && (
-          <Tabs value={kind} onValueChange={pick}>
-            <TabsList>{kinds.map((k) => <TabsTrigger key={k} value={k} className="font-mono text-xs">{k}</TabsTrigger>)}</TabsList>
-          </Tabs>
+          <Select value={kind} onValueChange={pick}>
+            <SelectTrigger aria-label="Table" className="w-48 font-mono text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent position="popper">{kinds.map((k) => <SelectItem key={k} value={k} className="font-mono text-xs">{k}</SelectItem>)}</SelectContent>
+          </Select>
         )}>
         <label className="relative">
           <Search aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -78,65 +68,16 @@ export function TablesView() {
         </label>
       </PageHeader>
       {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {read && !read.rows.length ? (
-        <Empty className="mt-6">
-          <EmptyHeader>
-            <EmptyMedia variant="icon"><Table2 /></EmptyMedia>
-            <EmptyTitle>No records yet</EmptyTitle>
-            <EmptyDescription>{kind}'s records show here as they're made.</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : read && (
+      {read && (
         <>
           <p className="-mt-2 text-xs text-muted-foreground tabular-nums">
-            {query ? `${rows.length} of ${read.rows.length} records` : `${read.rows.length} record${read.rows.length === 1 ? "" : "s"}`} · {columns.length} fields
+            {query ? `${found} of ${value.length} records` : `${value.length} record${value.length === 1 ? "" : "s"}`} · {count} fields
           </p>
-          <div className="min-h-0 flex-1 overflow-hidden rounded-xl border [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto">
-            <Table className="text-xs">
-              <TableHeader className="sticky top-0 z-10 bg-background shadow-[inset_0_-1px_0_var(--border)]">
-                <TableRow className="hover:bg-transparent">
-                  {columns.map((c) => (
-                    <TableHead key={c.key} aria-sort={order?.key === c.key ? (order.down ? "descending" : "ascending") : "none"} className="px-0">
-                      <button onClick={() => sort(c.key)} title={[c.key, c.desc].filter(Boolean).join(" · ")}
-                              className="flex h-full w-full items-center gap-1.5 px-3 font-mono font-medium whitespace-nowrap text-muted-foreground hover:text-foreground">
-                        <TypeIcon type={c.type} />{c.key}
-                        {order?.key === c.key && (order.down ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
-                      </button>
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.id}>
-                    {columns.map((c) => (
-                      <TableCell key={c.key} className={cn("max-w-72 px-3 align-top", c.key === "id" && "text-muted-foreground")}>
-                        <Cell value={r.values[c.key]} type={c.type} onOpen={(value) => setOpened({ title: `${r.name}.${c.key}`, value })} />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="min-h-0 flex-1">
+            <Inspect key={kind} inline open title={kind} type={type} value={value} onOpenChange={() => {}} edit={keep} record={kind} query={query} />
           </div>
         </>
       )}
-      <Inspect title={opened?.title ?? ""} value={opened?.value ?? null} open={opened !== null} onOpenChange={(to) => !to && setOpened(null)} />
     </div>
   )
-}
-
-/** A field's value in its cell: a time as a day and a time, yes or no as a tick or a cross, a
- * dash for none (an empty list too); a list or a record says what it holds, and opens. */
-function Cell({ value, type, onOpen }: { value: unknown; type: Type | undefined; onOpen: (value: unknown) => void }) {
-  if (value == null || (typeof value === "object" && !Object.keys(value).length)) return <span className="text-muted-foreground/60">–</span>
-  if (!atomic(value)) return <Opens value={value} onOpen={() => onOpen(value)} />
-  if (typeof value === "boolean") return <Truth value={value} />
-  if (type === "time" && typeof value === "number") {
-    const at = new Date(value * 60_000)
-    return <time dateTime={at.toISOString()} className="whitespace-nowrap tabular-nums">{at.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</time>
-  }
-  if (typeof value === "number") return <span className="tabular-nums">{Number.isInteger(value) ? value : value.toFixed(2)}</span>
-  return <span title={String(value)} className="line-clamp-2 break-words">{String(value)}</span>
 }

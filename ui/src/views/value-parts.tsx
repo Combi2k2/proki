@@ -5,7 +5,7 @@ import { useState } from "react"
 import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { parsed } from "@/views/fields"
-import { Editable } from "@/views/in-place"
+import { Editable, HELD } from "@/views/in-place"
 import { shown } from "@/views/program-inspect"
 
 /** Whether a value fits a cell as it is: not a list, not a record (an empty one says "none"). */
@@ -38,7 +38,7 @@ export function Opens({ value, onOpen, className }: { value: unknown; onOpen: ()
   const list = Array.isArray(value)
   return (
     <button type="button" title={holds(value)} onClick={(e) => (e.stopPropagation(), onOpen())} style={{ color: `var(--type-${list ? "list" : "object"})` }}
-            className={cn("-mx-1 inline-flex items-center rounded px-1 whitespace-nowrap hover:bg-muted", className)}>
+            className={cn(HELD, "inline-flex items-center whitespace-nowrap", className)}>
       {list ? "[" : "{"}{Object.keys(value as object).length > 0 && <span className="text-muted-foreground">…</span>}{list ? "]" : "}"}
     </button>
   )
@@ -52,11 +52,11 @@ export function Truth({ value }: { value: unknown }) {
 }
 
 /** Yes or no, as its mark; clicked, both marks show in a line and a click on one sets it. `changed`: lit, not kept yet. */
-export function Flag({ value, onPut, changed }: { value: unknown; onPut: (value: boolean) => void; changed?: boolean }) {
+export function Flag({ value, onPut, changed, boxed }: { value: unknown; onPut: (value: boolean) => void; changed?: boolean; boxed?: boolean }) {
   const [open, setOpen] = useState(false)
   if (!open) return (
     <button type="button" aria-label={`${value === true ? "true" : value === false ? "false" : "unknown"}, change`} onClick={() => setOpen(true)}
-            className={cn("inline-flex min-w-4 cursor-pointer justify-center border-b border-dotted border-transparent pb-px hover:border-muted-foreground", changed && "border-solid border-changed border-b-2 hover:border-changed")}>
+            className={cn("inline-flex min-w-4 cursor-pointer justify-center border-b border-dotted border-transparent pb-px", boxed ? HELD : "hover:border-muted-foreground", changed && "border-solid border-changed border-b-2 hover:border-changed")}>
       <Truth value={value} />
     </button>
   )
@@ -72,13 +72,13 @@ export function Flag({ value, onPut, changed }: { value: unknown; onPut: (value:
 
 /** A plain value changed where it's read: text or a number is clicked and typed over (yes or no is picked from its two
  * marks); a change goes to `onPut`. `changed`: lit, not kept yet. */
-export function Scalar({ value, string, flag, onPut, changed, editing }: { value: unknown; string?: boolean; flag?: boolean; onPut: (value: unknown) => Promise<string | null>; changed?: boolean; editing?: boolean }) {
-  if (typeof value === "boolean" || flag) return <Flag value={value} changed={changed} onPut={(on) => void onPut(on)} />
+export function Scalar({ value, string, flag, onPut, changed, editing, boxed }: { value: unknown; string?: boolean; flag?: boolean; onPut: (value: unknown) => Promise<string | null>; changed?: boolean; editing?: boolean; boxed?: boolean }) {
+  if (typeof value === "boolean" || flag) return <Flag value={value} changed={changed} boxed={boxed} onPut={(on) => void onPut(on)} />
   const text = value === null || value === undefined ? "" : typeof value === "string" || typeof value === "object" ? JSON.stringify(value) : shown(value)
   const save = async (typed: string) => {
     const was = parsed(typed)
     const sent = typed.trim() === "" ? null : string && typeof was !== "string" ? typed : was
     return collection(sent) ? "One value here: a list or a record opens as a table" : onPut(sent)
   }
-  return <Editable label="Value" code value={text} onSave={save} changed={changed} editing={editing} className={cn("text-xs whitespace-pre-wrap", WRAP)} />
+  return <Editable label="Value" code value={text} onSave={save} changed={changed} editing={editing} boxed={boxed} className={cn("text-xs whitespace-pre-wrap", WRAP)} />
 }
