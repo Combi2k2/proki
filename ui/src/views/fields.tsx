@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import type { Field, Source, SourceName, Type, Weighed } from "@/lib/proki"
 import { Confirm } from "@/components/confirm"
-import { CHANGED, Editable, Pick, type Staged, Staging, Term, typing, useStaged } from "@/views/in-place"
+import { CHANGED, Drafted, Editable, Pick, type Staged, Staging, Term, typing, useStaged } from "@/views/in-place"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { BARE, TemplateBox } from "@/views/code"
 import { Collection, emptyOf } from "@/views/inspect"
@@ -190,7 +190,7 @@ function SourceDialog({ field, weighed, index, fresh, onChange, onClose }: { fie
 function LlmForm({ field, now, was, st, post }: { field: Field; now: Source; was: Source; st: Staged; post: ReactNode }) {
   return (
     <div className="flex flex-col gap-4 [&>section]:border-t-0 [&>section]:pt-0">
-      <TemplateBox label="Prompt" value={now.context ?? ""} onChange={(e) => st.put("context", e.target.value, was.context ?? "")} placeholder="How many hours will this take?" className="min-h-24" />
+      <TemplateBox label="Prompt" value={now.context ?? ""} changed={"context" in st.patch} onChange={(e) => st.put("context", e.target.value, was.context ?? "")} placeholder="How many hours will this take?" className="min-h-24" />
       <div className="flex flex-col gap-1.5">
         <Label text="Type" />
         <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-xs">
@@ -236,7 +236,7 @@ function JevForm({ now, was, st, named, post }: {
     <div className="flex flex-col gap-4">
       <KindTabs kind={kind} kinds={["noul", "choice", "score"]} changed={"type" in st.patch} onPick={(k) => st.put("type", k, was.type ?? "noul")} />
       {named.contexts && <Context text={named.contexts.jev} />}
-      <TemplateBox label="Question" value={now.question ?? ""} onChange={(e) => st.put("question", e.target.value, was.question ?? "")} placeholder="Is this for school?" className="min-h-10" />
+      <TemplateBox label="Question" value={now.question ?? ""} changed={"question" in st.patch} onChange={(e) => st.put("question", e.target.value, was.question ?? "")} placeholder="Is this for school?" className="min-h-10" />
       <Criteria key={kind} criteria={now.criteria ?? {}} onSet={(c) => st.put("criteria", c, was.criteria ?? {})}
                 {...(kind === "noul" ? { fixed: ["True", "False"] } : kind === "score" ? { label: "Marks", placeholder: "1" } : {})} />
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
@@ -311,10 +311,28 @@ export function RecordFields({ record, children }: { record: string; children?: 
   )
 }
 
+/** Where a choice's options come from, picked from a menu as a field's sources are named: the chip `user` (you give a list) or `expr` (an expression
+ * works it out). `changed`: not kept yet. */
+export function OptionsFrom({ value, changed, onPick }: { value: "user" | "expr"; changed?: boolean; onPick: (value: "user" | "expr") => void }) {
+  const tag = (n: "user" | "expr", means?: string) => (
+    <span className="inline-flex items-center gap-2">
+      <span className={cn(TAG, SOURCES[n].chip)}><Mark icon={SOURCES[n].icon} />{n}</span>
+      {means && <span className="text-muted-foreground">{means}</span>}
+    </span>
+  )
+  return (
+    <Pick label="Options from" value={value} arrow changed={changed} onPick={(v) => onPick(v as "user" | "expr")}
+          options={[["user", tag("user", "You give the list")], ["expr", tag("expr", "An expression works it out")]]}>
+      {tag(value)}
+    </Pick>
+  )
+}
+
 /** A source as a chip, its icon before its name: what it means as you hover it (under a
  * TooltipProvider). */
-export function Chip({ name, active, onClick, onRemove, ...drag }: {
+export function Chip({ name, active, means, onClick, onRemove, ...drag }: {
   name: SourceName
+  means?: string  // what it says as you hover it, where it isn't what the source is for a field
   active?: boolean
   onClick?: (e: React.MouseEvent) => void
   onRemove?: () => void
@@ -332,7 +350,7 @@ export function Chip({ name, active, onClick, onRemove, ...drag }: {
           )}
         </span>
       </TooltipTrigger>
-      <TooltipContent side="top">{SOURCES[name].means}</TooltipContent>
+      <TooltipContent side="top">{means ?? SOURCES[name].means}</TooltipContent>
     </Tooltip>
   )
 }
@@ -595,13 +613,14 @@ export const fieldKeys = (type?: Type): string[] => (kindOf(type) === "object" &
 export function StagedFields({ name, type, own, at = "type" }: { name: string; type?: Type; own?: Type; at?: string }) {
   const st  = useStaged()
   const was = own ?? type ?? "any"
-  return st ? <SchemaFields name={name} type={(st.patch[at] as Type | undefined) ?? was} onChange={(t) => st.put(at, t, was)} /> : null
+  return st ? <SchemaFields name={name} type={(st.patch[at] as Type | undefined) ?? was} was={was} onChange={(t) => st.put(at, t, was)} /> : null
 }
 
 /** The fields of an object type (or of each item of a list of objects), as a table like a record's: a row each, its name and what it
  * is, the row's trash as you point at it, a click opening the field; a new one added under them with its description. No `onChange`:
- * read only. `onOpen`: what a field's click opens instead (the app's own objects: the field's own dialog). */
-export function SchemaFields({ name, type, onChange, onOpen }: { name: string; type: Type; onChange?: (type: Type) => void; onOpen?: (key: string) => void }) {
+ * read only. `onOpen`: what a field's click opens instead (the app's own objects: the field's own dialog). `was`: the type as kept, to mark a field new
+ * or changed (nothing marked without it). */
+export function SchemaFields({ name, type, was, onChange, onOpen }: { name: string; type: Type; was?: Type; onChange?: (type: Type) => void; onOpen?: (key: string) => void }) {
   const [open, setOpen]     = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const schema = schemaOf(type)
@@ -618,13 +637,15 @@ export function SchemaFields({ name, type, onChange, onOpen }: { name: string; t
                                                      : (put([...props, [key, { type: "string", ...(desc ? { description: desc } : {}) }]]), "")
   const row    = "grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-3"
   const spec   = props.find(([k]) => k === open)
+  const kept   = was === undefined ? undefined : (((kindOf(was) === "list" ? schemaOf(was).items : schemaOf(was)) ?? {}) as Schema).properties as Record<string, Schema> | undefined ?? {}
+  const mark   = (key: string, s: Schema) => (!kept ? undefined : !(key in kept) ? "bg-added/10" : JSON.stringify(kept[key]) !== JSON.stringify(s) ? "bg-changed/10" : undefined)
   return (
     <section className="flex flex-col gap-1.5 border-t pt-4">
       <Heading text="Fields" onAdd={adding || !onChange ? undefined : () => setAdding(true)} />
       <div className="rounded-md border">
         <div className={cn(row, "border-b bg-muted/40 py-1 pr-9 pl-2 text-xs text-muted-foreground")}><span>Name</span><span>What it is</span></div>
         {props.map(([key, s]) => (
-          <div key={key} className="group/row relative border-b last:border-b-0">
+          <div key={key} className={cn("group/row relative border-b last:border-b-0", mark(key, s))}>
             <div role="button" tabIndex={0} onClick={() => (onOpen ?? setOpen)(key)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (onOpen ?? setOpen)(key)}
                  className={cn(row, "cursor-pointer py-1.5 pr-9 pl-2 text-xs hover:bg-muted/60")}>
               <span className="flex min-w-0 items-center gap-1.5"><TypeIcon type={s as Type} /><code className="truncate font-semibold">{key}</code></span>
@@ -640,46 +661,57 @@ export function SchemaFields({ name, type, onChange, onOpen }: { name: string; t
       {open && spec && (
         <Dialog open onOpenChange={(to) => !to && setOpen(null)}>
           <DialogContent className="sm:max-w-lg" onEscapeKeyDown={typing}>
-            <DialogHeader>
-              <DialogTitle className="flex min-w-0 items-center gap-2 pr-8 font-mono text-sm">
-                <TypeIcon type={spec[1] as Type} className="size-4" />
-                <span className="flex min-w-0 items-baseline">
-                  <span className="shrink-0">{`${name}${list ? "[i]" : ""}.`}</span>
-                  <Editable label="Name" value={spec[0]} className="truncate text-foreground" onSave={onChange && (async (t) => {
-                    const to = t.trim()
-                    if (!to || (to !== spec[0] && props.some(([k]) => k === to))) return `${to || "A field"} is already there`
-                    at(spec[0], to, spec[1])
-                    setOpen(to)
-                    return null
-                  })} />
-                </span>
-              </DialogTitle>
-              <DialogDescription asChild>
-                <div><Editable label="Description" long placeholder="No description" value={String(spec[1].description ?? "")} onSave={onChange && (async (t) => (at(spec[0], spec[0], { ...spec[1], description: t }), null))} /></div>
-              </DialogDescription>
-            </DialogHeader>
-            <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t pt-4 text-xs">
-              <dt className="text-muted-foreground">Type</dt>
-              <dd>
-                <Pick label="Type" value={kindOf(spec[1])} options={TYPES.map((t) => [t, <><TypeIcon type={t} />{t}</>])}
-                      onPick={onChange && ((k) => at(spec[0], spec[0], { ...picked(k, spec[1]), ...(spec[1].description ? { description: spec[1].description } : {}) }))}>
-                  <span style={{ color: `var(--type-${kindOf(spec[1])})` }}>{kindOf(spec[1])}</span>
-                </Pick>
-              </dd>
-              {kindOf(spec[1]) === "list" && (
-                <>
-                  <dt className="text-muted-foreground">Item</dt>
-                  <dd>
-                    <Pick label="Item" value={kindOf((spec[1].items ?? {}) as Type)} options={TYPES.filter((t) => t !== "list").map((t) => [t, <><TypeIcon type={t} />{t}</>])}
-                          onPick={onChange && ((k) => at(spec[0], spec[0], { ...spec[1], items: picked(k, (spec[1].items ?? {}) as Schema) }))}>
-                      <span style={{ color: `var(--type-${kindOf((spec[1].items ?? {}) as Type)})` }}>{kindOf((spec[1].items ?? {}) as Type)}</span>
-                    </Pick>
-                  </dd>
-                </>
-              )}
-            </dl>
-            <SchemaFields name={`${name}${list ? "[i]" : ""}.${spec[0]}`} type={spec[1] as Type}
-                          onChange={onChange && ((t) => at(spec[0], spec[0], { ...schemaOf(t), ...(spec[1].description ? { description: spec[1].description } : {}) }))} />
+            <Drafted<[string, Schema]> value={spec} onClose={() => setOpen(null)} onSave={([to, s]) => {
+              if (!to.trim() || (to !== spec[0] && props.some(([k]) => k === to))) return `${to.trim() || "A field"} is already there`
+              at(spec[0], to, s)
+              setOpen(null)
+            }}>
+              {(d, update) => {
+                const kind = kindOf(d[1])
+                const own  = (change: Partial<Schema> | ((s: Schema) => Schema)) => update(([k, s]) => [k, typeof change === "function" ? change(s) : { ...s, ...change }])
+                const keep = (s: Schema, next: Schema): Schema => ({ ...next, ...(s.description ? { description: s.description } : {}) })  // a type picked keeps what it's for
+                return (
+                  <>
+                    <DialogHeader>
+                      <DialogTitle className="flex min-w-0 items-center gap-2 pr-8 font-mono text-sm">
+                        <TypeIcon type={d[1] as Type} className="size-4" />
+                        <span className="flex min-w-0 items-baseline">
+                          <span className="shrink-0">{`${name}${list ? "[i]" : ""}.`}</span>
+                          <Editable label="Name" value={d[0]} changed={d[0] !== spec[0]} className="truncate text-foreground" onSave={onChange && (async (t) => (update(([, s]) => [t.trim(), s]), null))} />
+                        </span>
+                      </DialogTitle>
+                      <DialogDescription asChild>
+                        <div><Editable label="Description" long placeholder="No description" value={String(d[1].description ?? "")} changed={(d[1].description ?? "") !== (spec[1].description ?? "")}
+                                       onSave={onChange && (async (t) => (own({ description: t }), null))} /></div>
+                      </DialogDescription>
+                    </DialogHeader>
+                    <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t pt-4 text-xs">
+                      <dt className="text-muted-foreground">Type</dt>
+                      <dd>
+                        <Pick label="Type" value={kind} changed={kind !== kindOf(spec[1])} options={TYPES.map((t) => [t, <><TypeIcon type={t} />{t}</>])}
+                              onPick={onChange && ((k) => own((s) => keep(s, picked(k, s))))}>
+                          <span style={{ color: `var(--type-${kind})` }}>{kind}</span>
+                        </Pick>
+                      </dd>
+                      {kind === "list" && (
+                        <>
+                          <dt className="text-muted-foreground">Item</dt>
+                          <dd>
+                            <Pick label="Item" value={kindOf((d[1].items ?? {}) as Type)} changed={kindOf((d[1].items ?? {}) as Type) !== kindOf((spec[1].items ?? {}) as Type)}
+                                  options={TYPES.filter((t) => t !== "list").map((t) => [t, <><TypeIcon type={t} />{t}</>])}
+                                  onPick={onChange && ((k) => own((s) => ({ ...s, items: picked(k, (s.items ?? {}) as Schema) })))}>
+                              <span style={{ color: `var(--type-${kindOf((d[1].items ?? {}) as Type)})` }}>{kindOf((d[1].items ?? {}) as Type)}</span>
+                            </Pick>
+                          </dd>
+                        </>
+                      )}
+                    </dl>
+                    <SchemaFields name={`${name}${list ? "[i]" : ""}.${d[0]}`} type={d[1] as Type} was={spec[1] as Type}
+                                  onChange={onChange && ((t) => own((s) => keep(s, schemaOf(t))))} />
+                  </>
+                )
+              }}
+            </Drafted>
           </DialogContent>
         </Dialog>
       )}
@@ -767,7 +799,7 @@ function Inside({ value, fixed, flat, onChange }: { value: Schema; fixed?: boole
 function Context({ text }: { text: string }) {
   const st = useStaged()!
   return (
-    <TemplateBox label="Context" value={(st.patch.shared as string | undefined) ?? text} onChange={(e) => st.put("shared", e.target.value, text)} className="min-h-16" />
+    <TemplateBox label="Context" value={(st.patch.shared as string | undefined) ?? text} changed={"shared" in st.patch} onChange={(e) => st.put("shared", e.target.value, text)} className="min-h-16" />
   )
 }
 

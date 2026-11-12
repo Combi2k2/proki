@@ -12,11 +12,12 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import type { MediaItem, StateSpec } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { BARE, CodeInput, Template } from "@/views/code"
+import { BARE, CodeInput } from "@/views/code"
+import { KindTabs, OptionsFrom } from "@/views/fields"
 import { CHANGED_LINE, Editable, Pick, useStaged } from "@/views/in-place"
 import { file, MediaPicker } from "@/views/media"
-import { ActionRows, ACTION_ROWS, NAMES, rowField } from "@/views/action-rows"
-import { AskJev, AskLlm, START } from "@/views/ask-actions"
+import { ActionRows, ACTION_ROWS, NAMES, RowFields, rowField } from "@/views/action-rows"
+import { AskJev, AskLlm, LABELS, PromptBox, PromptRows, START, Waiting } from "@/views/ask-actions"
 
 export { NAMES }
 
@@ -48,7 +49,6 @@ export type Save = (data: Record<string, unknown>) => Promise<string | null>
 
 /** A rule's side: a number, else an expression. */
 export const parseSide = (text: string) => (/^-?\d+(\.\d+)?$/.test(text.trim()) ? Number(text.trim()) : text.trim())
-const parseNumber = (text: string) => (text.trim() === "" ? null : Number(text))
 
 /** A time as it's typed: empty is none, a number is minutes, else a phrase ("6s", "1d"). */
 export const parseSpan = (text: string): number | string | null => (text.trim() === "" ? null : /^\d+(\.\d+)?$/.test(text.trim()) ? Number(text) : text.trim())
@@ -338,52 +338,7 @@ const Out = ({ label, onClick, className }: { label: string; onClick: () => void
           className={cn("text-destructive opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100", className)}><Trash2 /></Button>
 )
 
-/** What's said, a text with {name}s, read as it's typed: the slots coloured as Python reads a format string. */
-function TemplateField({ value, onChange, placeholder, changed }: { value: string; onChange: (text: string) => void; placeholder: string; changed?: boolean }) {
-  return <Template value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label="Text" className={cn(changed && CHANGED_LINE)} />
-}
-
-/** An expression, typed where it's read, coloured as Python is. */
-function ExprField({ label, value, placeholder, onChange, changed }: { label: string; value: string; placeholder: string; onChange: (text: string) => void; changed?: boolean }) {
-  return <CodeInput aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} list={NAMES} layout="min-w-40 flex-1" placeholder={placeholder} className={cn(BARE, changed && CHANGED_LINE)} />
-}
-
-/** What fills a text's {name}s, as a table like the resource dialog's: a name, then the expression it stands for, a row
- * each, typed where they're read; a row's trash is there as you point at it. `was`: what it was, to mark what's changed. */
-export function Placeholders({ pairs, was, onChange }: { pairs: Pair[]; was?: Pair[]; onChange: (pairs: Pair[]) => void }) {
-  const diff = was && compared(was.map(([k]) => k), pairs.map(([k]) => k))
-  const put  = (i: number, at: 0 | 1, text: string) => onChange(pairs.map((p, j) => (j !== i ? p : at ? [p[0], text] : [text, p[1]]) as Pair))
-  const lost = (at: number) => diff?.gone.filter((g) => g.at === at).map((g) => g.label) ?? []
-  const ROW  = "grid grid-cols-[8rem_minmax(0,1fr)] items-center gap-3 px-2 py-2.5 pr-9"
-  return (
-    <section className="flex flex-col gap-1.5 border-t pt-4 text-xs">
-      <div className="flex items-center justify-between">
-        <span className="font-medium">Placeholders</span>
-        <Button type="button" size="xs" variant="ghost" className="-mr-2 text-muted-foreground" onClick={() => onChange([...pairs, ["", ""]])}><Plus /> Add</Button>
-      </div>
-      {pairs.length === 0 ? <span className="text-muted-foreground">None.</span> : (
-        <div className="relative rounded-md border">
-          {pairs.map(([key, expr], i) => {
-            const old = was?.find(([k]) => k === key)
-            return (
-              <div key={i} className={cn("group/row relative border-b last:border-b-0", diff?.added[i] && "bg-added/10")}>
-                {lost(i).length > 0 && <Gone labels={lost(i)} className="-top-[5px]" />}
-                <div className={ROW}>
-                  <CodeInput aria-label="Placeholder name" value={key} placeholder="name" layout="w-full" className={BARE} onChange={(e) => put(i, 0, e.target.value)} />
-                  <CodeInput aria-label="Placeholder expression" value={expr} list={NAMES} placeholder="shallow_today / 60" layout="w-full" className={cn(BARE, old && old[1] !== expr && CHANGED_LINE)} onChange={(e) => put(i, 1, e.target.value)} />
-                </div>
-                <Out label={`Take out ${key || "the placeholder"}`} className="absolute top-1/2 right-1.5 -translate-y-1/2" onClick={() => onChange(pairs.filter((_, j) => j !== i))} />
-              </div>
-            )
-          })}
-          {lost(pairs.length).length > 0 && <Gone labels={lost(pairs.length)} className="-bottom-[5px]" />}
-        </div>
-      )}
-    </section>
-  )
-}
-
-/** A choice's options, as a table like the placeholders': its number, then its label, typed where it's read; the one
+/** A choice's options, as a table: its number (Index), then its label, typed where it's read; the one
  * `preselected` has a mark at its end, and clicking another's moves it. `was`: what it was, to mark what's changed. */
 function OptionsTable({ options, was, preselected, preselectChanged, onChange }: {
   options: string[]
@@ -397,6 +352,7 @@ function OptionsTable({ options, was, preselected, preselectChanged, onChange }:
   const take = (i: number) => onChange(options.filter((_, j) => j !== i), preselected === undefined || preselected === i ? undefined : preselected > i ? preselected - 1 : preselected)
   return (
     <div className="relative rounded-md border text-xs">
+      <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 border-b bg-muted/40 py-1 pr-16 pl-2 text-muted-foreground"><span>Index</span><span>Label</span></div>
       {options.map((label, i) => (
         <div key={i} className={cn("group/row relative border-b last:border-b-0", preselected === i && "bg-muted/50", diff?.added[i] && "bg-added/10")}>
           {lost(i).length > 0 && <Gone labels={lost(i)} className="-top-[5px]" />}
@@ -424,8 +380,9 @@ function OptionsTable({ options, was, preselected, preselectChanged, onChange }:
  * sound beside its title and text, what fills its text, and (`ask`) the question's settings and options.
  * `commit`: the params changed (a key's value undefined: taken out), the mistake if any. Under a dialog's
  * `Staging`, every change waits there, marked, for its Save; a kind of question left is remembered, to come back to. */
-export function PopupFields({ ask, kind, params, commit, picks, pick }: {
+export function PopupFields({ ask, kind, params, commit, picks, saved: savedPicks, pick }: {
   ask?: boolean
+  saved?: Picks  // the pictures and sounds as kept, to mark a change
   kind: string
   params: Params
   commit: (patch: Params) => Promise<string | null>
@@ -435,7 +392,6 @@ export function PopupFields({ ask, kind, params, commit, picks, pick }: {
   const staged  = useStaged()  // in a dialog that keeps what's changed with its Save; else it's kept as it's changed
   const shown   = staged ? { ...params, ...staged.patch } : params
   const was     = contextOf(params.context)
-  const { format, values } = contextOf(shown.context)
   const options = shown.options as string[] | string | undefined
   type Source = "static" | "dynamic"
   type Left = { options: string[] | string; default: unknown }
@@ -448,49 +404,39 @@ export function PopupFields({ ask, kind, params, commit, picks, pick }: {
     Object.entries(patch).forEach(([key, value]) => staged.put(key, value, key === "context" ? { format: was.format, values: was.values } : params[key]))
     return Promise.resolve(null)
   }
-  const put = (nextFormat: string, nextValues: Pair[]) => void choose({ context: { format: nextFormat, values: nextValues } })
   const to = (next: Source | null) => {  // text (null), or a choice from a list of either kind
     if (source) left.current[source] = { options: options as Left["options"], default: shown.default }
     const back = next && (left.current[next] ?? { options: next === "static" ? [""] : "", default: undefined })
     void choose({ options: back?.options, default: back?.default })
   }
   const saved = kindOf(params.options)
+  const text  = (key: string) => ({ value: String(shown[key] ?? ""), changed: lit(key), onSave: async (t: string) => (void choose({ [key]: t.trim() || undefined }), null), onType: (t: string) => void choose({ [key]: t.trim() || undefined }) })
   return (
     <>
       <section className="flex gap-4 border-t pt-4">
-        <div className="flex w-36 shrink-0 flex-col gap-2">
-          <Pictures keys={picks.image} onChange={(keys) => pick("image", keys)} />
-          <Sounds keys={picks.sound} onChange={(keys) => pick("sound", keys)} />
+        <div className="flex w-32 shrink-0 flex-col gap-2">
+          <Pictures keys={picks.image} changed={!!savedPicks && JSON.stringify(picks.image) !== JSON.stringify(savedPicks.image)} onChange={(keys) => pick("image", keys)} />
+          <Sounds keys={picks.sound} changed={!!savedPicks && JSON.stringify(picks.sound) !== JSON.stringify(savedPicks.sound)} onChange={(keys) => pick("sound", keys)} />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <Editable label="Title" value={String(shown.title ?? "")} placeholder="Title" changed={lit("title")} className="pb-1 text-lg font-medium"
-                    onSave={(t) => choose({ title: t.trim() || undefined })} />
-          <TemplateField value={format} changed={lit("context") && format !== was.format} onChange={(t) => put(t, values)} placeholder={ask ? "What do you want to ask?" : "Nothing said"} />
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium">Title</span>
+            <Input aria-label="Title" value={String(shown.title ?? "")} placeholder="Title" className={cn("h-8 text-sm", lit("title") && CHANGED_LINE)} onChange={(e) => void choose({ title: e.target.value || undefined })} />
+          </div>
+          <PromptBox label="Content" params={{ context: shown.context }} was={staged ? { context: params.context } : undefined} put={(_, v) => void choose({ context: v })} placeholder={ask ? "What do you want to ask?" : "Nothing said"} min="min-h-16" />
         </div>
       </section>
-      <Placeholders pairs={values} was={staged ? was.values : undefined} onChange={(next) => put(format, next)} />
+      <PromptRows params={{ context: shown.context }} was={staged ? { context: params.context } : undefined} put={(_, v) => void choose({ context: v })} />
       {ask && (
-        <>
-          <section className="grid grid-cols-2 gap-x-6 border-t pt-4">
-            <Line label="Answer">
-              <Pick label="Answer" value={source ? "choice" : "text"} changed={!!staged && !!source !== !!saved} options={[["choice", "Choice"], ["text", "Text"]]}
+        <div className="flex flex-col gap-4 border-t pt-4">
+          <KindTabs kind={source ? "choice" : "text"} kinds={["text", "choice"]} changed={!!staged && !!source !== !!saved}
                     onPick={(v) => to(v === "text" ? null : left.current.static ? "static" : left.current.dynamic ? "dynamic" : "static")} />
-            </Line>
-            <Line label="Save to"><ExprField label="Save to" value={String(shown.result ?? "")} placeholder="answer" changed={lit("result")} onChange={(t) => void choose({ result: t.trim() ? t : undefined })} /></Line>
-            <Line label="Timeout">
-              <Editable label="Timeout" value={shown.timeout == null ? "" : String(shown.timeout)} placeholder={String(TIMEOUT[kind])} changed={lit("timeout")}
-                        onSave={async (t) => (await choose({ timeout: parseNumber(t) ?? undefined }))} /> s
-            </Line>
-            <Line label="Deferrable">
-              <Checkbox checked={shown.immediate !== true} onCheckedChange={(on) => void choose({ immediate: on === true ? undefined : true })} className={cn(lit("immediate") && "border-changed")} />
-            </Line>
-          </section>
           {source && (
-            <section className="flex flex-col gap-1.5 border-t pt-4 text-xs">
+            <section className="flex flex-col gap-1.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <span className="font-medium">Options</span>
-                  <Pick label="Options from" value={source} changed={!!staged && source !== saved} options={[["static", "Static list"], ["dynamic", "Dynamic list"]]} onPick={(v) => to(v as Source)} />
+                  <OptionsFrom value={source === "static" ? "user" : "expr"} changed={!!staged && source !== saved} onPick={(v) => to(v === "user" ? "static" : "dynamic")} />
                 </span>
                 {source === "static" && <Button type="button" size="xs" variant="ghost" className="-mr-2 text-muted-foreground" onClick={() => void choose({ options: [...(options as string[]), ""] })}><Plus /> Add</Button>}
               </div>
@@ -499,28 +445,23 @@ export function PopupFields({ ask, kind, params, commit, picks, pick }: {
                   <OptionsTable options={options as string[]} was={staged && saved === "static" ? (params.options as string[]) : undefined}
                                 preselected={typeof shown.default === "number" ? shown.default : undefined} preselectChanged={lit("default")}
                                 onChange={(next, preselected) => void choose({ options: next, default: preselected })} />
-                  {typeof shown.default === "string" && (
-                    <Line label="Preselect"><ExprField label="Preselect" value={shown.default} placeholder="an option or its number" changed={lit("default")} onChange={(t) => void choose({ default: t.trim() ? t : undefined })} /></Line>
-                  )}
+                  {typeof shown.default === "string" && <RowFields rows={[["Preselect", "default", "text"]]} hints={{ default: "an option or its number" }} label={LABELS} field={(k) => text(k)} />}
                 </>
               ) : (
-                <>
-                  <Line label="From"><ExprField label="Options" value={String(options ?? "")} placeholder="track.labels" changed={lit("options") && saved === "dynamic"} onChange={(t) => void choose({ options: t })} /></Line>
-                  <Line label="Preselect"><ExprField label="Preselect" value={String(shown.default ?? "")} placeholder="an option or its number" changed={lit("default")} onChange={(t) => void choose({ default: t.trim() ? t : undefined })} /></Line>
-                </>
+                <RowFields rows={[["From", "options", "text"], ["Preselect", "default", "text"]]} hints={{ options: "track.labels", default: "an option or its number" }} label={LABELS} field={(k) => text(k)} />
               )}
             </section>
           )}
-        </>
+          <Waiting params={shown} put={(k, v) => void choose({ [k]: v })} wait={TIMEOUT[kind]} was={staged ? params : undefined} />
+          <div style={{ gridTemplateColumns: `${LABELS} minmax(0,1fr)` }} className="grid items-center gap-x-3 text-xs">
+            <span className="pl-0 text-muted-foreground">Deferrable</span>
+            <Checkbox checked={shown.immediate !== true} onCheckedChange={(on) => void choose({ immediate: on === true ? undefined : true })} className={cn(lit("immediate") && "border-changed")} />
+          </div>
+        </div>
       )}
     </>
   )
 }
-
-/** A label and what it sets, on a line. */
-const Line = ({ label, children }: { label: string; children: ReactNode }) => (
-  <label className="flex min-h-8 items-center gap-2 text-sm"><span className="w-20 shrink-0 text-muted-foreground">{label}</span>{children}</label>
-)
 
 /** Keys of the media library, found for what's shown of them. */
 function useItems(keys: string[]) {
@@ -532,45 +473,37 @@ function useItems(keys: string[]) {
   return items
 }
 
-/** A poke's pictures: every one in the pool as a thumbnail in a box of one size, scrolling, with Add under them (a big
- * plus when there are none); a click chooses in the library's window. */
-function Pictures({ keys, onChange }: { keys: string[]; onChange: (keys: string[]) => void }) {
+/** A poke's pictures: the pool as a box of one size holding nine, a click on it chooses in the library's window (a big plus when there are none;
+ * past nine, the ninth cell says there are more). */
+function Pictures({ keys, changed, onChange }: { keys: string[]; changed?: boolean; onChange: (keys: string[]) => void }) {
   const [picking, setPicking] = useState(false)
   const items = useItems(keys)
+  const more  = items.length > 9
   return (
     <>
-      {items.length === 0 ? (
-        <button type="button" onClick={() => setPicking(true)} title="Add pictures"
-                className="flex h-40 w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed bg-muted/40 text-xs text-muted-foreground hover:bg-muted">
-          <Plus className="size-6" />Add pictures
-        </button>
-      ) : (
-        <div className="flex h-40 w-full flex-col overflow-hidden rounded-xl border bg-muted/40">
-          <div className="grid min-h-0 flex-1 grid-cols-4 content-start gap-1.5 overflow-y-auto p-1.5">
-            {items.map((item) => (
-              <button key={item.key} type="button" onClick={() => setPicking(true)} title={item.name} className="aspect-square rounded-md hover:bg-muted">
-                <img src={file(item.file)} alt={item.name} className="size-full object-contain" />
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => setPicking(true)} className="flex shrink-0 items-center justify-center gap-1 border-t py-1.5 text-xs text-muted-foreground hover:bg-muted">
-            <Plus className="size-3.5" />Add pictures
-          </button>
-        </div>
-      )}
+      <button type="button" onClick={() => setPicking(true)} title={items.length ? "Choose pictures" : "Add pictures"} aria-label="Pictures"
+              className={cn("size-32 shrink-0 overflow-hidden rounded-xl border bg-muted/40 hover:bg-muted", changed && "border-solid border-changed", items.length === 0 && "flex flex-col items-center justify-center gap-1.5 border-dashed text-xs text-muted-foreground")}>
+        {items.length === 0 ? <><Plus className="size-6" />Add pictures</> : (
+          <span className="grid size-full grid-cols-3 grid-rows-3 gap-1 p-1.5">
+            {items.slice(0, more ? 8 : 9).map((item) => <img key={item.key} src={file(item.file)} alt={item.name} className="size-full rounded-sm object-contain" />)}
+            {more && <span className="flex items-center justify-center text-sm text-muted-foreground">…</span>}
+          </span>
+        )}
+      </button>
       {picking && <MediaPicker kind="image" keys={keys} onClose={() => setPicking(false)} onDone={(next) => { onChange(next); setPicking(false) }} />}
     </>
   )
 }
 
-/** A poke's sounds: one button, saying how many there are. */
-function Sounds({ keys, onChange }: { keys: string[]; onChange: (keys: string[]) => void }) {
+/** A poke's sounds: a bar as wide as the pictures' box, saying how many there are. */
+function Sounds({ keys, changed, onChange }: { keys: string[]; changed?: boolean; onChange: (keys: string[]) => void }) {
   const [picking, setPicking] = useState(false)
   return (
     <>
-      <Button type="button" size="sm" variant="outline" className="w-full text-muted-foreground" onClick={() => setPicking(true)}>
-        <Music /> {keys.length ? (keys.length === 1 ? "1 sound" : `${keys.length} sounds`) : "Add sound"}
-      </Button>
+      <button type="button" onClick={() => setPicking(true)} aria-label="Sounds"
+              className={cn("flex h-8 w-32 shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-xl border bg-muted/40 text-xs whitespace-nowrap text-muted-foreground hover:bg-muted", changed && "border-changed")}>
+        <Music className="size-3.5 shrink-0" /><span className="truncate">{keys.length ? (keys.length === 1 ? "1 sound" : `${keys.length} sounds`) : "Add sound"}</span>
+      </button>
       {picking && <MediaPicker kind="sound" keys={keys} onClose={() => setPicking(false)} onDone={(next) => { onChange(next); setPicking(false) }} />}
     </>
   )

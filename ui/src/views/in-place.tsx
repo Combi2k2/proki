@@ -100,6 +100,33 @@ export function Editable({ label, value, onSave, onType, code, list, long, clamp
   )
 }
 
+/** A part opened over its table, changed as a draft: Cancel (or closing it) drops the draft, Save hands it back to the table, which marks the part until its own
+ * Save. `onSave`: takes the draft; its mistake, if any. `children`: the draft, and how to change it (a function from it to its next). */
+export function Drafted<T>({ value, onSave, onClose, children }: {
+  value: T
+  onSave: (draft: T) => string | void
+  onClose: () => void
+  children: (draft: T, update: (next: (draft: T) => T) => void) => ReactNode
+}) {
+  const [draft, setDraft] = useState(value)
+  const [error, setError] = useState("")
+  const dirty = JSON.stringify(draft) !== JSON.stringify(value)
+  return (
+    <>
+      {children(draft, (next) => (setError(""), setDraft(next)))}
+      {dirty && (
+        <div className="flex flex-col gap-1.5">
+          {error && <span className="text-xs break-words text-destructive">{error}</span>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="button" size="sm" onClick={() => setError(onSave(draft) ?? "")}>Save</Button>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 /** The look of what's been changed and not kept yet: a blue line under it (a field with a line of its
  * own: that line, blue). A row added is light green; one taken out leaves a red arrow where it was. */
 export const HELD         = "-mx-1 rounded px-1 hover:bg-muted"  // a table's cell that opens or changes: shaded under the pointer

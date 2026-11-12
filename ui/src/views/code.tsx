@@ -107,11 +107,11 @@ export function Template({ value, className, strings, ...props }: { value: strin
 }
 
 /** A text with {slots}, in a box of its own, its name above it. */
-export function TemplateBox({ label, className, ...props }: { label: string; value: string } & Omit<ComponentProps<typeof Textarea>, "value">) {
+export function TemplateBox({ label, className, changed, ...props }: { label: string; value: string; changed?: boolean } & Omit<ComponentProps<typeof Textarea>, "value">) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-xs font-medium">{label}</span>
-      <div className="rounded-md border px-2 py-1 text-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+      <div className={cn("rounded-md border px-2 py-1 text-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50", changed && "border-changed")}>
         <Template strings aria-label={label} className={className} {...props} />
       </div>
     </div>

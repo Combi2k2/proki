@@ -718,13 +718,13 @@ function ActionSeen({ spec, at, update, remove, form, close }: {
               </DialogHeader>
               <Corner what="action" name={said} onDelete={() => (remove(), close())} />
               {popup ? (
-                <PopupFields ask={spec.kind === "ask_usr"} kind={spec.kind} params={spec.params} commit={commit} picks={(st.patch.picks as Picks | undefined) ?? picks}
+                <PopupFields ask={spec.kind === "ask_usr"} kind={spec.kind} params={spec.params} commit={commit} saved={picks} picks={(st.patch.picks as Picks | undefined) ?? picks}
                              pick={(which, keys) => st.put("picks", { ...((st.patch.picks as Picks | undefined) ?? picks), [which]: keys }, picks)} />
               ) : shown(st) === "ask_llm" || shown(st) === "ask_jev" ? (() => {
                 const { desc: _d, picks: _p, kind: _k, ...patch } = st.patch  // what's held of its params, over what's kept
                 const params = { ...spec.params, ...patch }
                 const put    = (key: string, value: unknown) => st.put(key, value, key === "context" ? { format: contextOf(spec.params.context).format, values: contextOf(spec.params.context).values } : spec.params[key])
-                return shown(st) === "ask_llm" ? <AskLlm params={params} put={put} at={at} /> : <AskJev params={params} put={put} />
+                return shown(st) === "ask_llm" ? <AskLlm params={params} put={put} at={at} was={spec.params} /> : <AskJev params={params} put={put} was={spec.params} />
               })() : ACTION_ROWS[shown(st)] ? (
                 <ActionRows kind={shown(st)} field={(key, how) => st.field(key, how === "expr" ? exprText(spec.params[key]) : String(spec.params[key] ?? ""))} />
               ) : form}
