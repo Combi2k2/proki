@@ -341,10 +341,28 @@ function ProgramScope({ name, state, before, reference, onGo, onBack, onLoad }: 
 
   const props = { name, specs, detail, reference, change, act, setError, onGo, after: () => (loadDetail(), onLoad()) }
 
+  const reached = new Set([detail.initial])  // the states the start leads to
+  for (const from of reached) specs?.branches.forEach((b) => b.state === from && reached.add(b.goto))
+  const lost = specs?.states.filter((s) => !reached.has(s.name)).map((s) => s.name) ?? []
+  const addState = async () => {  // a new state, opened to give it its name and ways in
+    const taken = new Set(specs?.states.map((s) => s.name))
+    let n = 1
+    while (taken.has(`state_${n}`)) n++
+    const made = `state_${n}`
+    const mistake = await change([{ op: "add", kind: "state", data: { program: name, name: made, desc: "", every: 1 } }])
+    if (mistake) setError(mistake)
+    else onGo({ program: name, state: made })
+  }
+  const sweepStates = async () => {
+    const mistake = await change(lost.map((s) => ({ op: "remove" as const, kind: "state", data: { program: name, name: s } })))
+    if (mistake) setError(mistake)
+  }
+
   return (
     <Layout
       main={<>{error && <ErrorDialog message={error} onClose={() => setError("")} />}<ProgramMain {...props} /></>}
       back={<GraphView key={detail.name} detail={detail} picked={state} onInspect={(next) => next && onGo({ program: name, state: next.state })}
+                       onAdd={specs ? addState : undefined} sweep={specs ? { names: lost, onSweep: sweepStates } : undefined}
                        onPane={() => onGo({ program: name, state: null })} />}
       over={state !== null && (
         <Over state={state} title={typed ? humane(typed) : undefined} before={before} onBack={onBack} onClose={() => onGo({ program: name, state: null })}

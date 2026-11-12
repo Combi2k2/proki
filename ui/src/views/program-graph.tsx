@@ -22,7 +22,8 @@ import {
 import "@xyflow/react/dist/style.css"
 import dagre from "@dagrejs/dagre"
 import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type Simulation, type SimulationNodeDatum } from "d3-force"
-import { Check, CornerDownRight, Hourglass, Loader2, Maximize, Minus, Orbit, Spline, X, ZoomIn, ZoomOut } from "lucide-react"
+import { Broom, Check, CornerDownRight, Hourglass, Plus, Loader2, Maximize, Minus, Orbit, Spline, X, ZoomIn, ZoomOut } from "lucide-react"
+import { Confirm } from "@/components/confirm"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { ProgramDetail } from "@/lib/proki"
@@ -96,13 +97,23 @@ export function forgetGraph(name: string) {
   for (const part of ["places", "view", "fixed"]) try { localStorage.removeItem(`graph.${name}.${part}`) } catch { /* no storage here */ }
 }
 
-type GraphProps = { detail: ProgramDetail; picked?: string | null; onInspect: (next: Inspected) => void; onPane?: () => void }
+/** A button down the graph's left side: its own box, its icon big. */
+const SIDE = "rounded-xl bg-background/90 shadow-sm backdrop-blur [&_svg]:size-6!"
+
+type GraphProps = {
+  detail: ProgramDetail
+  picked?: string | null
+  onInspect: (next: Inspected) => void
+  onPane?: () => void
+  onAdd?: () => void                                    // a "+" to make a new state
+  sweep?: { names: string[]; onSweep: () => void }      // a broom to delete the states nothing leads to (`names`)
+}
 
 export function GraphView(props: GraphProps) {
   return <ReactFlowProvider><Graph {...props} /></ReactFlowProvider>
 }
 
-function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
+function Graph({ detail, picked, onInspect, onPane, onAdd, sweep }: GraphProps) {
   const placesKey = `graph.${detail.name}.places`, viewKey = `graph.${detail.name}.view`, fixedKey = `graph.${detail.name}.fixed`
   const shape = JSON.stringify(detail.states.map((s) => [s.name, s.next.map((b) => b.goto)]))  // what the layout depends on
   const auto = useMemo(() => Object.fromEntries(springs(detail, layout(detail)).tick(400).nodes().map((b) => [b.id, corner(b)])), [shape])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -268,6 +279,20 @@ function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
                     onClick={() => ((moved.current = false), keep(viewKey, null), void flow.fitView({ ...FIT, duration: 300 }))}><Maximize /></Button>
           </div>
         </Panel>
+        {(onAdd || sweep) && (
+          <Panel position="center-left" className="flex flex-col gap-2">
+            {onAdd && <Button size="icon-lg" variant="outline" className={cn(SIDE, "size-11")} title="New state" aria-label="New state" onClick={onAdd}><Plus /></Button>}
+            {sweep && (sweep.names.length > 0 ? (
+              <Confirm title={`Delete ${sweep.names.length === 1 ? "a state nothing leads to" : `${sweep.names.length} states nothing leads to`}?`}
+                       description={`${sweep.names.map(humane).join(", ")}, with their actions and transitions. Nothing can reach ${sweep.names.length === 1 ? "it" : "them"} from the start. This can't be undone.`}
+                       action="Delete" onConfirm={sweep.onSweep}>
+                <Button size="icon-lg" variant="outline" className={cn(SIDE, "size-11")} title="Sweep away the states nothing leads to" aria-label="Sweep away the states nothing leads to"><Broom /></Button>
+              </Confirm>
+            ) : (
+              <Button size="icon-lg" variant="outline" className={cn(SIDE, "size-11")} title="Every state can be reached" aria-label="Every state can be reached" disabled><Broom /></Button>
+            ))}
+          </Panel>
+        )}
         <Panel position="bottom-left">
           <ToggleGroup type="single" size="sm" spacing={1} value={style} onValueChange={(s) => s && pick(s as typeof style)} aria-label="The view"
                        className="gap-1 rounded-xl border bg-background/90 p-1 shadow-sm backdrop-blur">
