@@ -5,7 +5,7 @@ import { Check, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { colour, useKnown } from "@/views/code"
+import { colour } from "@/views/code"
 
 const PLAIN = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const  // names and formulas, as typed
 
@@ -32,7 +32,6 @@ export function Editable({ label, value, onSave, onType, code, list, long, clamp
   changed?: boolean // changed in a dialog, not kept yet
   className?: string
 }) {
-  useKnown()
   const [text, setText]   = useState<string | null>(editing ? value : null)  // null: not being changed
   const [error, setError] = useState("")
   const [caret, setCaret] = useState(0)  // where it's typed, for the names it offers
@@ -54,7 +53,7 @@ export function Editable({ label, value, onSave, onType, code, list, long, clamp
   }
   if (text === null) return (
     <button type="button" onClick={() => (before.current = value, setText(value))} title="Click to change" aria-label={`${label}: ${value || placeholder}, change`}
-            className={cn(look, "max-w-full cursor-text rounded-sm text-left", clamp && "block line-clamp-1", className, boxed ? HELD : "decoration-muted-foreground decoration-dotted underline-offset-4 hover:underline", !value && "text-muted-foreground", changed && CHANGED)}>
+            className={cn(look, "max-w-full cursor-text rounded-sm text-left", clamp && "block truncate", className, boxed ? HELD : "decoration-muted-foreground decoration-dotted underline-offset-4 hover:underline", !value && "text-muted-foreground", changed && CHANGED)}>
       {read}
     </button>
   )

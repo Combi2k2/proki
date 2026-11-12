@@ -10,19 +10,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import type { MediaItem, StateSpec, Type } from "@/lib/proki"
+import type { MediaItem, StateSpec } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { BARE, CodeInput, Template } from "@/views/code"
-import { Criteria, TypeField } from "@/views/fields"
 import { CHANGED_LINE, Editable, Pick, useStaged } from "@/views/in-place"
 import { file, MediaPicker } from "@/views/media"
 import { ActionRows, ACTION_ROWS, NAMES, rowField } from "@/views/action-rows"
+import { AskJev, AskLlm, START } from "@/views/ask-actions"
 
 export { NAMES }
 
-
-const ASKS = ["ask_usr", "ask_jev", "ask_llm"]
 
 const TIMEOUT: Record<string, number> = { ask_usr: 120, ask_jev: 10, ask_llm: 10 }  // seconds, unless it says
 export const ACTIONS: Record<string, [string, LucideIcon, string]> = {  // each action's name, its icon, and the tint behind it
@@ -159,19 +156,6 @@ function Text({ value, onChange, code, names, ...props }: {
   return <Input value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-8 text-sm", code && "font-mono text-xs")} spellCheck={!code} {...props} />
 }
 
-function Choice({ value, onChange, options, className }: {
-  value: string
-  onChange: (value: string) => void
-  options: [string, string][]  // value, label
-  className?: string
-}) {
-  return (
-    <NativeSelect value={value} onChange={(e) => onChange(e.target.value)} className={className}>
-      {options.map(([v, label]) => <NativeSelectOption key={v} value={v}>{label}</NativeSelectOption>)}
-    </NativeSelect>
-  )
-}
-
 const Row = ({ children }: { children: ReactNode }) => <div className="grid grid-cols-2 gap-3">{children}</div>
 
 // --- a program, a state, a way out ----------------------------------------------------------
@@ -281,15 +265,16 @@ export function ActionForm({ spec, at, taken, onSave, onCancel, onDirty }: {
           <DialogTitle>
             <Pick label="Kind" value={kind} arrow className="gap-2 text-base"
                   options={Object.entries(ACTIONS).map(([k, [said, Icon, tint]]) => [k, <><Tinted icon={Icon} tint={tint} />{said}</>])}
-                  onPick={(k) => { if (name === free(kind, taken)) setName(free(k, taken)); setKind(k); setParams({}) }} />
+                  onPick={(k) => { if (name === free(kind, taken)) setName(free(k, taken)); setKind(k); setParams(START[k] ?? {}) }} />
           </DialogTitle>
           <DialogDescription asChild><div><Editable label="Description" value={desc} long placeholder="No description" onSave={async (t) => (setDesc(t), null)} className="text-sm text-muted-foreground" /></div></DialogDescription>
         </DialogHeader>
       )}
       {kind in ACTION_ROWS && <ActionRows kind={kind} field={rowField(params, set)} />}
       {kind === "poke" && <PopupFields kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />}
-      {kind === "ask_jev" && <JevFields params={params} set={set} />}
-      {ASKS.includes(kind) && kind !== "ask_jev" && <AskFields kind={kind} params={params} set={set} picks={picks} pick={pick} at={at} />}
+      {kind === "ask_usr" && <PopupFields ask kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />}
+      {kind === "ask_llm" && <AskLlm params={params} put={set} at={at} />}
+      {kind === "ask_jev" && <AskJev params={params} put={set} />}
       {kind === "lock" && <p className="text-xs text-muted-foreground">Locks the screen.</p>}
     </Form>
   )
@@ -385,7 +370,7 @@ export function Placeholders({ pairs, was, onChange }: { pairs: Pair[]; was?: Pa
               <div key={i} className={cn("group/row relative border-b last:border-b-0", diff?.added[i] && "bg-added/10")}>
                 {lost(i).length > 0 && <Gone labels={lost(i)} className="-top-[5px]" />}
                 <div className={ROW}>
-                  <CodeInput aria-label="Placeholder name" value={key} placeholder="name" layout="w-full" className={BARE} render={(t) => <span className="text-code-slot">{t}</span>} onChange={(e) => put(i, 0, e.target.value)} />
+                  <CodeInput aria-label="Placeholder name" value={key} placeholder="name" layout="w-full" className={BARE} onChange={(e) => put(i, 0, e.target.value)} />
                   <CodeInput aria-label="Placeholder expression" value={expr} list={NAMES} placeholder="shallow_today / 60" layout="w-full" className={cn(BARE, old && old[1] !== expr && CHANGED_LINE)} onChange={(e) => put(i, 1, e.target.value)} />
                 </div>
                 <Out label={`Take out ${key || "the placeholder"}`} className="absolute top-1/2 right-1.5 -translate-y-1/2" onClick={() => onChange(pairs.filter((_, j) => j !== i))} />
@@ -432,17 +417,6 @@ function OptionsTable({ options, was, preselected, preselectChanged, onChange }:
       ))}
       {options.length === 0 && <span className="block px-2 py-1.5 text-muted-foreground">None.</span>}
       {lost(options.length).length > 0 && <Gone labels={lost(options.length)} className="-bottom-[5px]" />}
-    </div>
-  )
-}
-
-/** What a jev's or an LLM's question reads: its text and what fills it. */
-function ContextField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
-  const { format, values } = contextOf(value)
-  return (
-    <div className="flex flex-col gap-3">
-      <TemplateField value={format} onChange={(t) => onChange({ format: t, values })} placeholder="{h:.1f} h shallow so far. Start a session?" />
-      <Placeholders pairs={values} onChange={(next) => onChange({ format, values: next })} />
     </div>
   )
 }
@@ -548,119 +522,6 @@ export function PopupFields({ ask, kind, params, commit, picks, pick }: {
 const Line = ({ label, children }: { label: string; children: ReactNode }) => (
   <label className="flex min-h-8 items-center gap-2 text-sm"><span className="w-20 shrink-0 text-muted-foreground">{label}</span>{children}</label>
 )
-
-type Criteria = Record<string, string | null>  // each label, and what it means
-type Question = { type: "noul" | "choice" | "score"; question: string; criteria?: Criteria | string; result: string }
-const QUESTION: [string, string][] = [["noul", "Yes or no"], ["choice", "A choice"], ["score", "A score"]]
-
-/** jev's questions, asked at once about what its context says: each a yes or no, a choice of
- *  its criteria, or a score (where it is on a scale, its criteria marks on it), its answer in its own
- *  variable: a yes or no's probability of yes, a choice's .index, .conf and .odds, a score's .score, .conf and .odds. */
-function JevFields({ params, set }: { params: Params; set: (key: string, value: unknown) => void }) {
-  const questions = (params.questions as Question[] | undefined) ?? []
-  useEffect(() => {
-    if (params.questions === undefined) set("questions", [{ type: "choice", question: "", criteria: { "": "" }, result: "answer" }])
-  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
-  const put = (i: number, change: Partial<Question>) =>
-    set("questions", questions.map((q, j) => (j !== i ? q : { ...q, ...change })))
-  const typed = (i: number, type: Question["type"]) =>
-    put(i, { type, criteria: type === "noul" ? undefined : questions[i].criteria ?? { "": "" } })
-  const free = () => { const taken = new Set(questions.map((q) => q.result)); let n = 1; while (taken.has(`answer${n}`)) n++; return `answer${n}` }
-  return (
-    <>
-      <ContextField value={params.context} onChange={(v) => set("context", v)} />
-      {questions.map((q, i) => (
-        <div key={i} className="flex flex-col gap-2 rounded-md border p-2.5">
-          <Row>
-            <Field label="Answer"><Choice value={q.type} options={QUESTION} onChange={(t) => typed(i, t as Question["type"])} /></Field>
-            <Field label="Save answer to" hint={{ noul: "the probability of yes", choice: ".index .conf .odds", score: ".score .conf .odds" }[q.type]}>
-              <Text value={q.result} onChange={(v) => put(i, { result: v })} code />
-            </Field>
-            <Button type="button" size="icon-sm" variant="ghost" aria-label="Take it out" disabled={questions.length === 1} className="mt-5"
-                    onClick={() => set("questions", questions.filter((_, j) => j !== i))}><Trash2 /></Button>
-          </Row>
-          <Field label="Question"><Text value={q.question} onChange={(v) => put(i, { question: v })} placeholder={q.type === "noul" ? "Is it urgent?" : "What is it?"} /></Field>
-          {q.type !== "noul" && (
-            <Field label={q.type === "score" ? "Marks on its scale" : "Options"}>
-              <Choice value={typeof q.criteria === "string" ? "expr" : "list"} options={[["list", "A list"], ["expr", "From an expression"]]}
-                      onChange={(v) => put(i, { criteria: v === "expr" ? "" : { "": "" } })} />
-            </Field>
-          )}
-          {q.type !== "noul" && typeof q.criteria === "object" && q.criteria !== null && (
-            <Criteria key={`${i}-${q.type}`} criteria={q.criteria} onSet={(criteria) => put(i, { criteria })}
-                      {...(q.type === "score" ? { label: "Marks", hint: "a number on its scale, and what it means", placeholder: "1" } : {})} />
-          )}
-          {typeof q.criteria === "string" && (
-            <Field label={q.type === "score" ? "Marks" : "Options"} hint={q.type === "score" ? "an expression: {mark: meaning}" : "an expression: {label: meaning}, or a list of texts or [label, meaning]"}>
-              <Text value={q.criteria} onChange={(v) => put(i, { criteria: v })} code names placeholder="track.labels" />
-            </Field>
-          )}
-        </div>
-      ))}
-      <Row>
-        <Button type="button" size="sm" variant="outline" className="w-fit"
-                onClick={() => set("questions", [...questions, { type: "noul", question: "", result: free() }])}><Plus /> Question</Button>
-        <Field label="Timeout" hint={`s, default ${TIMEOUT.ask_jev}`}>
-          <Text value={params.timeout == null ? "" : String(params.timeout)} onChange={(v) => set("timeout", parseNumber(v) ?? undefined)} type="number" min={1} />
-        </Field>
-      </Row>
-    </>
-  )
-}
-
-/** The type of the variable an answer is saved to, by its name as the state reads it (its
- *  own, its program's, then a global one): what the LLM answers. It's set on the variable. */
-function Answered({ name, at }: { name: string; at: { program: string; state: string } }) {
-  const [found, setFound] = useState<{ name: string; type: Type } | null>(null)
-  useEffect(() => {
-    let gone = false
-    const names = name.includes(".") ? [name] : [`${at.program}.${at.state}.${name}`, `${at.program}.${name}`, name]
-    ;(async () => {
-      for (const n of names) {
-        const answer = await window.proki.tool("evaluate", { expr: n })
-        if (!answer.error) return gone || setFound({ name: n, type: answer.type ?? "any" })
-      }
-      if (!gone) setFound(null)
-    })()
-    return () => { gone = true }
-  }, [name, at.program, at.state])
-  if (!name.trim()) return null
-  const text = !found || found.type === "any"
-  return (
-    <Field label="It answers" group hint={found ? (text ? "text: give the variable a type for more" : `as ${found.name} is typed; change it on the variable`) : "text, until the variable is made"}>
-      {found && !text && <TypeField label="" value={found.type} fixed />}
-    </Field>
-  )
-}
-
-/** A question, as its kind takes it: to you (laid out as the popup is, its settings and options under
- *  it), to the LLM (what it reads; it answers as the variable it's saved to is typed). */
-function AskFields({ kind, params, set, picks, pick, at }: {
-  kind: string
-  at: { program: string; state: string }
-  params: Params
-  set: (key: string, value: unknown) => void
-  picks: Picks
-  pick: (which: keyof Picks, keys: string[]) => void
-}) {
-  useEffect(() => {
-    if (params.result === undefined) set("result", "answer")
-  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
-  if (kind === "ask_usr") return <PopupFields ask kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />
-  return (
-    <>
-      <ContextField value={params.context} onChange={(v) => set("context", v)} />
-      <div className="grid grid-cols-2 gap-x-8 border-t pt-4">
-        <Line label="Target"><CodeInput value={String(params.result ?? "")} onChange={(e) => set("result", e.target.value)} list={NAMES} layout="flex-1" className="h-7 text-xs" placeholder="answer" /></Line>
-        <Line label="Timeout">
-          <Input value={params.timeout == null ? "" : String(params.timeout)} onChange={(e) => set("timeout", parseNumber(e.target.value) ?? undefined)}
-                 type="number" min={1} placeholder={String(TIMEOUT[kind])} className="h-7 w-16 text-xs" /> s
-        </Line>
-      </div>
-      <Answered name={String(params.result ?? "")} at={at} />
-    </>
-  )
-}
 
 /** Keys of the media library, found for what's shown of them. */
 function useItems(keys: string[]) {

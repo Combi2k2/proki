@@ -3,6 +3,7 @@
 
 import { Fragment, useEffect, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { Reference, Type } from "@/lib/proki"
 import { exprText, parseExpr } from "@/lib/typed"
@@ -93,16 +94,19 @@ export function ActionRows({ kind, field }: { kind: string; field: Field }) {
   return <RowFields rows={rows} field={field} aside={aside} />
 }
 
-/** Rows: each a label and a shaded box, read as one line and opened in full to change. `hints`: what an empty one says; `aside`: beside a box. */
-export function RowFields({ rows, field, hints = HINTS, aside }: { rows: Rows; field: Field; hints?: Record<string, string>; aside?: (key: string) => ReactNode }) {
+/** Rows: each a label and a shaded box, read as one line and opened in full to change. `hints`: what an empty one says; `boxes`: a row's own box class; `aside`: beside a box; `label`: the labels' width; `joiner`: a word at the labels' end, in the code font, as "is" joins a name to what it stands for. */
+export function RowFields({ rows, field, hints = HINTS, boxes, aside, label: width = "6rem", joiner }: {
+  rows: Rows; field: Field; hints?: Record<string, string>; boxes?: Record<string, string>; aside?: (key: string) => ReactNode; label?: string; joiner?: string
+}) {
   if (rows.length === 0) return null
   return (
-    <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-t pt-4 text-xs">
+    <dl style={{ gridTemplateColumns: `${width} minmax(0,1fr)` }} className={cn("grid items-start gap-x-3 gap-y-2 text-xs", !joiner && "border-t pt-4")}>
       {rows.map(([label, key, how]) => (
         <Fragment key={key}>
-          <dt className="py-1.5 text-muted-foreground">{label}</dt>
+          {joiner ? <dt className="flex justify-between gap-2 py-1.5 pl-2 font-mono"><span className="truncate">{label}</span><span className="font-sans text-muted-foreground">{joiner}</span></dt>
+                  : <dt className="py-1.5 text-muted-foreground">{label}</dt>}
           <dd className="flex items-start gap-1">
-            <Editable label={label} code long clamp list={NAMES} placeholder={hints[key] ?? "–"} className="w-full min-w-0 flex-1 rounded-md bg-muted px-2 py-1.5 text-xs" {...field(key, how)} />
+            <Editable label={label} code long clamp list={NAMES} placeholder={hints[key] ?? "–"} className={cn("w-full min-w-0 flex-1 rounded-md bg-muted px-2 py-1.5 text-xs", boxes?.[key])} {...field(key, how)} />
             {aside?.(key)}
           </dd>
         </Fragment>

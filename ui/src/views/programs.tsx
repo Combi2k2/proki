@@ -27,8 +27,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from "@/components/ui/switch"
 import { GLOBAL, type ActionSpec, type BranchSpec, type Change, type GlobalSpecs, type ProgramDetail, type ProgramSpecs, type Reference, type Scope, type Where } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { ACTIONS, ActionForm, BranchForm, cleaned, PopupFields, type Picks, StateForm, Tinted, type Save } from "@/views/program-forms"
+import { ACTIONS, ActionForm, BranchForm, cleaned, contextOf, PopupFields, type Picks, StateForm, Tinted, type Save } from "@/views/program-forms"
 import { ActionRows, ACTION_ROWS } from "@/views/action-rows"
+import { AskJev, AskLlm, START } from "@/views/ask-actions"
 import { exprText, parseExpr } from "@/lib/typed"
 import { Expr } from "@/views/code"
 import { Editable, Pick, Staging, typing, type Staged } from "@/views/in-place"
@@ -501,7 +502,7 @@ function StateMain({ name, state, specs, detail, reference, change, act, setErro
                      )
                    }}
                    form={(a, onSave, onCancel, onDirty) => <ActionForm spec={a} at={at} taken={actions.filter((b) => b !== a).map((b) => b.name)} onSave={onSave} onCancel={onCancel} onDirty={onDirty} />}
-                   seen={(a, how) => <ActionSeen spec={a} {...how} />} />
+                   seen={(a, how) => <ActionSeen spec={a} at={at} {...how} />} />
           <Ordered title="Transitions" empty="None: it stays." kind="branch" at={at} items={branches} act={act} change={change}
                    before={(data) => specs.states.some((s) => s.name === data.goto) ? []
                      : [{ op: "add", kind: "state", data: { program: name, name: data.goto, desc: "", every: 1 } }]}
@@ -644,7 +645,7 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
         return !seen ? made : (  // an action is made in a dialog of its own, as it's changed in one
           <>
             <Dialog open onOpenChange={(o) => !o && leave()}>
-              <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg" onEscapeKeyDown={typing}>
+              <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg sm:has-[[data-wide]]:max-w-[38.5rem]" onEscapeKeyDown={typing}>
                 {made}
               </DialogContent>
             </Dialog>
@@ -661,8 +662,8 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
 /** An action, over the state's dialog: its kind, what it's for, and what it does, each part changed
  * where it is. A kind with more to it (a poke, a question) shows its form here. `update`: sends
  * the changes (the mistake, if any); `form`: the kind's own, for those. */
-function ActionSeen({ spec, update, remove, form, close }: {
-  spec: ActionSpec; update: (changes: Record<string, unknown>) => Promise<string | null>; remove: () => void; form: ReactNode; close: () => void
+function ActionSeen({ spec, at, update, remove, form, close }: {
+  spec: ActionSpec; at: { program: string; state: string }; update: (changes: Record<string, unknown>) => Promise<string | null>; remove: () => void; form: ReactNode; close: () => void
 }) {
   const [said] = ACTIONS[spec.kind] ?? [spec.kind]
   const popup = spec.kind === "poke" || spec.kind === "ask_usr"  // laid out as its popup is, each part changed where it's read
@@ -672,12 +673,12 @@ function ActionSeen({ spec, update, remove, form, close }: {
     window.proki.tool("get_picks", { id: spec.id }).then((answer) => !answer.error && setPicks({ image: answer.media.filter((m: { kind: string }) => m.kind === "image").map((m: { key: string }) => m.key),
                                                                                               sound: answer.media.filter((m: { kind: string }) => m.kind === "sound").map((m: { key: string }) => m.key) }))
   }, [spec.id, popup])
-  const rows   = ACTION_ROWS[spec.kind]
-  const inline = popup || !!rows  // else the kind's own form, with its own Save
+  const holds  = (k: string) => k in ACTION_ROWS || k === "ask_llm" || k === "ask_jev"  // its parts are changed where they're read, held with Save
+  const inline = popup || holds(spec.kind)  // else the kind's own form, with its own Save
   const [refused, setRefused] = useState("")
   const shown    = (st: Staged) => (st.patch.kind as string | undefined) ?? spec.kind  // the kind, as changed and not kept yet
-  const switchTo = async (k: string, st: Staged) => {  // between kinds with rows: held with the rest until Save; else at once
-    if (k in ACTION_ROWS && spec.kind in ACTION_ROWS) return st.put("kind", k, spec.kind)
+  const switchTo = async (k: string, st: Staged) => {  // between kinds held with Save: held with the rest until it; else at once
+    if (holds(k) && holds(spec.kind)) return (st.put("kind", k, spec.kind), Object.entries(START[k] ?? {}).forEach(([key, v]) => st.put(key, v, spec.params[key])))
     setRefused((await send({ kind: k, params: popup && (k === "poke" || k === "ask_usr") ? cleaned(k, spec.params) : {} })) ?? "")
   }
   const send   = (patch: Record<string, unknown>) => update({ name: spec.name, desc: spec.desc, kind: spec.kind, params: spec.params, ...patch })
@@ -698,7 +699,7 @@ function ActionSeen({ spec, update, remove, form, close }: {
   }
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
-      <DialogContent className={cn("max-h-[85vh] overflow-x-hidden overflow-y-auto", popup || !rows ? "sm:max-w-lg" : "sm:max-w-lg")} onEscapeKeyDown={typing}>
+      <DialogContent className={"max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg sm:has-[[data-wide]]:max-w-[38.5rem]"} onEscapeKeyDown={typing}>
         <Staging reserve={inline} onSave={keep}>
           {(st) => (
             <>
@@ -719,7 +720,12 @@ function ActionSeen({ spec, update, remove, form, close }: {
               {popup ? (
                 <PopupFields ask={spec.kind === "ask_usr"} kind={spec.kind} params={spec.params} commit={commit} picks={(st.patch.picks as Picks | undefined) ?? picks}
                              pick={(which, keys) => st.put("picks", { ...((st.patch.picks as Picks | undefined) ?? picks), [which]: keys }, picks)} />
-              ) : ACTION_ROWS[shown(st)] ? (
+              ) : shown(st) === "ask_llm" || shown(st) === "ask_jev" ? (() => {
+                const { desc: _d, picks: _p, kind: _k, ...patch } = st.patch  // what's held of its params, over what's kept
+                const params = { ...spec.params, ...patch }
+                const put    = (key: string, value: unknown) => st.put(key, value, key === "context" ? { format: contextOf(spec.params.context).format, values: contextOf(spec.params.context).values } : spec.params[key])
+                return shown(st) === "ask_llm" ? <AskLlm params={params} put={put} at={at} /> : <AskJev params={params} put={put} />
+              })() : ACTION_ROWS[shown(st)] ? (
                 <ActionRows kind={shown(st)} field={(key, how) => st.field(key, how === "expr" ? exprText(spec.params[key]) : String(spec.params[key] ?? ""))} />
               ) : form}
             </>

@@ -16,7 +16,6 @@
     --color-code-call: var(--code-call);
     --color-code-punct: var(--code-punct);
     --color-code-bracket: var(--code-bracket);
-    --color-code-slot: var(--code-slot);
     --color-added: var(--added);
     --color-removed: var(--removed);
     --font-heading: var(--font-sans);
@@ -102,7 +101,6 @@
     --code-call:     #82aaff;
     --code-punct:    #89ddff;
     --code-bracket:  #ffcb6b;
-    --code-slot:     #f07178;
     --changed:       oklch(0.7 0.15 250);  /* what's changed and not kept yet: blue; added: green; taken out: red */
     --added:         oklch(0.78 0.15 150);
     --removed:       oklch(0.68 0.2 25);

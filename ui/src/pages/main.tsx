@@ -126,7 +126,6 @@ function Main() {
   const [opened, setOpened] = useState<number | string | null>(opening(card))  // a card, or an automation, to open
   const [where, setWhere] = useState<Where>(GLOBAL)
   const [welcome, setWelcome] = useState(() => recall("proki-welcomed", ["yes", "no"] as const, "no") === "no")  // the welcome, not seen through yet
-  useEffect(() => void import("@/views/known").then((m) => m.keepLearning()), [])
   useEffect(() => {
     window.proki.onNavigate((path) => {
       const [to, card] = path.split("/")

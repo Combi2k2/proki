@@ -16,7 +16,7 @@ import type { Field, Source, SourceName, Type, Weighed } from "@/lib/proki"
 import { Confirm } from "@/components/confirm"
 import { CHANGED, Editable, Pick, type Staged, Staging, Term, typing, useStaged } from "@/views/in-place"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { BARE, Template } from "@/views/code"
+import { BARE, TemplateBox } from "@/views/code"
 import { Collection, emptyOf } from "@/views/inspect"
 import { goToPlace, Places } from "@/views/places"
 import { AddButton, Detail, takeover } from "@/views/scope-shared"
@@ -190,12 +190,7 @@ function SourceDialog({ field, weighed, index, fresh, onChange, onClose }: { fie
 function LlmForm({ field, now, was, st, post }: { field: Field; now: Source; was: Source; st: Staged; post: ReactNode }) {
   return (
     <div className="flex flex-col gap-4 [&>section]:border-t-0 [&>section]:pt-0">
-      <div className="flex flex-col gap-1.5">
-        <Label text="Prompt" />
-        <div className="rounded-md border px-2 py-1 text-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-          <Template strings value={now.context ?? ""} onChange={(e) => st.put("context", e.target.value, was.context ?? "")} placeholder="How many hours will this take?" aria-label="Prompt" className="min-h-24" />
-        </div>
-      </div>
+      <TemplateBox label="Prompt" value={now.context ?? ""} onChange={(e) => st.put("context", e.target.value, was.context ?? "")} placeholder="How many hours will this take?" className="min-h-24" />
       <div className="flex flex-col gap-1.5">
         <Label text="Type" />
         <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-xs">
@@ -212,7 +207,21 @@ function LlmForm({ field, now, was, st, post }: { field: Field; now: Source; was
   )
 }
 
-const ANSWERS: Record<string, [string, string][]> = {
+/** A question's kind as tabs, the one chosen raised. */
+export function KindTabs({ kind, kinds, changed, onPick }: { kind: string; kinds: string[]; changed?: boolean; onPick: (kind: string) => void }) {
+  return (
+    <div role="tablist" className="grid gap-1 rounded-lg border bg-muted/40 p-1 text-xs" style={{ gridTemplateColumns: `repeat(${kinds.length}, minmax(0, 1fr))` }}>
+      {kinds.map((k) => (
+        <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => k !== kind && onPick(k)}
+                className={cn("rounded-md py-1 font-mono", kind === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground", changed && kind === k && CHANGED)}>
+          {k}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export const ANSWERS: Record<string, [string, string][]> = {
   noul:   [["res", "number"]],
   choice: [["res.index", "integer"], ["res.conf", "number"], ["res.odds", "list"]],
   score:  [["res.score", "number"], ["res.conf", "number"], ["res.odds", "list"]],
@@ -225,21 +234,9 @@ function JevForm({ now, was, st, named, post }: {
   const kind = now.type ?? "noul"
   return (
     <div className="flex flex-col gap-4">
-      <div role="tablist" className="grid grid-cols-3 gap-1 rounded-lg border bg-muted/40 p-1 text-xs">
-        {["noul", "choice", "score"].map((k) => (
-          <button key={k} type="button" role="tab" aria-selected={kind === k} onClick={() => k !== kind && st.put("type", k, was.type ?? "noul")}
-                  className={cn("rounded-md py-1 font-mono", kind === k ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground", "type" in st.patch && kind === k && CHANGED)}>
-            {k}
-          </button>
-        ))}
-      </div>
+      <KindTabs kind={kind} kinds={["noul", "choice", "score"]} changed={"type" in st.patch} onPick={(k) => st.put("type", k, was.type ?? "noul")} />
       {named.contexts && <Context text={named.contexts.jev} />}
-      <div className="flex flex-col gap-1.5">
-        <Label text="Question" />
-        <div className="rounded-md border px-2 py-1 text-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-          <Template strings value={now.question ?? ""} onChange={(e) => st.put("question", e.target.value, was.question ?? "")} placeholder="Is this for school?" aria-label="Question" className="min-h-10" />
-        </div>
-      </div>
+      <TemplateBox label="Question" value={now.question ?? ""} onChange={(e) => st.put("question", e.target.value, was.question ?? "")} placeholder="Is this for school?" className="min-h-10" />
       <Criteria key={kind} criteria={now.criteria ?? {}} onSet={(c) => st.put("criteria", c, was.criteria ?? {})}
                 {...(kind === "noul" ? { fixed: ["True", "False"] } : kind === "score" ? { label: "Marks", placeholder: "1" } : {})} />
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
@@ -770,12 +767,7 @@ function Inside({ value, fixed, flat, onChange }: { value: Schema; fixed?: boole
 function Context({ text }: { text: string }) {
   const st = useStaged()!
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label text="Context" />
-      <div className="rounded-md border px-2 py-1 text-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-        <Template strings value={(st.patch.shared as string | undefined) ?? text} onChange={(e) => st.put("shared", e.target.value, text)} aria-label="Context" className="min-h-16" />
-      </div>
-    </div>
+    <TemplateBox label="Context" value={(st.patch.shared as string | undefined) ?? text} onChange={(e) => st.put("shared", e.target.value, text)} className="min-h-16" />
   )
 }
 
