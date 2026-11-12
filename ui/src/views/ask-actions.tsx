@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { Type } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { TemplateBox } from "@/views/code"
-import { ANSWERS, Criteria, KindTabs, OptionsFrom, TypeField, TypeIcon } from "@/views/fields"
+import { ANSWERS, Criteria, KindTabs, OptionsFrom, SchemaFields, TypeIcon } from "@/views/fields"
 import { CHANGED, Drafted, Editable, typing } from "@/views/in-place"
 import { NAMES, RowFields } from "@/views/action-rows"
 import { contextOf } from "@/views/program-forms"
@@ -80,9 +80,9 @@ export function PromptRows({ params, put, was }: { params: Params; put: Put; was
 /** A text with {slots}, then what each stands for. */
 const Prompt = (props: Parameters<typeof PromptBox>[0]) => <><PromptBox {...props} /><PromptRows params={props.params} put={props.put} was={props.was} /></>
 
-/** The type of the variable an answer is saved to, by its name as the state reads it (its own, its program's, then a global one): what the LLM
- * answers. It's set on the variable. */
-function Answered({ name, at }: { name: string; at: Where }) {
+/** What the LLM answers: the type of the variable its answer is saved to, by its name as the state reads it (its own, its program's, then a global one),
+ * loaded as it is (an object's fields as a table); it's changed on the variable. Text, until the variable is made. */
+function AnswerSchema({ name, at }: { name: string; at: Where }) {
   const [found, setFound] = useState<{ name: string; type: Type } | null>(null)
   useEffect(() => {
     let gone = false
@@ -97,26 +97,27 @@ function Answered({ name, at }: { name: string; at: Where }) {
     return () => { gone = true }
   }, [name, at.program, at.state])
   if (!name.trim()) return null
-  const text = !found || found.type === "any"
   return (
-    <div className="flex flex-col gap-1.5 text-xs">
-      <span className="font-medium">It answers<span className="ml-1.5 font-normal text-muted-foreground">
-        {found ? (text ? "text: give the variable a type for more" : `as ${found.name} is typed; change it on the variable`) : "text, until the variable is made"}</span></span>
-      {found && !text && <TypeField label="" value={found.type} fixed />}
+    <div className="flex flex-col gap-3 border-t pt-4 text-xs">
+      <div style={{ gridTemplateColumns: `${LABELS} minmax(0,1fr)` }} className="grid items-baseline gap-x-3">
+        <span className="font-medium">Answer schema</span>
+        <span className="text-muted-foreground">{found ? `as ${found.name} is typed; change it on the variable` : "text, until the variable is made"}</span>
+      </div>
+      {found && <SchemaFields flush name={found.name} type={found.type} />}
     </div>
   )
 }
 
-/** The parts of an action's dialog, under a line from its title and description. */
+/** The parts of an action's dialog, under a line from its title and description (`wide`: it asks for more room). */
 const Parts = ({ children, wide }: { children: ReactNode; wide?: boolean }) => <div data-wide={wide || undefined} className="flex flex-col gap-4 border-t pt-4">{children}</div>
 
 /** A question to the LLM: its prompt, where its answer goes, and how long it waits. */
 export function AskLlm({ params, put, at, was }: { params: Params; put: Put; at: Where; was?: Params }) {
   return (
-    <Parts>
+    <Parts wide>
       <Prompt label="Prompt" params={params} put={put} placeholder="How many hours will this take?" min="min-h-24" was={was} />
       <Waiting params={params} put={put} wait={10} was={was} />
-      <Answered name={String(params.result ?? "")} at={at} />
+      <AnswerSchema name={String(params.result ?? "")} at={at} />
     </Parts>
   )
 }

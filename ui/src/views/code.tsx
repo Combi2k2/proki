@@ -2,7 +2,7 @@
 // called, the names, the operators. Expr shows one; CodeInput is a field to type one in, coloured as it's typed (the text drawn over the field, the field's own
 // transparent: its caret and its selection stay).
 
-import { useEffect, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from "react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
@@ -90,18 +90,37 @@ const Slots = ({ text, string }: { text: string; string?: boolean }) => (
   <>{text.split(SLOT).map((part, i) => (i % 2 ? <Slot key={i} inner={part.slice(1, -1)} /> : string && part ? <span key={i} className="text-code-string">{part}</span> : part))}</>
 )
 
+/** How tall the text typed in `ref`'s field is, measured as `dep` (what it holds) changes and as it's resized. A field that draws its text under a transparent
+ * one must never be shorter than this: it would scroll its own text, and the two would no longer lie over each other. Give the box a spacer this high. */
+export function useFit(ref: RefObject<HTMLTextAreaElement | null>, dep: unknown) {
+  const [fit, setFit] = useState(0)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => { const kept = el.style.height; el.style.height = "0px"; setFit(el.scrollHeight); el.style.height = kept; el.scrollTop = 0 }
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [ref, dep])
+  return fit
+}
+
 /** A text to type, its {name} slots drawn as code as they're typed; only the colour differs, so the
  * caret stays where the letters are. It grows with what's typed. The line under it shows as you point
  * at it. */
 export function Template({ value, className, strings, ...props }: { value: string; strings?: boolean } & ComponentProps<typeof Textarea>) {
-  const box = cn("col-start-1 row-start-1 min-h-14 w-full px-0 py-1 leading-relaxed break-words whitespace-pre-wrap", strings ? "font-mono text-xs" : "text-sm")
+  const box  = cn("col-start-1 row-start-1 min-h-14 w-full px-0 py-1 leading-relaxed break-words whitespace-pre-wrap", strings ? "font-mono text-xs" : "text-sm")
+  const area = useRef<HTMLTextAreaElement>(null)
+  const fit  = useFit(area, value)
   return (
     <div className="grid">
-      <div aria-hidden className={cn(box, "pointer-events-none")}>
+      <div aria-hidden className={cn(box, "pointer-events-none", className)}>
         <Slots text={value} string={strings} />{"\n"}
       </div>
-      <textarea value={value} spellCheck={false} {...props}
-                className={cn(box, "resize-none overflow-hidden border-0 bg-transparent text-transparent caret-foreground outline-none placeholder:text-muted-foreground", !strings && "border-b border-transparent hover:border-dotted hover:border-muted-foreground focus:border-solid focus:border-ring", className)} />
+      <div aria-hidden style={{ height: fit }} className="col-start-1 row-start-1" />
+      <textarea ref={area} value={value} spellCheck={false} {...props}
+                className={cn(box, "m-0 block resize-none overflow-hidden border-0 bg-transparent text-transparent caret-foreground outline-none placeholder:text-muted-foreground", !strings && "border-b border-transparent hover:border-dotted hover:border-muted-foreground focus:border-solid focus:border-ring", className)} />
     </div>
   )
 }

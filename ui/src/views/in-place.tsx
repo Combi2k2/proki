@@ -5,7 +5,7 @@ import { Check, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { colour } from "@/views/code"
+import { colour, useFit } from "@/views/code"
 
 const PLAIN = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const  // names and formulas, as typed
 
@@ -37,6 +37,7 @@ export function Editable({ label, value, onSave, onType, code, list, long, clamp
   const [caret, setCaret] = useState(0)  // where it's typed, for the names it offers
   const box = useRef<HTMLTextAreaElement>(null)
   const before = useRef(value)  // as it was when the change began
+  const fit    = useFit(box, text)  // how tall what's typed is: the box is never shorter, so it never scrolls its text
   const look = cn("min-w-0 break-words", code && "font-mono")
   const read = !value ? placeholder : code ? colour(value) : value
   if (!onSave) return <span title={title} className={cn(look, className, !value && "text-muted-foreground")}>{read}</span>
@@ -91,9 +92,10 @@ export function Editable({ label, value, onSave, onType, code, list, long, clamp
             </Popover>
             {text.slice(start)}
           </span>
+          <span aria-hidden style={{ height: fit }} className="col-start-1 row-start-1" />
           <textarea {...field} ref={box} className={cn(field.className, area, "overflow-hidden text-transparent caret-foreground")} onChange={(e) => (setText(e.target.value), onType?.(e.target.value), typed(e))} onSelect={typed} />
         </span>
-      ) : long ? <textarea {...field} onChange={(e) => (setText(e.target.value), onType?.(e.target.value))} />
+      ) : long ? <textarea {...field} ref={box} style={{ minHeight: fit }} onChange={(e) => (setText(e.target.value), onType?.(e.target.value))} />
             : <input {...field} list={list} onChange={(e) => (setText(e.target.value), onType?.(e.target.value))} />}
       {error && <span className="font-sans text-[11px] font-normal break-words text-destructive">{error}</span>}
     </span>

@@ -3,14 +3,13 @@
 
 import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from "react"
 import {
-  Bot, Box, Brackets, ChartLine, CircleHelp, Clock, Hash, KeySquare, PawPrint, Plus, Radical, Scale, Sigma, ToggleRight, Trash2, Type as TextIcon, User, Variable, Workflow, X,
+  Bot, Box, Brackets, ChartLine, CircleHelp, Clock, Hash, KeySquare, PawPrint, Radical, Scale, Sigma, ToggleRight, Trash2, Type as TextIcon, User, Variable, Workflow, X,
   type LucideIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import type { Field, Source, SourceName, Type, Weighed } from "@/lib/proki"
 import { Confirm } from "@/components/confirm"
@@ -20,6 +19,7 @@ import { BARE, TemplateBox } from "@/views/code"
 import { Collection, emptyOf } from "@/views/inspect"
 import { goToPlace, Places } from "@/views/places"
 import { AddButton, Detail, takeover } from "@/views/scope-shared"
+import { LABELS, Waiting } from "@/views/ask-actions"
 
 type Change = (request: object) => Promise<string>
 
@@ -188,18 +188,21 @@ function SourceDialog({ field, weighed, index, fresh, onChange, onClose }: { fie
 
 /** What an LLM field's prompt is laid out as: the prompt, the type of its answer (a table of fields for an object), then what's done with it. */
 function LlmForm({ field, now, was, st, post }: { field: Field; now: Source; was: Source; st: Staged; post: ReactNode }) {
+  const kind = kindOf((st.patch.schema as Type | undefined) ?? was.schema ?? field.worked)
+  const cols = { gridTemplateColumns: `${LABELS} minmax(0,1fr)` }
   return (
-    <div className="flex flex-col gap-4 [&>section]:border-t-0 [&>section]:pt-0">
+    <div className="flex flex-col gap-4 border-t pt-4">
       <TemplateBox label="Prompt" value={now.context ?? ""} changed={"context" in st.patch} onChange={(e) => st.put("context", e.target.value, was.context ?? "")} placeholder="How many hours will this take?" className="min-h-24" />
-      <div className="flex flex-col gap-1.5">
-        <Label text="Type" />
-        <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 text-xs">
-          <dd className="col-span-2"><TypeChange type={field.worked} own={was.schema} editable at="schema" /></dd>
-          <ItemChange type={field.worked} own={was.schema} editable at="schema" />
-        </dl>
+      <Waiting params={{ timeout: now.timeout }} was={{ timeout: was.timeout }} put={(_, v) => st.put("timeout", v, was.timeout)} wait={10} save={false} />
+      <div className="flex flex-col gap-3 border-t pt-4 text-xs">
+        <div style={cols} className="grid items-center gap-x-3 gap-y-2">
+          <Label text="Answer schema" />
+          <TypeChange type={field.worked} own={was.schema} editable at="schema" />
+          {kind === "list" && <ItemChange type={field.worked} own={was.schema} editable at="schema" />}
+        </div>
+        <StagedFields flush name={field.key} type={field.worked} own={was.schema} at="schema" />
       </div>
-      <StagedFields name={field.key} type={field.worked} own={was.schema} at="schema" />
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 border-t pt-4">
         <Label text="Post-processing" />
         {post}
       </div>
@@ -587,40 +590,21 @@ function typed(s: Schema): Type {
   return short ? short[0] : s
 }
 
-/** A type: a name, an object of named fields, or a list of one type, each field a type of its
- *  own. `inherit`: none is the field's own (an ask's answer). `fixed`: shown, not changed.
- *  `alone`: its kind only, what's inside it shown by TypeInside where there's room. */
-export function TypeField({ label, value, inherit, fixed, alone, kinds, onChange }: {
-  label: string; value: Type | undefined; inherit?: boolean; fixed?: boolean; alone?: boolean; kinds?: string[]; onChange?: (type: Type | undefined) => void
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        {label && <Label text={label} />}
-        <Kind value={kindOf(value)} inherit={inherit} fixed={fixed} kinds={kinds}
-              onChange={(k) => onChange?.(k === "inherit" ? undefined : typed(picked(k, value === undefined ? {} : schemaOf(value))))} />
-        {value !== undefined && !alone && <OneOf value={schemaOf(value)} />}
-      </div>
-      {value !== undefined && !alone && <Inside value={schemaOf(value)} fixed={fixed} onChange={(s) => onChange?.(typed(s))} />}
-    </div>
-  )
-}
-
 /** The names of an object type's fields (none: not an object). */
 export const fieldKeys = (type?: Type): string[] => (kindOf(type) === "object" && type ? Object.keys(((schemaOf(type).properties ?? {}) as object)) : [])
 
 /** An object variable's fields (or those of each item of a list of objects), held in the dialog's type and kept with its Save: `SchemaFields`, as the dialog's own. */
-export function StagedFields({ name, type, own, at = "type" }: { name: string; type?: Type; own?: Type; at?: string }) {
+export function StagedFields({ name, type, own, at = "type", flush }: { name: string; type?: Type; own?: Type; at?: string; flush?: boolean }) {
   const st  = useStaged()
   const was = own ?? type ?? "any"
-  return st ? <SchemaFields name={name} type={(st.patch[at] as Type | undefined) ?? was} was={was} onChange={(t) => st.put(at, t, was)} /> : null
+  return st ? <SchemaFields flush={flush} name={name} type={(st.patch[at] as Type | undefined) ?? was} was={was} onChange={(t) => st.put(at, t, was)} /> : null
 }
 
 /** The fields of an object type (or of each item of a list of objects), as a table like a record's: a row each, its name and what it
  * is, the row's trash as you point at it, a click opening the field; a new one added under them with its description. No `onChange`:
  * read only. `onOpen`: what a field's click opens instead (the app's own objects: the field's own dialog). `was`: the type as kept, to mark a field new
- * or changed (nothing marked without it). */
-export function SchemaFields({ name, type, was, onChange, onOpen }: { name: string; type: Type; was?: Type; onChange?: (type: Type) => void; onOpen?: (key: string) => void }) {
+ * or changed (nothing marked without it). `flush`: no line over it, it's under a section's own. */
+export function SchemaFields({ name, type, was, flush, onChange, onOpen }: { name: string; type: Type; was?: Type; flush?: boolean; onChange?: (type: Type) => void; onOpen?: (key: string) => void }) {
   const [open, setOpen]     = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const schema = schemaOf(type)
@@ -640,7 +624,7 @@ export function SchemaFields({ name, type, was, onChange, onOpen }: { name: stri
   const kept   = was === undefined ? undefined : (((kindOf(was) === "list" ? schemaOf(was).items : schemaOf(was)) ?? {}) as Schema).properties as Record<string, Schema> | undefined ?? {}
   const mark   = (key: string, s: Schema) => (!kept ? undefined : !(key in kept) ? "bg-added/10" : JSON.stringify(kept[key]) !== JSON.stringify(s) ? "bg-changed/10" : undefined)
   return (
-    <section className="flex flex-col gap-1.5 border-t pt-4">
+    <section className={cn("flex flex-col gap-1.5", !flush && "border-t pt-4")}>
       <Heading text="Fields" onAdd={adding || !onChange ? undefined : () => setAdding(true)} />
       <div className="rounded-md border">
         <div className={cn(row, "border-b bg-muted/40 py-1 pr-9 pl-2 text-xs text-muted-foreground")}><span>Name</span><span>What it is</span></div>
@@ -649,7 +633,7 @@ export function SchemaFields({ name, type, was, onChange, onOpen }: { name: stri
             <div role="button" tabIndex={0} onClick={() => (onOpen ?? setOpen)(key)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (onOpen ?? setOpen)(key)}
                  className={cn(row, "cursor-pointer py-1.5 pr-9 pl-2 text-xs hover:bg-muted/60")}>
               <span className="flex min-w-0 items-center gap-1.5"><TypeIcon type={s as Type} /><code className="truncate font-semibold">{key}</code></span>
-              <span className="truncate text-muted-foreground">{String(s.description ?? "") || "–"}</span>
+              <span className="truncate text-muted-foreground">{[String(s.description ?? ""), Array.isArray(s.enum) ? `one of ${s.enum.map(String).join(", ")}` : ""].filter(Boolean).join(" · ") || "–"}</span>
             </div>
             {onChange && <Button type="button" size="icon-xs" variant="ghost" aria-label={`Delete ${key}`} title="Delete" onClick={() => put(props.filter(([k]) => k !== key))}
                     className="absolute top-1/2 right-1.5 -translate-y-1/2 text-destructive opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"><Trash2 /></Button>}
@@ -716,82 +700,6 @@ export function SchemaFields({ name, type, was, onChange, onOpen }: { name: stri
         </Dialog>
       )}
     </section>
-  )
-}
-
-/** What's inside a type, a section of its own: an object's fields, a list's items' type (nothing
- *  for a type with nothing inside). */
-export function TypeInside({ value, onChange }: { value: Type; onChange: (type: Type) => void }) {
-  const kind = kindOf(value)
-  if (kind !== "object" && kind !== "list") return null
-  return (
-    <section className="flex flex-col gap-2 border-t pt-4">
-      {kind === "object" && <Label text="Fields" />}
-      <Inside value={schemaOf(value)} flat onChange={(s) => onChange(typed(s))} />
-    </section>
-  )
-}
-
-/** A type's kind, picked from them all, each with its icon. */
-function Kind({ value, inherit, fixed, kinds = TYPES, onChange }: { value: string; inherit?: boolean; fixed?: boolean; kinds?: string[]; onChange: (kind: string) => void }) {
-  if (fixed) return <span className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground"><TypeIcon type={value} />{value}</span>
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger size="sm" aria-label="type" className="min-w-28 font-mono text-xs"><SelectValue /></SelectTrigger>
-      <SelectContent position="popper" className="font-mono">
-        {inherit && <SelectItem value="inherit" className="text-xs">its type</SelectItem>}
-        {kinds.map((t) => <SelectItem key={t} value={t} className="text-xs"><TypeIcon type={t} />{t}</SelectItem>)}
-      </SelectContent>
-    </Select>
-  )
-}
-
-/** The options a type is one of, said beside it (nothing for a type that has none). */
-function OneOf({ value }: { value: Schema }) {
-  const options = Array.isArray(value.enum) ? `one of ${value.enum.map(String).join(", ")}` : ""
-  return <span title={options || undefined} className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{options}</span>
-}
-
-/** What's inside a type: an object's fields, each a name and a type, or a list's items' type;
- *  what's inside those set in under them. */
-function Inside({ value, fixed, flat, onChange }: { value: Schema; fixed?: boolean; flat?: boolean; onChange: (s: Schema) => void }) {
-  const kind = kindOf(value)
-  const box  = cn("flex flex-col gap-1.5", !flat && "mt-1 mb-1.5 ml-2 border-l pt-1 pl-4")
-  if (kind === "list") {
-    const items = (value.items ?? {}) as Schema
-    return (
-      <div className={box}>
-        <div className="flex items-center gap-2">
-          <span className="w-32 shrink-0 text-xs text-muted-foreground">Item's type</span>
-          <Kind value={kindOf(items)} fixed={fixed} onChange={(k) => onChange({ ...value, items: picked(k, items) })} />
-          <OneOf value={items} />
-        </div>
-        <Inside value={items} fixed={fixed} onChange={(items) => onChange({ ...value, items })} />
-      </div>
-    )
-  }
-  if (kind !== "object") return null
-  const props = Object.entries((value.properties ?? {}) as Record<string, Schema>)
-  const put   = (next: [string, Schema][]) => onChange({ ...value, properties: Object.fromEntries(next) })
-  const at    = (i: number, key: string, s: Schema) => put(props.map((p, j) => (j === i ? [key, s] : p)))
-  const fresh = Array.from({ length: props.length + 1 }, (_, n) => `field_${n + 1}`).find((k) => !props.some(([p]) => p === k))!
-  return (
-    <div className={box}>
-      {props.map(([key, s], i) => (
-        <div key={i} className="flex flex-col">
-          <div className="flex items-center gap-2">
-            <Input {...PLAIN} value={key} disabled={fixed} aria-label="field name" className="h-7 w-32 shrink-0 font-mono text-xs md:text-xs"
-                   onChange={(e) => !props.some(([k], j) => j !== i && k === e.target.value) && at(i, e.target.value, s)} />
-            <Kind value={kindOf(s)} fixed={fixed} onChange={(k) => at(i, key, picked(k, s))} />
-            <OneOf value={s} />
-            {!fixed && <Button variant="ghost" size="icon-xs" aria-label={`remove ${key}`} onClick={() => put(props.filter((_, j) => j !== i))}><Trash2 /></Button>}
-          </div>
-          <Inside value={s} fixed={fixed} onChange={(s) => at(i, key, s)} />
-        </div>
-      ))}
-      {!props.length && fixed && <p className="text-xs text-muted-foreground">No fields.</p>}
-      {!fixed && <Button variant="ghost" size="sm" className="w-fit text-xs" onClick={() => put([...props, [fresh, {}]])}><Plus /> Field</Button>}
-    </div>
   )
 }
 
