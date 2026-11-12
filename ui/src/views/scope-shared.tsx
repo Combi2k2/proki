@@ -6,7 +6,6 @@ import { useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { GripVertical, Pencil, Plus, Trash2 } from "lucide-react"
 import { Confirm } from "@/components/confirm"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { type Change, type Reference, type RuleSpec, type SignalSpec, type VariableSpec } from "@/lib/proki"
@@ -84,9 +83,6 @@ export async function revert(name: string | null): Promise<string | null> {
   return answer.error ?? null
 }
 
-export function Mistake({ text }: { text: string }) {
-  return <Alert variant="destructive"><AlertDescription className="break-words">{text}</AlertDescription></Alert>
-}
 
 /** The one way to add something to a list, in a dialog and in the side panel alike. */
 export function AddButton({ onClick, disabled, label = "Add" }: { onClick: () => void; disabled?: boolean; label?: string }) {

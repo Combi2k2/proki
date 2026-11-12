@@ -122,8 +122,24 @@ a label you pick is yours. Filter by what's left to you.
 
 **Metrics (F-010)**: charts over a horizon → toggle signals, change kept time and buckets in the signal's own dialog.
 
-**Automations list (F-011)**: cards by group, with a switch → one click opens the automation, the switch turns it on or off
-without opening. A card says what it does and what it's doing now.
+**Automations list (F-011)**: every automation as one card, in one list sorted by title, with a switch → one click opens the
+automation, the switch turns it on or off without opening. Under the title only "Little helpers that work on their own." (no counts); its buttons are just Reset (the global settings, when changed) and New. No grouping of its own: the 20 most used tags sit on top as `#tag`
+chips, and one clicked (or a tag on a card clicked) shows only the automations with it, clicked again shows all. A search box at the
+top right narrows by title, name, description or tag, together with the tag. A card is: its icon at the left, the title and the
+switch, what it does under the title, up to three `#tag` chips (`…` for the rest), and a foot with the state it is in (its name
+only) a ball that moves as the state does: working (green) bounces, squashed as it lands and stretched as it leaves; idle or watching (yellow) sends out an aura that fades away from its centre; an error (red) shakes unevenly, with quick turns and an odd squeeze (the engine doesn't report one yet); off (grey) doesn't move at all. None of it moves under reduced motion, and how many
+states it has. **New automation** opens a dialog laid out as the card is: an icon tile at the left (a dashed plus until chosen; its
+chooser lists a few hundred icons and finds any other by name), the title beside it and the description under both, each a boxed field named above it, with a placeholder, then the tags as chips with a dashed `+ tag` that lists the tags in use. Its name is the title as a slug and it starts in `idle`.
+
+**An automation's header**: over the graph, a card: the icon at the left, centred on the text; the description as it is (cut short with an
+ellipsis past two lines), the `#tag` chips under it; at the right the on/off switch at the top and, under it at the foot, the Reset (only when
+it has changes to lose) and Delete icons, each asked first. The room above the switch equals the room below the icons, whatever the description's
+height. No state name or ball (the card in the list shows those). A click anywhere on it (but the switch and the icons) opens the automation's
+dialog: the icon, its display name and its code name on one line, its description under them with room for four lines (each a boxed field like the
+search box, named above it, with a placeholder), its tags (chips with a ×, and a dashed `+ tag` that lists the tags in use and finds or makes one by
+what's typed). Changes are held and marked as elsewhere (a blue border on a changed field, a ring on a changed icon, a tag added green, a tag taken
+out red and struck through with an arrow to put it back); Cancel and Save appear at the foot once something's changed, and a refused Save is told in the
+error dialog. The first view of a graph is fitted to the window, a program made new included.
 
 **An automation**: a graph of states and the ways between them → click a state (opens its dialog), click a way (its dialog),
 drag to rearrange → the Resources panel lists inputs, signals, variables and rules for the scope you're in.
@@ -166,3 +182,7 @@ minute → every function and action found by typing.
 2. Use only the app's sample data; never change the user's real engine data to test.
 3. For each screen, check 1, 2 and 3 above and note what's seen. Rank by how many places it reaches.
 4. Report what was and wasn't rendered. Don't fix unless asked; don't commit unless asked.
+
+**Errors**: never written across the top of a page. One the person can resolve (a name already used, a change refused) opens a dialog,
+"That didn't work", with the message and OK. One they can't (Proki isn't answering) opens "Proki isn't answering" with no button, no ×,
+and Escape does nothing; it goes by itself when Proki answers again. A missing field is told by the field ("Give it a title.").

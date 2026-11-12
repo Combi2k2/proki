@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import { Confirm } from "@/components/confirm"
 import { PageHeader } from "@/components/page"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ErrorDialog } from "@/components/error-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -132,7 +132,7 @@ export function TasksView({ open, onOpen }: { open: number | null; onOpen: (grou
       </PageHeader>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-8 py-5">
-        {error && <Alert variant="destructive" className="mb-4"><AlertDescription>{error}</AlertDescription></Alert>}
+        {error && <ErrorDialog message={error} onClose={() => setError("")} />}
         {rows.length === 0 && (
           <Empty className="mt-6">
             <EmptyHeader>

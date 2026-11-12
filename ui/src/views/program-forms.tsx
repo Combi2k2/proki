@@ -6,7 +6,6 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { AppWindow, Bell, Bot, CircleCheck, Equal, KeySquare, ListMinus, ListPlus, Loader2, Lock, MessageCircleQuestionMark, Minus, Music, Play, Plus, Trash2, type LucideIcon } from "lucide-react"
-import { DynamicIcon, type IconName } from "lucide-react/dynamic"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -16,7 +15,6 @@ import type { MediaItem, StateSpec, Type } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { BARE, CodeInput, Template } from "@/views/code"
 import { Criteria, TypeField } from "@/views/fields"
-import { IconPicker } from "@/views/icon-picker"
 import { CHANGED_LINE, Editable, Pick, useStaged } from "@/views/in-place"
 import { file, MediaPicker } from "@/views/media"
 
@@ -186,48 +184,6 @@ function Choice({ value, onChange, options, className }: {
 const Row = ({ children }: { children: ReactNode }) => <div className="grid grid-cols-2 gap-3">{children}</div>
 
 // --- a program, a state, a way out ----------------------------------------------------------
-
-export function ProgramForm({ spec, states, onSave, onCancel, saveLabel }: {
-  spec?: { name: string; title?: string; desc: string; icon?: string; tags: string[]; initial: string }
-  states?: string[]  // to start in (none: a new program, starting in a new state)
-  onSave: Save
-  onCancel: () => void
-  saveLabel?: string
-}) {
-  const [name, setName] = useState(spec?.name ?? "")
-  const [title, setTitle] = useState(spec?.title ?? "")
-  const [desc, setDesc] = useState(spec?.desc ?? "")
-  const [icon, setIcon] = useState(spec?.icon ?? "")
-  const [tags, setTags] = useState((spec?.tags ?? []).join(", "))
-  const [initial, setInitial] = useState(spec?.initial ?? "idle")
-  return (
-    <Form onCancel={onCancel} saveLabel={saveLabel}
-          onSave={() => onSave({ name: name.trim(), title: title.trim(), desc, icon: icon.trim(), initial: initial.trim(),
-                                 tags: tags.split(",").map((t) => t.trim()).filter(Boolean) })}>
-      <Row>
-        <Field label="Name"><Text value={name} onChange={setName} code autoFocus placeholder="stretch" /></Field>
-        <Field label="Starts in">
-          {states ? <Choice value={initial} onChange={setInitial} options={states.map((s) => [s, s])} />
-                  : <Text value={initial} onChange={setInitial} code />}
-        </Field>
-      </Row>
-      <Row>
-        <Field label="Title" hint="what the app calls it"><Text value={title} onChange={setTitle} placeholder="Stretch breaks" /></Field>
-        <Field label="Icon" hint="its picture, where it's listed">
-          <IconPicker value={icon} onPick={setIcon}>
-            <Button type="button" variant="outline" className="justify-start font-normal">
-              {icon ? <DynamicIcon name={icon as IconName} data-icon="inline-start" /> : null}{icon || "Choose…"}
-            </Button>
-          </IconPicker>
-        </Field>
-      </Row>
-      <Field label="Description"><Text value={desc} onChange={setDesc} placeholder="Stand up every hour." /></Field>
-      <Field label="Tags" hint="comma-separated; the first of focus, day, tasks, notes, background says where it's listed">
-        <Text value={tags} onChange={setTags} placeholder="day, health" />
-      </Field>
-    </Form>
-  )
-}
 
 export function StateForm({ spec, onSave, onCancel }: { spec?: StateSpec; onSave: Save; onCancel: () => void }) {
   const [name, setName] = useState(spec?.name ?? "")

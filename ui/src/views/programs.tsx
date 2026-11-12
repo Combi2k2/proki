@@ -17,27 +17,27 @@ import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { ArrowLeft, ArrowRight, ChevronRight, Code, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react"
 import { Confirm } from "@/components/confirm"
-import { PageHeader } from "@/components/page"
+import { ErrorDialog } from "@/components/error-dialog"
+import { PageHeader, SearchBox } from "@/components/page"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardAction, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardFooter } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { GLOBAL, type ActionSpec, type BranchSpec, type Change, type GlobalSpecs, type ProgramDetail, type ProgramSpecs, type Reference, type Scope, type Where } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { ACTIONS, ActionForm, BranchForm, cleaned, PopupFields, type Picks, NAMES, parseValue, ProgramForm, StateForm, Tinted, valueText, type Save } from "@/views/program-forms"
+import { ACTIONS, ActionForm, BranchForm, cleaned, PopupFields, type Picks, NAMES, parseValue, StateForm, Tinted, valueText, type Save } from "@/views/program-forms"
 import { Expr } from "@/views/code"
 import { Editable, Pick, Staging, typing } from "@/views/in-place"
 import { Discard } from "@/components/discard"
 import { Truth } from "@/views/value-parts"
-import { GraphView } from "@/views/program-graph"
+import { forgetGraph, GraphView } from "@/views/program-graph"
 import { action } from "@/views/program-inspect"
-import { IconPicker } from "@/views/icon-picker"
+import { NewProgram, ProgramDialog, TagChip } from "@/views/program-new"
 import { useDrag } from "@/views/tasks"
-import { AREAS, doing, friendly, humane, type Area } from "@/lib/friendly"
-import { Apply, Block, CHANGED, FLASH, GO, Line, Mistake, Path, Running, revert, useSpecs, bus } from "@/views/scope-shared"
+import { friendly, humane, light } from "@/lib/friendly"
+import { Apply, Block, CHANGED, FLASH, GO, Line, Path, Running, revert, useSpecs, bus } from "@/views/scope-shared"
 import { Corner } from "@/views/resources"
 
 const depth = (p: Path) => (p.program === null ? 0 : p.state === null ? 1 : 2)
@@ -114,7 +114,7 @@ export function ProgramsView({ open = null, onWhere }: { open?: string | null; o
         <ChevronRight aria-hidden className="size-4 text-muted-foreground" />
         <Crumb code>{title(path.program)}</Crumb>
       </nav>}
-      {error && <div className="px-8 pb-2"><Mistake text={error} /></div>}
+      {error && <ErrorDialog message={error} onClose={() => setError("")} />}
       <AlertDialog open={!!pending} onOpenChange={(open) => !open && setPending(null)}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
@@ -202,7 +202,8 @@ function Over({ state, before, onBack, onClose, children }: { state: string; bef
 function GlobalScope({ reference, onGo, onLoad }: { reference: Reference; onGo: (p: Path) => void; onLoad: () => void }) {
   const { specs, error, setError, change, act } = useSpecs<GlobalSpecs>(null, true, onLoad)
   const [creating, setCreating] = useState(false)
-  const [area, setArea] = useState<Area | "all">("all")
+  const [tag, setTag]   = useState<string | null>(null)  // the tag picked: the automations that have it
+  const [find, setFind] = useState("")
 
   const switchOn = async (name: string, on: boolean) => {
     const answer = await window.proki.tool("switch_program", { name, on })
@@ -210,88 +211,90 @@ function GlobalScope({ reference, onGo, onLoad }: { reference: Reference; onGo: 
     onLoad()
   }
   const create: Save = async (data) => {
+    forgetGraph(String(data.name))  // a name used before starts fitted
     const mistake = await change([{ op: "add", kind: "program", data }])
     if (!mistake) onGo({ program: String(data.name), state: null })
     return mistake
   }
 
-  const made  = reference.programs.map((p) => ({ program: p, ...friendly(p) }))
-  const on    = reference.programs.filter((p) => p.on).length
-  const busy  = reference.programs.filter((p) => doing(p).busy).length
-  const areas = AREAS.filter((a) => made.some((m) => m.area === a.id))
+  const uses  = new Map<string, number>()
+  reference.programs.forEach((p) => p.tags.forEach((t) => uses.set(t, (uses.get(t) ?? 0) + 1)))
+  const known = [...uses].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).map(([t]) => t)  // the most used first
+  const tags  = [...new Set([...known.slice(0, 20), ...(tag ? [tag] : [])])]
+  const shown = reference.programs
+    .map((p) => ({ program: p, title: friendly(p).title }))
+    .filter(({ program: p, title }) => (!tag || p.tags.includes(tag)) && [title, p.name, p.desc, ...p.tags].join(" ").toLowerCase().includes(find.trim().toLowerCase()))
+    .sort((x, y) => x.title.localeCompare(y.title))
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <PageHeader title="Automations" sub={<>
-          Little helpers that work on their own while you do.{" "}
-          <span className="text-foreground"><span className="font-medium tabular-nums">{on} of {reference.programs.length}</span> on</span>
-          {busy > 0 && <>, <span className="tabular-nums">{busy}</span> working right now</>}.
-        </>}>
+      <PageHeader title="Automations" sub="Little helpers that work on their own.">
         {specs?.default && specs.changed && (
           <Confirm title="Reset the global settings?" description="Your changes to them go back to how they came." action="Reset"
                    onConfirm={async () => { setError((await revert(null)) ?? ""); act([]) }}>
-            <Button size="sm" variant="outline"><RotateCcw data-icon="inline-start" /> Reset global</Button>
+            <Button size="sm" variant="outline" title="Reset the global settings"><RotateCcw data-icon="inline-start" /> Reset</Button>
           </Confirm>
         )}
-        <Button size="sm" onClick={() => setCreating(true)} disabled={creating}><Plus data-icon="inline-start" /> New automation</Button>
+        <Button size="sm" title="New automation" onClick={() => setCreating(true)} disabled={creating}><Plus data-icon="inline-start" /> New</Button>
+        <SearchBox value={find} onChange={setFind} label="Search the automations" />
       </PageHeader>
-      {error && <Mistake text={error} />}
-      {creating && <ProgramForm saveLabel="Create" onSave={create} onCancel={() => setCreating(false)} />}
+      {error && <ErrorDialog message={error} onClose={() => setError("")} />}
+      {creating && <NewProgram known={known} onCreate={create} onClose={() => setCreating(false)} />}
 
-      <ToggleGroup type="single" variant="outline" size="sm" value={area} onValueChange={(v) => setArea((v || "all") as Area | "all")}
-                   aria-label="Show automations for" className="flex-wrap">
-        <ToggleGroupItem value="all">All</ToggleGroupItem>
-        {areas.map((a) => <ToggleGroupItem key={a.id} value={a.id}>{a.title}</ToggleGroupItem>)}
-      </ToggleGroup>
+      <div className="flex flex-wrap gap-1.5" aria-label="Show the automations with a tag">
+        {tags.map((t) => <TagChip key={t} tag={t} on={t === tag} onClick={() => setTag(t === tag ? null : t)} />)}
+      </div>
 
-      {areas.filter((a) => area === "all" || a.id === area).map((a) => (
-        <section key={a.id} aria-labelledby={`area-${a.id}`} className="flex flex-col gap-3">
-          <div>
-            <h2 id={`area-${a.id}`} className="text-base font-semibold">{a.title}</h2>
-            <p className="text-xs text-muted-foreground">{a.about}</p>
-          </div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3">  {/* each card 270–360px wide: its least ¾ of its most */}
-            {made.filter((m) => m.area === a.id).map(({ program }) => (
-              <ProgramCard key={program.name} program={program} onOpen={() => onGo({ program: program.name, state: null })}
-                           onSwitch={(to) => switchOn(program.name, to)} />
-            ))}
-          </div>
-        </section>
-      ))}
+      {shown.length === 0 && <p className="text-sm text-muted-foreground">No automation matches.</p>}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3">  {/* each card 270–360px wide: its least ¾ of its most */}
+        {shown.map(({ program }) => (
+          <ProgramCard key={program.name} program={program} tag={tag} onOpen={() => onGo({ program: program.name, state: null })}
+                       onSwitch={(to) => switchOn(program.name, to)} onTag={(t) => setTag(t === tag ? null : t)} />
+        ))}
+      </div>
     </div>
   )
 }
 
-/** A program as a card: its icon, title and what it does; a switch; what it's doing now, and
- * how many states it has. Click it to go in. */
-function ProgramCard({ program, onOpen, onSwitch }: { program: Running; onOpen: () => void; onSwitch: (on: boolean) => void }) {
+/** The state a program is in, its name only, behind a ball that shows how it is (see `light`): "Paused" while it's off. */
+function StateLight({ program, className }: { program: { on: boolean; state: string }; className?: string }) {
+  const lit = light(program)
+  return (
+    <span className={cn("flex min-w-0 items-center gap-2 text-xs", className)}>
+      <span aria-hidden className={cn("ball", `ball-${lit}`)}><span className="ball-core" /></span>
+      <span className={cn("translate-y-px truncate font-mono", lit === "off" ? "text-muted-foreground" : "text-foreground")}>{lit === "off" ? "Paused" : humane(program.state)}</span>
+    </span>
+  )
+}
+
+/** A program as a card: its icon, title and what it does; a switch; its tags (clicked, they pick that tag); and in the foot the state it's in,
+ * lit yellow while idle, green while working, grey while off, and how many states it has. Click it to go in. */
+function ProgramCard({ program, tag, onOpen, onSwitch, onTag }: { program: Running; tag: string | null; onOpen: () => void; onSwitch: (on: boolean) => void; onTag: (tag: string) => void }) {
   const { title, icon: Icon, about } = friendly(program)
-  const now = doing(program)
   return (
     <Card size="sm" className="relative w-full max-w-[360px] cursor-pointer transition-shadow hover:ring-foreground/20 has-[[data-opens]:focus-visible]:ring-2 has-[[data-opens]:focus-visible]:ring-ring">
-      <CardHeader>
-        <div className="flex items-start gap-3">
-          <span className={cn("grid size-9 shrink-0 place-items-center rounded-lg", program.on ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground")}>
-            <Icon aria-hidden className="size-[18px]" />
-          </span>
-          <div className="min-w-0">
-            <CardTitle className="flex items-center gap-1.5">
-              <button data-opens onClick={onOpen} aria-label={`${title}: see how it works`}
-                      className="text-left font-mono outline-none after:absolute after:inset-0 after:rounded-xl after:content-['']">{title}</button>
-              {program.kind === "code" && <Code className="size-3.5 shrink-0 text-muted-foreground" aria-label="built in, read only" />}
-            </CardTitle>
-            <CardDescription className="mt-0.5 line-clamp-2 min-h-[2lh]">{about}</CardDescription>
-          </div>
-        </div>
-        <CardAction>
-          <Switch checked={program.on} onCheckedChange={onSwitch} aria-label={`${title} on`} className="relative z-10" />
-        </CardAction>
-      </CardHeader>
-      <CardFooter className="mt-auto justify-between gap-2 border-t pt-3 text-xs">
-        <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-          <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", now.busy ? "bg-brand motion-safe:animate-pulse" : program.on ? "bg-foreground/35" : "bg-muted-foreground/40")} />
-          <span className={cn("truncate", now.busy && "font-medium text-foreground")}>{now.text}</span>
+      <div className="flex items-start gap-3 px-(--card-spacing)">
+        <span className={cn("grid size-14 shrink-0 place-items-center rounded-2xl", program.on ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground")}>
+          <Icon aria-hidden className="size-6" />
         </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <button data-opens onClick={onOpen} aria-label={`${title}: see how it works`}
+                    className="flex min-w-0 items-center gap-1.5 text-left font-mono text-sm leading-snug font-medium outline-none after:absolute after:inset-0 after:rounded-xl after:content-['']">
+              <span className="truncate">{title}</span>
+              {program.kind === "code" && <Code className="size-3.5 shrink-0 text-muted-foreground" aria-label="built in, read only" />}
+            </button>
+            <Switch checked={program.on} onCheckedChange={onSwitch} aria-label={`${title} on`} className="relative z-10 shrink-0" />
+          </div>
+          <p className="mt-1.5 line-clamp-2 min-h-[2lh] text-sm text-muted-foreground">{about}</p>
+        </div>
+      </div>
+      <div className="relative z-10 flex min-h-5 flex-wrap items-center gap-1.5 px-(--card-spacing)">
+        {program.tags.slice(0, 3).map((t) => <TagChip key={t} tag={t} on={t === tag} onClick={() => onTag(t)} />)}
+        {program.tags.length > 3 && <span title={program.tags.slice(3).map((t) => `#${t}`).join(" ")} className="text-xs text-muted-foreground">…</span>}
+      </div>
+      <CardFooter className="mt-auto justify-between gap-2 border-t pt-3 text-xs">
+        <StateLight program={program} />
         <span className="shrink-0 text-muted-foreground tabular-nums">{program.states.length} {program.states.length === 1 ? "state" : "states"}</span>
       </CardFooter>
     </Card>
@@ -335,7 +338,7 @@ function ProgramScope({ name, state, before, reference, onGo, onBack, onLoad }: 
 
   return (
     <Layout
-      main={<>{error && <Mistake text={error} />}<ProgramMain {...props} /></>}
+      main={<>{error && <ErrorDialog message={error} onClose={() => setError("")} />}<ProgramMain {...props} /></>}
       back={<GraphView key={detail.name} detail={detail} picked={state} onInspect={(next) => next && onGo({ program: name, state: next.state })}
                        onPane={() => onGo({ program: name, state: null })} />}
       over={state !== null && (
@@ -369,41 +372,32 @@ function ProgramMain({ name, specs, detail, reference, change, act, setError, on
     if (answer.error) setError(answer.error)
     after()
   }
-  const saveProgram: Save = async (data) => {
-    const mistake = await change([{ op: "update", kind: "program", data: { name, changes: data } }])
-    if (!mistake) {
-      setEditing(false)
-      if (data.name !== name) onGo({ program: String(data.name), state: null })
-    }
+  const saveProgram = async (changes: Record<string, unknown>) => {
+    const mistake = await change([{ op: "update", kind: "program", data: { name, changes } }])
+    if (!mistake && typeof changes.name === "string" && changes.name !== name) onGo({ program: changes.name, state: null })
     return mistake
   }
 
   return (
     <>
-      {editing && specs ? (
-        <ProgramForm spec={specs.program} states={specs.states.map((s) => s.name)} onSave={saveProgram} onCancel={() => setEditing(false)} />
-      ) : (
-        <div className="flex items-start gap-3 rounded-xl border bg-card p-4 shadow-xs">
-          <IconPicker value={detail.icon ?? ""} disabled={!specs} label="Change its icon"
-                      onPick={(icon) => act([{ op: "update", kind: "program", data: { name, changes: { icon } } }])}>
-            <button className={cn("grid size-10 shrink-0 place-items-center rounded-lg", detail.on ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground",
-                                  specs && "hover:ring-2 hover:ring-primary/30")}>
-              <Icon aria-hidden className="size-5" />
-            </button>
-          </IconPicker>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm">{detail.desc || <span className="text-muted-foreground">No description.</span>}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {detail.on ? <>Now: <span className="font-mono text-foreground">{humane(detail.state)}</span></> : "Off"}
-              {" · "}starts at <span className="font-mono">{humane(detail.initial)}</span>
-              {detail.tags.length > 0 && <> · {detail.tags.map((t) => `#${t}`).join(" ")}</>}
-              {!specs && <> · <Code className="inline size-3 align-[-2px]" /> in code, read only</>}
-            </p>
-          </div>
+      <div role={specs ? "button" : undefined} onClick={() => specs && setEditing(true)} title={specs ? "Its name, icon, description and tags" : undefined}
+           className={cn("flex items-stretch gap-4 rounded-xl border bg-card p-4 shadow-xs", specs && "cursor-pointer hover:ring-1 hover:ring-foreground/20")}>
+        <span className={cn("grid size-14 shrink-0 self-center place-items-center rounded-2xl", detail.on ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground")}>
+          <Icon aria-hidden className="size-6" />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+          <p className="line-clamp-2 text-sm">{detail.desc || <span className="text-muted-foreground">No description.</span>}</p>
+          {(detail.tags.length > 0 || !specs) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {detail.tags.map((t) => <TagChip key={t} tag={t} />)}
+              {!specs && <Code className="size-3.5 shrink-0 text-muted-foreground" aria-label="in code, read only"><title>In code, read only</title></Code>}
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-col items-end justify-between" onClick={(e) => e.stopPropagation()}>  {/* the switch as far up as the icons are down: the room above one is the room below the others */}
           <Switch checked={detail.on} onCheckedChange={switchOn} aria-label={`${title} on`} />
           {specs && (
-            <>
-              <Button size="icon-sm" variant="ghost" aria-label={`Edit ${title}`} title="Edit" onClick={() => setEditing(true)}><Pencil /></Button>
+            <div className="-mr-1.5 -mb-1.5 flex items-center">
               {specs.default && specs.changed && (
                 <Confirm title={`Reset “${title}”?`} description="Your changes to it go back to how it came." action="Reset"
                          onConfirm={async () => { setError((await revert(name)) ?? ""); act([]) }}>
@@ -418,9 +412,13 @@ function ProgramMain({ name, specs, detail, reference, change, act, setError, on
                        }}>
                 <Button size="icon-sm" variant="ghost" aria-label={`Delete ${title}`} title="Delete"><Trash2 /></Button>
               </Confirm>
-            </>
+            </div>
           )}
         </div>
+      </div>
+      {editing && specs && (
+        <ProgramDialog spec={{ name, title: specs.program.title ?? "", desc: specs.program.desc, icon: specs.program.icon ?? "", tags: specs.program.tags }}
+                       known={[...new Set(reference.programs.flatMap((p) => p.tags))]} onSave={saveProgram} onClose={() => setEditing(false)} />
       )}
     </>
   )
@@ -631,7 +629,7 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
           ))}
         </SortableContext>
       </DndContext>
-      {refused && <Mistake text={`Not moved: ${refused.why}`} />}
+      {refused && <ErrorDialog message={`Not moved: ${refused.why}`} onClose={() => setRefused(null)} />}
       {seen && viewing !== null && items[viewing] && seen(items[viewing], {
         update: (changes) => change([{ op: "update", kind, data: { ...at, at: viewing, changes } }]),
         remove: () => (act([{ op: "remove", kind, data: { ...at, at: viewing } }]), setViewing(null)),

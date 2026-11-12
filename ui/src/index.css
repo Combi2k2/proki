@@ -190,6 +190,51 @@ html { scrollbar-color: var(--border) transparent; caret-color: var(--brand); }
   animation: round 1.2s linear infinite;
 }
 
+/* The ball that lights a program's state, each light moving in its own way: working bounces (squashed as it lands, stretched as it
+   leaves), idle sends out an aura that fades with distance, an error shakes unevenly, off doesn't move at all. */
+.ball { position: relative; display: inline-grid; width: 0.625rem; height: 0.625rem; flex-shrink: 0; place-items: center; }
+.ball-core { width: 100%; height: 100%; border-radius: 9999px; background: currentColor; transform-origin: 50% 100%; }
+.ball-off    { color: color-mix(in oklab, var(--muted-foreground) 40%, transparent); }
+.ball-idle   { color: var(--shallow); }
+.ball-active { color: var(--focused); }
+.ball-error  { color: var(--removed); }
+.ball-active .ball-core { animation: ball-bounce 0.9s infinite; }
+.ball-error  .ball-core { animation: ball-shake 1.9s linear infinite; }
+.ball-idle::before, .ball-idle::after {
+  content: ""; position: absolute; inset: -2px; border-radius: 9999px; opacity: 0;
+  background: radial-gradient(circle, currentColor 0%, transparent 70%);
+  animation: ball-aura 2.4s ease-out infinite;
+}
+.ball-idle::after { animation-delay: 1.2s; }
+@keyframes ball-bounce {
+  0%   { transform: translateY(0) scale(1.35, 0.65); animation-timing-function: ease-out; }  /* lands: flattened */
+  12%  { transform: translateY(-1px) scale(0.82, 1.25); animation-timing-function: ease-out; }  /* leaves: stretched */
+  50%  { transform: translateY(-7px) scale(1, 1); animation-timing-function: ease-in; }  /* the top */
+  88%  { transform: translateY(-1px) scale(0.88, 1.15); animation-timing-function: ease-in; }
+  100% { transform: translateY(0) scale(1.35, 0.65); }
+}
+@keyframes ball-aura { from { transform: scale(0.6); opacity: 0.85; } to { transform: scale(3.4); opacity: 0; } }
+@keyframes ball-shake {  /* uneven: quick turns, a rest now and then, a squeeze or a stretch at times */
+  0%   { transform: translate(0, 0); }
+  6%   { transform: translate(-2px, 1px) rotate(-10deg); }
+  11%  { transform: translate(2.5px, -1px) rotate(8deg); }
+  17%  { transform: translate(-1px, -2px) scale(1.3, 0.75); }
+  22%  { transform: translate(3px, 1px); }
+  28%  { transform: translate(-3px, 0) rotate(-6deg); }
+  33%  { transform: translate(1px, 2px); }
+  37%  { transform: translate(0, 0) scale(0.75, 1.3); }
+  43%  { transform: translate(-2px, -1px) rotate(12deg); }
+  47%  { transform: translate(2px, 0); }
+  52%  { transform: translate(0, 0); }
+  66%  { transform: translate(0, 0); }
+  70%  { transform: translate(-3px, 1px) rotate(-8deg); }
+  74%  { transform: translate(3px, -2px); }
+  78%  { transform: translate(-1px, 2px) scale(1.25, 0.8); }
+  83%  { transform: translate(2px, 1px) rotate(6deg); }
+  88%  { transform: translate(-2px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+
 @keyframes dots { from { width: 0; } to { width: 3ch; } }
 .animate-dots { display: inline-block; overflow: hidden; vertical-align: bottom; width: 3ch; animation: dots 1.6s steps(4, jump-none) infinite; }
 @keyframes flash {  /* a playground variable an action just changed */
@@ -199,6 +244,7 @@ html { scrollbar-color: var(--border) transparent; caret-color: var(--brand); }
 @media (prefers-reduced-motion: reduce) {
   [data-slot="button"]:active, [data-slot="toggle-group-item"]:active, [data-slot="toggle"]:active { scale: none !important; }
   .animate-flow, .animate-hourglass, .animate-breathe, .animate-dots { animation: none; }
+  .ball-core, .ball::before, .ball::after { animation: none !important; }
   .animate-round { animation: none; background: var(--brand); opacity: 0.5; }
 }
 

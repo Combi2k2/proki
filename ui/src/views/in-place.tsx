@@ -110,6 +110,11 @@ export type Staged = {
   put: (key: string, value: unknown, was: unknown) => void  // a value back to `was` is no change
   lit: (key: string) => boolean                             // changed, not kept yet
   field: (key: string, was: string, on?: boolean) => { value: string; changed?: boolean; onSave?: (text: string) => Promise<null> }  // an Editable's props
+  dirty: boolean            // something's changed, not kept yet
+  error: string             // what the last Save was refused with
+  save: () => Promise<void>  // keep what's changed
+  cancel: () => void         // drop it (the same as the bar's Cancel)
+  dismiss: () => void        // the refusal read
 }
 const Stage = createContext<Staged | null>(null)
 export const useStaged = () => useContext(Stage)
@@ -137,14 +142,16 @@ export function Staging({ onSave, reserve = true, onCancel, children }: {
     setError(mistake ?? "")
     if (!mistake) setPatch({})
   }
-  const staged: Staged = {
-    patch, put, lit: (key) => key in patch,
-    field: (key, was, on = true) => !on ? { value: was } : {
+  const staged = {
+    patch, put, lit: (key: string) => key in patch,
+    field: (key: string, was: string, on = true) => !on ? { value: was } : {
       value: (patch[key] as string | undefined) ?? was, changed: key in patch,
-      onSave: async (text) => (put(key, text, was), null),
+      onSave: async (text: string) => (put(key, text, was), null),
     },
-  }
+  } as Staged
   const dirty = Object.keys(patch).length > 0
+  const cancel = () => (onCancel ? onCancel() : (setPatch({}), setError("")))
+  Object.assign(staged, { dirty, error, save: keep, cancel, dismiss: () => setError("") })
   return (
     <Stage.Provider value={staged}>
       {typeof children === "function" ? children(staged) : children}
@@ -152,7 +159,7 @@ export function Staging({ onSave, reserve = true, onCancel, children }: {
         <div className="sticky -bottom-4 z-10 -mx-4 -mb-4 flex flex-col gap-1.5 bg-popover px-4 pt-2 pb-4">
           {error && <span className="text-xs break-words text-destructive">{error}</span>}
           <div className="flex justify-end gap-2">
-            <Button type="button" size="sm" variant="ghost" onClick={() => (onCancel ? onCancel() : (setPatch({}), setError("")))}>Cancel</Button>
+            <Button type="button" size="sm" variant="ghost" onClick={cancel}>Cancel</Button>
             <Button type="button" size="sm" onClick={keep}>Save</Button>
           </div>
         </div>

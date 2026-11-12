@@ -10,6 +10,7 @@ The routines behind every prompt: read them, switch them off, and change them.
 - Each automation (a program) is a state machine. A state's actions run as it's entered:
   set a variable, ask you, Jev or the LLM, poke, lock, open a page. Its ways out read signals,
   variables and rules.
+- The list is every automation, one card each, found by its tags (the most used on top, each card's tags clickable) or a search; it has no groups of its own.
 - Scopes: Global, then a program, then a state. The Resources bubble lists what the scope can
   use (inputs, signals, variables, rules), the same global ones from anywhere.
 - Each one opens a dialog, changed where it's read: its type, its value, its fields, what writes

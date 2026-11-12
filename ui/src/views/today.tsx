@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, 
 import { ArrowRight, Check, Clock, Flame, Lightbulb, ListTodo, MessageCircle, Play, Square } from "lucide-react"
 import { useDefaultLayout } from "react-resizable-panels"
 import { PageHeader } from "@/components/page"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ErrorDialog } from "@/components/error-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -104,7 +104,7 @@ export function TodayView({ onGo }: { onGo: Go }) {
           ? <Button variant="outline" onClick={() => session("stop")}><Square data-icon="inline-start" /> End focus session</Button>
           : <Button onClick={() => session("start")} disabled={!today}><Play data-icon="inline-start" /> Start a focus session</Button>}
       </PageHeader>
-      {error && <Alert variant="destructive" className="shrink-0"><AlertDescription>Proki isn't answering right now: {error}</AlertDescription></Alert>}
+      {error && <ErrorDialog stuck message={error} />}
 
       {narrow ? (  // too narrow for the panels side by side: one under the other, scrolled
         <div className="-mx-8 grid min-h-0 flex-1 auto-rows-min grid-cols-[minmax(0,1fr)_minmax(0,11rem)] gap-3 overflow-y-auto px-8 pb-2 max-[560px]:grid-cols-1">

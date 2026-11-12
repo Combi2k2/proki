@@ -16,7 +16,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider,
-  getBezierPath, getSmoothStepPath, getStraightPath, useInternalNode, useNodesState, useReactFlow,
+  getBezierPath, getSmoothStepPath, getStraightPath, useInternalNode, useNodesInitialized, useNodesState, useReactFlow,
   type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps, type Viewport,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
@@ -33,7 +33,7 @@ import { isElse, minutes, summary, type Inspected } from "@/views/program-inspec
 
 const H = 64  // a box's height
 const GAP = 6  // between a box's edge and the arrow bound to it
-const FIT = { padding: { top: "104px", right: "48px", bottom: "64px", left: "48px" } as const, maxZoom: 1.1 }  // room for the card over its top
+const FIT = { padding: { top: "112px", right: "48px", bottom: "64px", left: "48px" } as const, maxZoom: 1.1 }  // room for the card over its top
 const STYLES = ["curved", "elbow", "straight", "springs"] as const  // springs: laid out live, its arrows arcs
 type Style = (typeof STYLES)[number]
 type XY = { x: number; y: number }
@@ -91,6 +91,11 @@ function keep(key: string, value: unknown) {
   try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* no storage here */ }
 }
 
+/** A program's boxes and view, forgotten: one made new under a name used before starts fitted, not where an old one was left. */
+export function forgetGraph(name: string) {
+  for (const part of ["places", "view", "fixed"]) try { localStorage.removeItem(`graph.${name}.${part}`) } catch { /* no storage here */ }
+}
+
 type GraphProps = { detail: ProgramDetail; picked?: string | null; onInspect: (next: Inspected) => void; onPane?: () => void }
 
 export function GraphView(props: GraphProps) {
@@ -110,6 +115,8 @@ function Graph({ detail, picked, onInspect, onPane }: GraphProps) {
   const click = useRef(0)       // in springs, a click waits 150ms for a second one: a double-click fixes the box
   const box   = useRef<HTMLDivElement>(null)
   const refit = () => !moved.current && flow.fitView({ ...FIT, duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 300 })
+  const ready = useNodesInitialized()
+  useEffect(() => void (ready && refit()), [ready, shape])  // eslint-disable-line react-hooks/exhaustive-deps -- fitted once the boxes are measured, and as the states change
   const [fixed, setFixed] = useState<string[]>(() => kept(fixedKey) ?? [])  // in springs, the boxes you fixed where they are
   const live = style === "springs"
   const now = detail.on ? detail.state : null

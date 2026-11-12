@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { ChevronRight, CircleGauge, Eye, EyeOff, Pencil, Trash2 } from "lucide-react"
 import { Confirm } from "@/components/confirm"
+import { ErrorDialog } from "@/components/error-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
@@ -20,7 +21,7 @@ import { Collection, emptyOf, Inspect } from "@/views/inspect"
 import { same } from "@/views/value-draft"
 import { collection, Flag, Opens, Scalar, Truth } from "@/views/value-parts"
 import { goToPlace, Places } from "@/views/places"
-import { AddButton, Detail, Apply, CHANGED, Kind, LINE, Mistake, RESOURCE, Running, Spec, goTo, takeover, useSpecs } from "@/views/scope-shared"
+import { AddButton, Detail, Apply, CHANGED, Kind, LINE, RESOURCE, Running, Spec, goTo, takeover, useSpecs } from "@/views/scope-shared"
 
 /** What the scope you're in can use, read on its own: kept up as it changes, and as the editor
  * changes it. A program in code has none of its own. It fills the height it's given, the switch
@@ -38,12 +39,12 @@ export function Resources({ where }: { where: Where }) {
     return () => (clearInterval(live), window.removeEventListener(CHANGED, load))
   }, [load])
   const code = reference?.programs.find((p) => p.name === where.program)?.kind === "code"
-  const { specs, error, change, act } = useSpecs<GlobalSpecs | ProgramSpecs>(where.program, reference !== null && !code)
+  const { specs, error, setError, change, act } = useSpecs<GlobalSpecs | ProgramSpecs>(where.program, reference !== null && !code)
   if (!reference || (!specs && !code)) return <p className="p-3 text-xs text-muted-foreground">{error || "Loading…"}</p>
   const own = { variables: specs?.variables ?? [], signals: specs?.signals ?? [], rules: specs?.rules ?? [] }
   return (
     <div className="flex min-h-full flex-col gap-2 px-3 pt-3">
-      {error && <Mistake text={error} />}
+      {error && <ErrorDialog message={error} onClose={() => setError("")} />}
       <Kept key={`${where.scope}/${where.program}/${where.state}`} own={own} where={where} reference={reference} change={change} act={act} />
     </div>
   )
@@ -834,12 +835,12 @@ function Defining({ kind, where, onSave, onClose }: { kind: Kind; where: Where; 
 /** The inputs: what's measured, the same everywhere. One that's on can be read by name; its
  * history (minutes) is kept as a table, for what reads its past. */
 function Inputs({ inputs, veiled, veil }: { inputs: Reference["inputs"]; veiled: (name: string) => boolean; veil: (name: string) => void }) {
-  const { specs, error, change } = useSpecs<GlobalSpecs>(null)
+  const { specs, error, setError, change } = useSpecs<GlobalSpecs>(null)
   const used = Object.fromEntries((specs?.inputs ?? []).map((i) => [i.name, i]))
   if (!specs) return <p className="px-1 text-xs text-muted-foreground">{error || "Loading…"}</p>
   return (
     <div className="flex flex-col">
-      {error && <Mistake text={error} />}
+      {error && <ErrorDialog message={error} onClose={() => setError("")} />}
       {inputs.map((input) => (
         <InputLine key={input.name} {...input} spec={used[input.name]} veiled={veiled(input.name)} onVeil={() => veil(input.name)}
                    onBackfill={(backfill) => change([used[input.name] ? { op: "update", kind: "input", data: { name: input.name, changes: { backfill } } }
