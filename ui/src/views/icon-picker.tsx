@@ -7,12 +7,21 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 
-const SUITED: IconName[] = [
+const SUITED = [  // the names a helper is drawn with, grouped by what they're about; any that the icon set doesn't have are left out
   "timer", "hourglass", "alarm-clock", "calendar-clock", "clock", "sunrise", "sun", "sunset", "moon-star", "bed-double", "coffee", "cup-soda",
   "brain", "waves", "target", "zap", "flame", "leaf", "heart-pulse", "dumbbell", "person-standing", "footprints", "eye", "music",
   "list-checks", "list-todo", "compass", "bell", "bot", "sparkles", "lightbulb", "notebook-pen", "pencil", "book-open", "tag", "folder",
   "mail", "message-circle", "phone", "users", "house", "briefcase", "chart-line", "trophy", "gift", "shield", "wand", "rocket",
-]
+  "activity", "alarm-clock-check", "anchor", "apple", "archive", "armchair", "atom", "award", "baby", "backpack", "banknote", "battery-charging", "beaker", "bike",
+  "binoculars", "bird", "bookmark", "book-marked", "box", "brush", "bug", "building", "bus", "cake", "calculator", "calendar", "calendar-check", "calendar-days", "camera",
+  "car", "carrot", "cat", "circle-check", "cloud", "cloud-rain", "code", "cog", "cookie", "cpu", "croissant", "crown", "database", "dog", "droplet", "egg", "factory",
+  "feather", "file-text", "film", "fish", "flag", "flask-conical", "flower", "folder-open", "gamepad-2", "gauge", "gem", "globe", "graduation-cap", "hammer", "hand-heart",
+  "headphones", "heart", "image", "inbox", "key", "lamp", "languages", "laptop", "layers", "library", "life-buoy", "lock", "map", "map-pin", "medal", "megaphone",
+  "microscope", "monitor", "mountain", "mouse-pointer", "newspaper", "orbit", "package", "palette", "paperclip", "party-popper", "pen-tool", "pill", "pizza", "plane",
+  "plug", "puzzle", "radio", "receipt", "repeat", "scale", "scissors", "search", "send", "settings", "shopping-cart", "shower-head", "smile", "snowflake", "sprout",
+  "star", "stethoscope", "store", "sun-moon", "tent", "thermometer", "thumbs-up", "ticket", "train-front", "trash-2", "tree-pine", "trending-up", "truck", "tv",
+  "umbrella", "utensils", "video", "wallet", "watch", "wifi", "wind", "wine", "wrench",
+].filter((n) => (iconNames as string[]).includes(n)) as IconName[]
 const SHOWN = 60  // found, at most
 
 export function IconPicker({ value, onPick, label = "Choose an icon", disabled, children }: {
@@ -43,6 +52,7 @@ export function IconPicker({ value, onPick, label = "Choose an icon", disabled, 
           ))}
         </div>
         {!found.length && <p className="px-1 pb-1 text-xs text-muted-foreground">No icon is called that.</p>}
+        {!words && <p className="px-1 pb-1 text-xs text-muted-foreground">{(iconNames as string[]).length - SUITED.length} more: find one by its name.</p>}
       </PopoverContent>
     </Popover>
   )

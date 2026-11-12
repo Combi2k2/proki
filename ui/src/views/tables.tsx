@@ -4,9 +4,7 @@
 // search keeps the rows with it anywhere. The table you looked at is kept.
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Search } from "lucide-react"
-import { PageHeader } from "@/components/page"
-import { Input } from "@/components/ui/input"
+import { PageHeader, SearchBox } from "@/components/page"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Reference, Type, VarDetail, Weighed } from "@/lib/proki"
 import { recallJson, rememberJson } from "@/lib/remember"
@@ -62,10 +60,7 @@ export function TablesView() {
             <SelectContent position="popper">{kinds.map((k) => <SelectItem key={k} value={k} className="font-mono text-xs">{k}</SelectItem>)}</SelectContent>
           </Select>
         )}>
-        <label className="relative">
-          <Search aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label={`Search ${kind || "the records"}`} className="h-8 w-56 pl-8 text-sm" />
-        </label>
+        <SearchBox value={query} onChange={setQuery} label={`Search ${kind || "the records"}`} />
       </PageHeader>
       {error && <p className="text-sm text-destructive">{error}</p>}
       {read && (
