@@ -156,24 +156,7 @@ function Text({ value, onChange, code, names, ...props }: {
   return <Input value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-8 text-sm", code && "font-mono text-xs")} spellCheck={!code} {...props} />
 }
 
-const Row = ({ children }: { children: ReactNode }) => <div className="grid grid-cols-2 gap-3">{children}</div>
-
 // --- a program, a state, a way out ----------------------------------------------------------
-
-export function StateForm({ spec, onSave, onCancel }: { spec?: StateSpec; onSave: Save; onCancel: () => void }) {
-  const [name, setName] = useState(spec?.name ?? "")
-  const [desc, setDesc] = useState(spec?.desc ?? "")
-  const [every, setEvery] = useState(String(spec?.every ?? 1))
-  return (
-    <Form onCancel={onCancel} onSave={() => onSave({ name: name.trim(), desc, every: parseSpan(every) ?? 1 })}>
-      <Row>
-        <Field label="Name"><Text value={name} onChange={setName} code autoFocus placeholder="waiting" /></Field>
-        <Field label="Check every" hint="6s, 5min, 1h; a number: minutes"><Text value={every} onChange={setEvery} placeholder="6s" /></Field>
-      </Row>
-      <Field label="Description"><Text value={desc} onChange={setDesc} placeholder="an hour of work" /></Field>
-    </Form>
-  )
-}
 
 // --- an action ------------------------------------------------------------------------------
 
@@ -209,12 +192,7 @@ export function ActionForm({ spec, at, taken, onSave, onCancel, onDirty }: {
     setParams((p) => { const next = { ...p }; if (value === undefined) delete next[key]; else next[key] = value; return next })
   const pick = (which: keyof Picks, keys: string[]) => { setPicks((p) => ({ ...p, [which]: keys })); setPicked(true) }
   const shown = kind === "poke" || kind === "ask_usr"
-  const save = async () => {
-    const mistake = await onSave({ name, desc: spec ? spec.desc : desc, kind, params: cleaned(kind, params) })  // yours, in its dialog, is changed there
-    if (mistake || !picked || !shown) return mistake
-    const answer = await window.proki.tool("set_picks", { id, keys: [...picks.image, ...picks.sound] })
-    return answer.error ? `Saved, but its pictures and sounds weren't: ${answer.error}` : null
-  }
+  const save = () => onSave({ name, desc: spec ? spec.desc : desc, kind, params: cleaned(kind, params), ...(picked && shown ? { picks } : {}) })  // yours, in its dialog, is changed there; the picks are kept with the rest
   return (
     <Form onCancel={onCancel} onSave={save} plain onDirty={onDirty}>
       {!spec && (

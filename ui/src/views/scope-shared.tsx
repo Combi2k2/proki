@@ -135,8 +135,8 @@ export function useLeave(moved: (e: DragEndEvent) => void, gone: (e: DragEndEven
 /** A line of a list, carried by its grip: what it says (click it to edit), then its pencil and its
  * bin; `named`, what it is, as its buttons say it; `refused`: shaken, as a drop that wasn't kept;
  * `lit`: flashed, as a dialog's chip comes to it. */
-export function Line({ id, named, refused, lit, plain, children, onEdit, onDelete }: {
-  id: number; named: string; refused?: boolean; lit?: boolean; plain?: boolean; children: ReactNode; onEdit: () => void; onDelete: () => void
+export function Line({ id, named, refused, lit, plain, mark, children, onEdit, onDelete }: {
+  id: number; named: string; refused?: boolean; lit?: boolean; plain?: boolean; mark?: "added" | "changed"; children: ReactNode; onEdit: () => void; onDelete: () => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: id + 1 })  // ids from 1: 0 isn't one
   const box = useRef<HTMLDivElement | null>(null)
@@ -144,7 +144,7 @@ export function Line({ id, named, refused, lit, plain, children, onEdit, onDelet
   return (
     <div ref={(el) => void (setNodeRef(el), box.current = el)} style={{ transform: CSS.Translate.toString(transform), transition }}
          className={cn("group flex items-center gap-2 rounded-lg border bg-card py-1.5 pr-3 pl-1 text-xs hover:bg-muted/50",
-                       isDragging && "opacity-40", refused && "animate-shake ring-2 ring-destructive/50",
+                       mark === "added" && "bg-added/10", mark === "changed" && "bg-changed/10", isDragging && "opacity-40", refused && "animate-shake ring-2 ring-destructive/50",
                        lit && "animate-[flash_2.4s_ease-out] ring-2 ring-brand/60")}>
       <button {...attributes} {...listeners} aria-label={`Move ${named}`} className="cursor-grab touch-none text-muted-foreground hover:text-foreground">
         <GripVertical className="size-3.5" />

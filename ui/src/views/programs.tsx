@@ -15,25 +15,25 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core"
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
-import { ArrowLeft, ArrowRight, ChevronRight, Code, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, ChevronRight, Code, Plus, RotateCcw, Trash2, X } from "lucide-react"
 import { Confirm } from "@/components/confirm"
 import { ErrorDialog } from "@/components/error-dialog"
 import { PageHeader, SearchBox } from "@/components/page"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardFooter } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { GLOBAL, type ActionSpec, type BranchSpec, type Change, type GlobalSpecs, type ProgramDetail, type ProgramSpecs, type Reference, type Scope, type Where } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { ACTIONS, ActionForm, cleaned, contextOf, PopupFields, type Picks, StateForm, Tinted, type Save } from "@/views/program-forms"
+import { ACTIONS, ActionForm, cleaned, contextOf, PopupFields, type Picks, Tinted, type Save } from "@/views/program-forms"
 import { ActionRows, ACTION_ROWS } from "@/views/action-rows"
 import { AskJev, AskLlm, START } from "@/views/ask-actions"
 import { exprText, parseExpr } from "@/lib/typed"
 import { Expr } from "@/views/code"
 import { Editable, Pick, Staging, typing, type Staged } from "@/views/in-place"
 import { Discard } from "@/components/discard"
+import { StateHead } from "@/views/state-head"
 import { TransitionForm, Way } from "@/views/transition"
 import { forgetGraph, GraphView } from "@/views/program-graph"
 import { action } from "@/views/program-inspect"
@@ -162,7 +162,7 @@ function Layout({ main, back, over }: { main: ReactNode; back?: ReactNode; over?
  * Escape or a click around it. The window behind is out of reach while it's open; the bubbles in
  * the corner aren't, and a bubble's panel open beside it moves it aside. Your focus goes to it as it
  * opens, and back as it closes. */
-function Over({ state, before, onBack, onClose, children }: { state: string; before?: string; onBack: () => void; onClose: () => void; children: ReactNode }) {
+function Over({ state, title, before, end, onBack, onClose, children }: { state: string; title?: string; before?: string; end?: ReactNode; onBack: () => void; onClose: () => void; children: ReactNode }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const last    = useRef(state)
   const closing = useRef(onClose)
@@ -188,11 +188,12 @@ function Over({ state, before, onBack, onClose, children }: { state: string; bef
     <div onClick={(e) => e.target === e.currentTarget && onClose()}
          className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-6 supports-backdrop-filter:backdrop-blur-[2px] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-150 min-[1100px]:[[data-bubble]_&]:pr-[25rem]">
       <section data-panel role="dialog" aria-modal="true" aria-labelledby="state-heading"
-               className="flex max-h-[min(88vh,52rem)] w-full max-w-2xl flex-col rounded-2xl border bg-background shadow-2xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-[0.98] motion-safe:duration-200">
+               className="flex max-h-[min(88vh,52rem)] w-full max-w-2xl flex-col rounded-2xl border bg-popover shadow-2xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-[0.98] motion-safe:duration-200">
         <header className="flex items-center gap-1 border-b py-2 pr-2 pl-4">
-          {before && <Button size="sm" variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={onBack} title={`Back to ${humane(before)}`}><ArrowLeft /> <span className="font-mono">{humane(before)}</span></Button>}
+          {before && <Button size="sm" variant="ghost" className="-ml-2.5 text-muted-foreground" onClick={onBack} title={`Back to ${humane(before)}`}><ArrowLeft /> <span className="max-w-32 truncate font-mono">{humane(before)}</span></Button>}
           {before && <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />}
-          <h2 id="state-heading" ref={heading} tabIndex={-1} title={state} className="min-w-0 flex-1 truncate font-mono text-base font-semibold outline-none">{humane(state)}</h2>
+          <h2 id="state-heading" ref={heading} tabIndex={-1} title={state} className="min-w-0 flex-1 truncate font-mono text-base font-semibold outline-none">{title ?? humane(state)}</h2>
+          {end}
           <Button size="icon-sm" variant="ghost" aria-label="Close the state" title="Close (Esc)" onClick={onClose}><X /></Button>
         </header>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain p-4">{children}</div>
@@ -319,6 +320,7 @@ function ProgramScope({ name, state, before, reference, onGo, onBack, onLoad }: 
   const config = running?.kind !== "code"
   const { specs, error, setError, change, act } = useSpecs<ProgramSpecs>(name, config, onLoad)
   const [detail, setDetail] = useState<ProgramDetail | null>(null)
+  const [typed, setTyped]   = useState<string | null>(null)  // the name being typed for the state open, for its title
 
   const held = useRef<ProgramDetail | null>(null)
   const loadDetail = useCallback(async () => {
@@ -345,8 +347,18 @@ function ProgramScope({ name, state, before, reference, onGo, onBack, onLoad }: 
       back={<GraphView key={detail.name} detail={detail} picked={state} onInspect={(next) => next && onGo({ program: name, state: next.state })}
                        onPane={() => onGo({ program: name, state: null })} />}
       over={state !== null && (
-        <Over state={state} before={before} onBack={onBack} onClose={() => onGo({ program: name, state: null })}>
-          <StateMain key={state} {...props} state={state} />
+        <Over state={state} title={typed ? humane(typed) : undefined} before={before} onBack={onBack} onClose={() => onGo({ program: name, state: null })}
+              end={specs && (
+                <Confirm title={`Delete the state “${humane(state)}”?`} description="It, its actions and its transitions are deleted. This can't be undone." action="Delete state"
+                         onConfirm={async () => {
+                           const mistake = await change([{ op: "remove", kind: "state", data: { program: name, name: state } }])
+                           if (mistake) setError(mistake)
+                           else onGo({ program: name, state: null })
+                         }}>
+                  <Button size="icon-sm" variant="ghost" aria-label={`Delete the state ${humane(state)}`} title="Delete"><Trash2 /></Button>
+                </Confirm>
+              )}>
+          <StateMain key={state} {...props} state={state} onTitle={setTyped} />
         </Over>
       )}
     />
@@ -427,151 +439,158 @@ function ProgramMain({ name, specs, detail, reference, change, act, setError, on
   )
 }
 
-function StateMain({ name, state, specs, detail, reference, change, act, setError, onGo }: ScopeProps & { state: string }) {
-  const [editing, setEditing] = useState(false)
+function StateMain({ name, state, specs, detail, change, onGo, onTitle }: ScopeProps & { state: string; onTitle: (name: string | null) => void }) {
   const live = detail.states.find((s) => s.name === state)
   const spec = specs?.states.find((s) => s.name === state)
   if (!live) return <p className="text-sm text-muted-foreground">No state {state}.</p>
   const go = (to: string) => onGo({ program: name, state: to })
+  const at = { program: name, state }
+  const keptA: Item<ActionSpec>[] = (specs?.actions.filter((a) => a.state === state) ?? []).map((data, from) => ({ from, data }))
+  const keptB: Item<BranchSpec>[] = (specs?.branches.filter((b) => b.state === state) ?? []).map((data, from) => ({ from, data }))
 
-  const saveState: Save = async (data) => {
-    if (!specs) return null
-    const renamed = String(data.name)
-    const changes: Change[] = [{ op: "update", kind: "state", data: { program: name, name: state, changes: data } }]
+  /** Everything held in the dialog, kept together: the actions and transitions, then the state itself (and what points to it, if it's renamed). */
+  const keepAll = async (p: Record<string, unknown>) => {
+    if (!specs || !spec) return null
+    const renamed = String(p.name ?? state).trim()
+    const every   = p.every === undefined ? undefined : Number(p.every)
+    if (!renamed) return "Give it a name."
+    if (every !== undefined && !(every > 0)) return "Give the cycle in seconds, like 6."
+    const acts = p.actions as Item<ActionSpec>[] | undefined
+    const ways = (p.branches as Item<BranchSpec>[] | undefined)?.map((x) => ({ ...x, data: { ...x.data, goto: x.data.goto === state ? renamed : x.data.goto } }))
+    const changes: Change[] = [...(acts ? diffed("action", at, keptA, acts) : []), ...(ways ? diffed("branch", at, keptB, ways) : [])]
+    if ("name" in p || "desc" in p || every !== undefined) {
+      changes.push({ op: "update", kind: "state", data: { program: name, name: state, changes: { name: renamed, desc: p.desc ?? spec.desc, every: every === undefined ? spec.every : `${every}s` } } })
+    }
     if (renamed !== state) {  // the ways out to it, and the program's start, go to its new name
       const seen: Record<string, number> = {}
       for (const b of specs.branches) {
         const index = (seen[b.state] = (seen[b.state] ?? -1) + 1)
-        if (b.goto === state) {
-          changes.push({ op: "update", kind: "branch", data: { program: name, state: b.state === state ? renamed : b.state, at: index, changes: { goto: renamed } } })
-        }
+        if (b.goto === state && !(ways && b.state === state)) changes.push({ op: "update", kind: "branch", data: { program: name, state: b.state === state ? renamed : b.state, at: index, changes: { goto: renamed } } })
       }
       if (specs.program.initial === state) changes.push({ op: "update", kind: "program", data: { name, changes: { initial: renamed } } })
     }
     const mistake = await change(changes)
-    if (!mistake) {
-      setEditing(false)
-      if (renamed !== state) onGo({ program: name, state: renamed }, true)
+    if (mistake) return mistake
+    for (const x of acts ?? []) {  // a poke's or a question's pictures and sounds, once it's there
+      const { picks } = x.data as ActionSpec & { picks?: Picks }
+      if (picks) await window.proki.tool("set_picks", { id: `${name}.${renamed}.${x.data.name}`, keys: [...picks.image, ...picks.sound] })
     }
-    return mistake
+    if (renamed !== state) onGo({ program: name, state: renamed }, true)
+    return null
   }
 
-  const at = { program: name, state }
-  const actions = specs?.actions.filter((a) => a.state === state) ?? []
-  const branches = specs?.branches.filter((b) => b.state === state) ?? []
-
   return (
-    <>
-      {editing && spec ? <StateForm spec={spec} onSave={saveState} onCancel={() => setEditing(false)} /> : (
-        <div className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-xs">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              {state === detail.initial && <Badge variant="outline" className="text-[11px]">start</Badge>}
-              {detail.on && state === detail.state && <Badge className="text-[11px]">now</Badge>}
-              <p className="text-sm">{live.desc || <span className="text-muted-foreground">No description.</span>}</p>
-            </div>
-          </div>
-          {specs && (
-            <>
-              <Button size="icon-sm" variant="ghost" aria-label={`Edit the state ${humane(state)}`} title="Edit" onClick={() => setEditing(true)}><Pencil /></Button>
-              <Confirm title={`Delete the state “${humane(state)}”?`} description="It, its actions and its transitions are deleted. This can't be undone." action="Delete state"
-                       onConfirm={async () => {
-                         const mistake = await change([{ op: "remove", kind: "state", data: { program: name, name: state } }])
-                         if (mistake) setError(mistake)
-                         else onGo({ program: name, state: null })
-                       }}>
-                <Button size="icon-sm" variant="ghost" aria-label={`Delete the state ${humane(state)}`} title="Delete"><Trash2 /></Button>
-              </Confirm>
-            </>
-          )}
-        </div>
-      )}
-
-      {specs ? (
-        <>
-          <Ordered title="Actions" empty="None: it waits." kind="action" at={at} items={actions} act={act} change={change}
-                   line={(a: ActionSpec) => {
-                     const { text } = action({ [a.kind]: a.params })
-                     const [said, Icon, tint] = ACTIONS[a.kind] ?? [a.kind, Code, "bg-muted text-muted-foreground"]
-                     return (
-                       <>
-                         <Tinted icon={Icon} tint={tint} />
-                         <span className="w-12 shrink-0 font-medium">{said}</span>
-                         {a.desc ? <span className="truncate text-muted-foreground">{a.desc}</span> : <Expr className="truncate">{text}</Expr>}
-                       </>
-                     )
-                   }}
-                   form={(a, onSave, onCancel, onDirty) => <ActionForm spec={a} at={at} taken={actions.filter((b) => b !== a).map((b) => b.name)} onSave={onSave} onCancel={onCancel} onDirty={onDirty} />}
-                   seen={(a, how) => <ActionSeen spec={a} at={at} {...how} />} />
-          <Ordered title="Transitions" empty="None: it stays." kind="branch" at={at} items={branches} act={act} change={change}
-                   before={(data) => specs.states.some((s) => s.name === data.goto) ? []
-                     : [{ op: "add", kind: "state", data: { program: name, name: data.goto, desc: "", every: 1 } }]}
-                   line={(b: BranchSpec, i: number) => <Way branch={b} live={live.next[i]} alone={branches.length === 1} onGo={go} />}
-                   form={(b, onSave, onCancel, onDirty) => {
-                     const i = b ? branches.indexOf(b) : branches.length
-                     return <TransitionForm spec={b} at={at} index={i} states={specs.states.map((s) => s.name)} live={live.next[i]} onSave={onSave} onCancel={onCancel} onDirty={onDirty} />
-                   }}
-                   seen={(b, how) => (
-                     <Dialog open onOpenChange={(o) => !o && how.close()}>
-                       <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg" onEscapeKeyDown={typing}>
-                         {how.form}
-                         <Corner what="transition" name={`${branches.indexOf(b) + 1}`} onDelete={how.remove} />
-                       </DialogContent>
-                     </Dialog>
-                   )} />
-        </>
-      ) : (
-        <>
-          <Block title="Actions">
-            {live.do.length === 0 && <p className="text-xs text-muted-foreground">None: it waits.</p>}
-            {live.do.map((entry, i) => {
-              const { kind, text } = action(entry)
-              return <div key={i} className="flex gap-2 rounded-lg border px-3 py-1.5 text-xs"><span className="font-medium">{kind}</span><span className="truncate text-muted-foreground">{text}</span></div>
-            })}
-          </Block>
-          <Block title="Transitions">
-            {live.next.length === 0 && <p className="text-xs text-muted-foreground">In code.</p>}
-            {live.next.map((b, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs">
-                <Way branch={{ program: name, state, goto: b.goto, when: [...b.conds.map((c) => c.expr), ...b.rules.map((r) => r.name)], desc: b.desc }} live={b} alone={live.next.length === 1} onGo={go} />
-              </div>
-            ))}
-          </Block>
-        </>
-      )}
-    </>
+    <Staging onSave={keepAll} reserve={!!specs}>
+      {(st) => {
+        const items = <T extends ActionSpec | BranchSpec>(key: "actions" | "branches", kept: Item<T>[]) => ({
+          kept, items: (st.patch[key] as Item<T>[] | undefined) ?? kept, hold: (next: Item<T>[]) => st.put(key, next, kept),
+        })
+        const a = items<ActionSpec>("actions", keptA)
+        const b = items<BranchSpec>("branches", keptB)
+        return (
+          <>
+            <StateHead st={st} state={state} spec={spec} live={live} detail={detail} onTitle={onTitle} />
+            {specs ? (
+              <>
+                <Ordered title="Actions" empty="None: it waits." kind="action" at={at} {...a}
+                         line={({ data }) => {
+                           const { text } = action({ [data.kind]: data.params })
+                           const [said, Icon, tint] = ACTIONS[data.kind] ?? [data.kind, Code, "bg-muted text-muted-foreground"]
+                           return (
+                             <>
+                               <Tinted icon={Icon} tint={tint} />
+                               <span className="w-12 shrink-0 font-medium">{said}</span>
+                               {data.desc ? <span className="truncate text-muted-foreground">{data.desc}</span> : <Expr className="truncate">{text}</Expr>}
+                             </>
+                           )
+                         }}
+                         form={(x, i, onSave, onCancel, onDirty) => <ActionForm spec={x?.data} at={at} taken={a.items.filter((_, j) => j !== i).map((y) => y.data.name)} onSave={onSave} onCancel={onCancel} onDirty={onDirty} />}
+                         seen={(x, how) => <ActionSeen spec={x.data} at={at} {...how} />} />
+                <Ordered title="Transitions" empty="None: it stays." kind="branch" at={at} {...b}
+                         line={({ data, from }, i) => <Way branch={data} live={from === null ? undefined : live.next[from]} alone={b.items.length === 1} onGo={go} />}
+                         form={(x, i, onSave, onCancel, onDirty) => (
+                           <TransitionForm spec={x?.data} at={at} index={i} states={specs.states.map((s) => s.name)} live={x?.from == null ? undefined : live.next[x.from]} onSave={onSave} onCancel={onCancel} onDirty={onDirty} />
+                         )}
+                         seen={(x, how) => (
+                           <Dialog open onOpenChange={(o) => !o && how.close()}>
+                             <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg" onEscapeKeyDown={typing}>
+                               {how.form}
+                               <Corner what="transition" name={`${b.items.indexOf(x) + 1}`} onDelete={how.remove} />
+                             </DialogContent>
+                           </Dialog>
+                         )} />
+              </>
+            ) : (
+              <>
+                <Block title="Actions">
+                  {live.do.length === 0 && <p className="text-xs text-muted-foreground">None: it waits.</p>}
+                  {live.do.map((entry, i) => {
+                    const { kind, text } = action(entry)
+                    return <div key={i} className="flex gap-2 rounded-lg border px-3 py-1.5 text-xs"><span className="font-medium">{kind}</span><span className="truncate text-muted-foreground">{text}</span></div>
+                  })}
+                </Block>
+                <Block title="Transitions">
+                  {live.next.length === 0 && <p className="text-xs text-muted-foreground">In code.</p>}
+                  {live.next.map((x, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs">
+                      <Way branch={{ program: name, state, goto: x.goto, when: [...x.conds.map((c) => c.expr), ...x.rules.map((r) => r.name)], desc: x.desc }} live={x} alone={live.next.length === 1} onGo={go} />
+                    </div>
+                  ))}
+                </Block>
+              </>
+            )}
+          </>
+        )
+      }}
+    </Staging>
   )
 }
 
-/** A state's actions or transitions: in order, each carried by its grip, edited or deleted, and
- * one added last. A drop kept shows at once; one refused springs back, and says why. `before`:
- * what's changed first, for what's saved. */
-function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, items, line, form, seen, before, change, act }: {
+/** An action or a transition of a state, as it's held until the state's Save: where it was kept (`from`; none: new), and what it is now. */
+type Item<T> = { from: number | null; data: T }
+
+/** The changes that take a state's actions or transitions from `kept` to `next`: what's gone removed, what moved taken out and put back, what changed updated, what's new added. */
+function diffed<T extends object>(kind: "action" | "branch", at: { program: string; state: string }, kept: Item<T>[], next: Item<T>[]): Change[] {
+  const body = (d: object) => { const { id: _i, program: _p, state: _s, picks: _k, ...rest } = d as Record<string, unknown>; return rest }
+  const same = new Set(next.map((n) => n.from))
+  const ops: Change[] = []
+  kept.forEach((_, i) => same.has(i) || ops.push({ op: "remove", kind, data: { ...at, at: i } }))
+  ops.reverse()  // the last first, so the places of the rest hold
+  const order: (number | null)[] = kept.map((_, i) => i).filter((i) => same.has(i))
+  next.forEach((n, p) => {
+    if (n.from === null) return (ops.push({ op: "add", kind, data: { ...at, ...body(n.data), at: p } }), order.splice(p, 0, null), undefined)
+    const cur = order.indexOf(n.from)
+    if (cur !== p) {
+      ops.push({ op: "remove", kind, data: { ...at, at: cur } }, { op: "add", kind, data: { ...at, ...body(kept[n.from].data), at: p } })
+      order.splice(cur, 1)
+      order.splice(p, 0, n.from)
+    }
+    if (JSON.stringify(body(n.data)) !== JSON.stringify(body(kept[n.from].data))) ops.push({ op: "update", kind, data: { ...at, at: p, changes: body(n.data) } })
+  })
+  return ops
+}
+
+/** A state's actions or transitions: in order, each carried by its grip, opened to change, and one added last. What's done to them waits, marked, in `hold` for the state's
+ * Save (`items`: as they are now; `kept`: as they were kept). Dragged out of the dialog, one is deleted. */
+function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, items, kept, hold, line, form, seen }: {
   title: string
   empty: string
   kind: "action" | "branch"
   at: { program: string; state: string }
-  items: T[]
-  line: (item: T, index: number) => ReactNode
-  form: (item: T | undefined, onSave: Save, onCancel: () => void, onDirty?: () => void) => ReactNode
-  seen?: (item: T, how: { update: (changes: Record<string, unknown>) => Promise<string | null>; remove: () => void; form: ReactNode; close: () => void }) => ReactNode  // a click opens it over, instead of a form in place
-  before?: (data: Record<string, unknown>) => Change[]
-  change: Apply
-  act: (changes: Change[]) => void
+  items: Item<T>[]
+  kept: Item<T>[]
+  hold: (next: Item<T>[]) => void
+  line: (item: Item<T>, index: number) => ReactNode
+  form: (item: Item<T> | undefined, index: number, onSave: Save, onCancel: () => void, onDirty?: () => void) => ReactNode
+  seen: (item: Item<T>, how: { update: (changes: Record<string, unknown>) => Promise<string | null>; remove: () => void; form: ReactNode; close: () => void }) => ReactNode  // a click opens it over
 }) {
-  const [open, setOpen] = useState<number | "new" | null>(null)
+  const [adding, setAdding]   = useState(false)
   const [viewing, setViewing] = useState<number | null>(null)
   const [leaving, setLeaving] = useState(false)  // asked whether to drop what's been set up
   const dirty = useRef(false)
-  const close = () => setOpen(null)
-  const saved = (data: Record<string, unknown>, changes: Change[]) => async () => {
-    const mistake = await change([...(before?.(data) ?? []), ...changes])
-    if (!mistake) close()
-    return mistake
-  }
+  const close = () => setAdding(false)
+  const put   = (i: number, data: Record<string, unknown>) => hold(items.map((x, j) => (j === i ? { ...x, data: { ...x.data, ...data } } : x)))
   const sensors = useDrag()
-  const [order, setOrder] = useState<number[] | null>(null)  // a drop, shown until the list comes back with it
-  const [refused, setRefused] = useState<{ at: number; why: string } | null>(null)
   const [lit, setLit] = useState<number | null>(null)  // the one a dialog's chip came to
   useEffect(() => {
     const take = () => {
@@ -585,50 +604,39 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
     window.addEventListener(FLASH, take)
     return () => window.removeEventListener(FLASH, take)
   }, [kind, at.program, at.state])
-  const kept = JSON.stringify(items)
-  useEffect(() => setOrder(null), [kept])
-  const moved = async (e: DragEndEvent) => {
-    if (!e.over || e.active.id === e.over.id) return
-    const from = Number(e.active.id) - 1, to = Number(e.over.id) - 1
-    setRefused(null)
-    setOrder(arrayMove(items.map((_, i) => i), from, to))
-    const why = await change([{ op: "remove", kind, data: { ...at, at: from } }, { op: "add", kind, data: { ...items[from], at: to } }])
-    if (why) (setOrder(null), setRefused({ at: from, why }))
-  }
-  const leave = useLeave(moved, (e) => act([{ op: "remove", kind, data: { ...at, at: Number(e.active.id) - 1 } }]))  // dropped beyond the dialog: deleted
-  const shown = order ?? items.map((_, i) => i)
+  const leave = useLeave((e) => e.over && e.active.id !== e.over.id && hold(arrayMove(items, Number(e.active.id) - 1, Number(e.over.id) - 1)),
+                         (e) => hold(items.filter((_, j) => j !== Number(e.active.id) - 1)))  // dropped beyond the dialog: taken out, until Save
+  const marked = (x: Item<T>) => x.from === null ? "added" : JSON.stringify(x.data) !== JSON.stringify(kept[x.from]?.data) ? "changed" : undefined
+  const shown = viewing === null ? undefined : items[viewing]
 
   return (
-    <Block title={title} add={open === "new" ? undefined : () => (dirty.current = false, setOpen("new"))}>
-      {items.length === 0 && open !== "new" && <p className="text-xs text-muted-foreground">{empty}</p>}
+    <Block title={title} add={adding ? undefined : () => (dirty.current = false, setAdding(true))}>
+      {items.length === 0 && !adding && <p className="text-xs text-muted-foreground">{empty}</p>}
       <div ref={leave.ref} className="flex flex-col gap-1.5">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} {...leave.props}>
-        <SortableContext items={shown.map((i) => i + 1)} strategy={verticalListSortingStrategy}>
-          {shown.map((i) => open === i ? (
-            <div key={i}>{form(items[i], (data) => saved(data, [{ op: "update", kind, data: { ...at, at: i, changes: data } }])(), close)}</div>
-          ) : (
-            <Line key={i} id={i} refused={refused?.at === i} lit={lit === i} named={kind === "action" ? `the action “${(items[i] as ActionSpec).name}”` : `transition ${i + 1}`}
-                  plain={!!seen} onEdit={() => seen ? setViewing(i) : setOpen(i)} onDelete={() => act([{ op: "remove", kind, data: { ...at, at: i } }])}>
-              {line(items[i], i)}
-            </Line>
-          ))}
-        </SortableContext>
-        {leave.ghost((id) => line(items[id - 1], id - 1))}
-      </DndContext>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} {...leave.props}>
+          <SortableContext items={items.map((_, i) => i + 1)} strategy={verticalListSortingStrategy}>
+            {items.map((x, i) => (
+              <Line key={x.from ?? `new${i}`} id={i} lit={lit === i} mark={marked(x)} named={kind === "action" ? `the action “${(x.data as ActionSpec).name}”` : `transition ${i + 1}`}
+                    plain onEdit={() => setViewing(i)} onDelete={() => hold(items.filter((_, j) => j !== i))}>
+                {line(x, i)}
+              </Line>
+            ))}
+          </SortableContext>
+          {leave.ghost((id) => line(items[id - 1], id - 1))}
+        </DndContext>
       </div>
-      {refused && <ErrorDialog message={`Not moved: ${refused.why}`} onClose={() => setRefused(null)} />}
-      {seen && viewing !== null && items[viewing] && seen(items[viewing], {
-        update: (changes) => change([{ op: "update", kind, data: { ...at, at: viewing, changes } }]),
-        remove: () => (act([{ op: "remove", kind, data: { ...at, at: viewing } }]), setViewing(null)),
-        form: form(items[viewing], (data) => change([{ op: "update", kind, data: { ...at, at: viewing, changes: data } }]).then((m) => (m || setViewing(null), m)), () => setViewing(null)),
+      {shown && viewing !== null && seen(shown, {
+        update: async (changes) => (put(viewing, changes), null),
+        remove: () => (hold(items.filter((_, j) => j !== viewing)), setViewing(null)),
+        form: form(shown, viewing, async (data) => (put(viewing, data), setViewing(null), null), () => setViewing(null)),
         close: () => setViewing(null),
       })}
-      {open === "new" && (() => {
-        const leave = () => (dirty.current ? setLeaving(true) : close())  // what's set up isn't dropped unasked
-        const made = form(undefined, (data) => saved(data, [{ op: "add", kind, data: { ...at, ...data } }])(), seen ? leave : close, () => void (dirty.current = true))
-        return !seen ? made : (  // an action is made in a dialog of its own, as it's changed in one
+      {adding && (() => {
+        const leaveNew = () => (dirty.current ? setLeaving(true) : close())  // what's set up isn't dropped unasked
+        const made = form(undefined, items.length, async (data) => (hold([...items, { from: null, data: data as T }]), close(), null), leaveNew, () => void (dirty.current = true))
+        return (
           <>
-            <Dialog open onOpenChange={(o) => !o && leave()}>
+            <Dialog open onOpenChange={(o) => !o && leaveNew()}>
               <DialogContent className="max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg sm:has-[[data-wide]]:max-w-[38.5rem]" onEscapeKeyDown={typing}>
                 {made}
               </DialogContent>
@@ -651,12 +659,13 @@ function ActionSeen({ spec, at, update, remove, form, close }: {
 }) {
   const [said] = ACTIONS[spec.kind] ?? [spec.kind]
   const popup = spec.kind === "poke" || spec.kind === "ask_usr"  // laid out as its popup is, each part changed where it's read
-  const [picks, setPicks] = useState<Picks>({ image: [], sound: [] })
+  const held = (spec as ActionSpec & { picks?: Picks }).picks  // handed back already, not kept yet
+  const [picks, setPicks] = useState<Picks>(held ?? { image: [], sound: [] })
   useEffect(() => {
-    if (!popup) return
+    if (!popup || held) return
     window.proki.tool("get_picks", { id: spec.id }).then((answer) => !answer.error && setPicks({ image: answer.media.filter((m: { kind: string }) => m.kind === "image").map((m: { key: string }) => m.key),
                                                                                               sound: answer.media.filter((m: { kind: string }) => m.kind === "sound").map((m: { key: string }) => m.key) }))
-  }, [spec.id, popup])
+  }, [spec.id, popup, held])
   const holds  = (k: string) => k in ACTION_ROWS || k === "ask_llm" || k === "ask_jev"  // its parts are changed where they're read, held with Save
   const inline = popup || holds(spec.kind)  // else the kind's own form, with its own Save
   const [refused, setRefused] = useState("")
@@ -674,12 +683,9 @@ function ActionSeen({ spec, at, update, remove, form, close }: {
     const { options } = params
     if (options === "") return "Say where the options come from."
     if (Array.isArray(options) && options.every((o) => !String(o).trim())) return "Add at least one option."
-    const mistake = await send({ ...(desc === undefined ? {} : { desc }), kind: to, params: cleaned(to, { ...(to === spec.kind ? spec.params : Object.fromEntries(Object.entries(spec.params).filter(([k]) => ACTION_ROWS[to]?.some(([, key]) => key === k)))), ...params }) })
-    if (mistake || !picked) return mistake
-    const { image, sound } = picked as Picks
-    await window.proki.tool("set_picks", { id: spec.id, keys: [...image, ...sound] })
-    setPicks(picked as Picks)
-    return null
+    const mistake = await send({ ...(desc === undefined ? {} : { desc }), kind: to, ...(picked ? { picks: picked } : {}), params: cleaned(to, { ...(to === spec.kind ? spec.params : Object.fromEntries(Object.entries(spec.params).filter(([k]) => ACTION_ROWS[to]?.some(([, key]) => key === k)))), ...params }) })
+    if (!mistake) close()  // handed back to the state, which holds it until its own Save
+    return mistake
   }
   return (
     <Dialog open onOpenChange={(open) => !open && close()}>
