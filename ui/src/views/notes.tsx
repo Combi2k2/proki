@@ -114,7 +114,7 @@ export function NotesView({ onGo }: { onGo: (to: View, card?: number) => void })
             <TableBody>
               {shown.map((n) => (
                 <TableRow key={n.id} className="cursor-pointer" onClick={() => setOpened(n.id)}>
-                  <TableCell className={cn("truncate font-medium", !n.title && "font-normal text-muted-foreground")}><Icon aria-label={KEPT[bucket].title.slice(0, -1) || bucket} className={cn("mr-1.5 inline size-3.5 align-text-bottom", KEPT[bucket].tint)} />{n.title || "No title"}</TableCell>
+                  <TableCell className={cn("truncate font-medium", !n.title && "font-normal text-muted-foreground")}><Icon aria-label={KEPT[bucket].title.slice(0, -1) || bucket} className={cn("mr-1.5 inline size-3.5 align-text-bottom", KEPT[bucket].tint)} /><button type="button" className="rounded-sm text-left" aria-label={`Open note: ${n.title || "No title"}`} onClick={(e) => { e.stopPropagation(); setOpened(n.id) }}>{n.title || "No title"}</button></TableCell>
                   <TableCell className="truncate text-muted-foreground" title={n.text}>{n.text.replace(/\s+/g, " ")}</TableCell>
                   <TableCell className="truncate text-muted-foreground">{ago(n.at)}</TableCell>
                   <TableCell className="truncate">

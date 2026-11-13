@@ -12,23 +12,22 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
-import { CHANGED_LINE, Staging, typing } from "@/views/in-place"
+import { Editable, Staging, typing } from "@/views/in-place"
 import { IconPicker } from "@/views/icon-picker"
 import type { Save } from "@/views/program-forms"
 
-const PLAIN = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const  // names, as typed
 
 /** A boxed field, like the search box: what's typed in it is held by the caller; `LABEL` names it above. */
 const FIELD = "h-8 text-sm"
 const LABEL = "text-xs text-muted-foreground"
 const ROOM = "min-h-24"  // a description keeps room for four lines
 
-/** A tag as a chip, `#tag`: clicked (given `onClick`) it picks that tag; `on` it is the one picked; `onRemove` adds a ×. `mark`: added (green) or
+/** A tag as a grey chip, `#tag`: clicked (given `onClick`) it picks that tag; `on` it is the one picked; `onRemove` adds a ×. `mark`: added (green) or
  * taken out (red, struck through, `onRestore` puts it back) in a dialog, not kept yet. */
 export function TagChip({ tag, on, mark, onClick, onRemove, onRestore }: { tag: string; on?: boolean; mark?: "added" | "removed"; onClick?: () => void; onRemove?: () => void; onRestore?: () => void }) {
   const look = cn("inline-flex h-5 items-center gap-1 rounded-md px-1.5 font-mono text-xs whitespace-nowrap select-none",
-                  mark === "added" ? "bg-added/20 text-foreground ring-1 ring-added/50" : mark === "removed" ? "bg-removed/15 text-muted-foreground line-through" : "bg-sky-500/15 text-sky-700 dark:text-sky-300",
-                  on && "ring-2 ring-sky-500/60")
+                  mark === "added" ? "bg-added/20 text-foreground ring-1 ring-added/50" : mark === "removed" ? "bg-removed/15 text-muted-foreground line-through" : "bg-muted text-muted-foreground",
+                  on && "text-foreground ring-1 ring-foreground/30")
   return (
     <span className={look}>
       {onClick ? <button type="button" aria-pressed={on} onClick={onClick}>#{tag}</button> : <>#{tag}</>}
@@ -162,7 +161,6 @@ export function ProgramDialog({ spec, known, onSave, onClose }: {
           {(st) => {
             const icon = (st.patch.icon as string | undefined) ?? spec.icon
             const tags = (st.patch.tags as string[] | undefined) ?? spec.tags
-            const shown = (key: string, was: string) => (st.patch[key] as string | undefined) ?? was
             return (
               <>
                 <div className="flex items-end gap-3 pr-8">
@@ -174,19 +172,16 @@ export function ProgramDialog({ spec, known, onSave, onClose }: {
                   </IconPicker>
                   <label className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className={LABEL}>Display name</span>
-                    <Input value={shown("title", spec.title)} onChange={(e) => st.put("title", e.target.value, spec.title)} placeholder="Stretch breaks"
-                           className={cn(FIELD, st.lit("title") && CHANGED_LINE)} />
+                    <Editable label="Display name" {...st.field("title", spec.title)} placeholder="Untitled" className="text-sm" />
                   </label>
                   <label className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className={LABEL}>Code name</span>
-                    <Input value={shown("name", spec.name)} onChange={(e) => st.put("name", e.target.value, spec.name)} placeholder="stretch_breaks" {...PLAIN}
-                           className={cn(FIELD, "font-mono text-xs", st.lit("name") && CHANGED_LINE)} />
+                    <Editable label="Code name" {...st.field("name", spec.name)} className="font-mono text-sm" />
                   </label>
                 </div>
                 <label className="flex flex-col gap-1">
                   <span className={LABEL}>Description</span>
-                  <Textarea value={shown("desc", spec.desc)} onChange={(e) => st.put("desc", e.target.value, spec.desc)} placeholder="What does it do for you?" 
-                            className={cn(ROOM, "resize-none text-sm", st.lit("desc") && CHANGED_LINE)} />
+                  <Editable label="Description" long {...st.field("desc", spec.desc)} placeholder="No description." className="text-sm" />
                 </label>
                 <div className="flex flex-col gap-1.5">
                   <span className={LABEL}>Tags</span>

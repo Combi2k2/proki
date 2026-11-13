@@ -17,7 +17,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type { Played, Type } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { CodeInput, colour, Expr } from "@/views/code"
-import { said, TypeIcon } from "@/views/fields"
+import { said, TypeIcon } from "@/views/field-parts"
 import { hover, Value } from "@/views/resources"
 
 const OPS = {  // what each reads at minute t, in words

@@ -226,7 +226,7 @@ if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) {
             { id: 2, name: "Ask Anna to proofread", values: { id: 2, name: "Ask Anna to proofread", estimate: 10, done_when: [], score: 0.4, after: [1], created_at: at - 2000, updated_at: at - 200 } },
           ] })
     },
-    apps: () => answer({ apps: [], labels: [] }),
+    apps: (request: { op?: string }) => answer(request.op === "read" ? { apps: [], labels: [] } : {}),
     today: () => answer({ ...today, focus: (today.focus = Math.min(0.95, Math.max(0.05, (today.focus ?? 0.5) + (Math.random() - 0.5) * 0.2))) }),
     metrics: () => answer({ metrics: [{ name: "focus", desc: "how focused you were", expr: "focus", pace: 300, persist: true, on: true, keep: null, method: "mean" }],
                             size: 86400, method: "mean", buckets: [0.42, 0.61, 0.55, 0.7, 0.38, 0.66, 0.58].map((v, i) => [new Date(Date.now() - (6 - i) * 86_400_000).toISOString(), v]) }),

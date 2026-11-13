@@ -237,13 +237,14 @@ html { scrollbar-color: var(--border) transparent; caret-color: var(--brand); }
 
 @keyframes dots { from { width: 0; } to { width: 3ch; } }
 .animate-dots { display: inline-block; overflow: hidden; vertical-align: bottom; width: 3ch; animation: dots 1.6s steps(4, jump-none) infinite; }
+.animate-flash { animation: flash 2.4s ease-out; }
 @keyframes flash {  /* a playground variable an action just changed */
   from { background-color: color-mix(in oklch, var(--metric) 45%, transparent); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   [data-slot="button"]:active, [data-slot="toggle-group-item"]:active, [data-slot="toggle"]:active { scale: none !important; }
-  .animate-flow, .animate-hourglass, .animate-breathe, .animate-dots { animation: none; }
+  .animate-flow, .animate-hourglass, .animate-breathe, .animate-dots, .animate-shake, .animate-flash { animation: none; }
   .ball-core, .ball::before, .ball::after { animation: none !important; }
   .animate-round { animation: none; background: var(--brand); opacity: 0.5; }
 }
@@ -262,3 +263,37 @@ html { scrollbar-color: var(--border) transparent; caret-color: var(--brand); }
   --xy-node-boxshadow-selected: none;
 }
 .react-flow__controls { border: 1px solid var(--border); border-radius: 0.75rem; overflow: hidden; }
+
+/* Shared definition rows keep their columns and rhythm across spec dialogs. */
+@utility spec-rows {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr);
+  column-gap: 0.75rem;
+  row-gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+}
+
+/* Shared chip tints, kept here with the rest of the semantic palette. */
+.tint-sky { background: color-mix(in oklab, var(--color-sky-500) 15%, transparent); color: var(--color-sky-700); }
+.dark .tint-sky { color: var(--color-sky-300); }
+.tint-violet { background: color-mix(in oklab, var(--color-violet-500) 15%, transparent); color: var(--color-violet-700); }
+.dark .tint-violet { color: var(--color-violet-300); }
+.tint-amber { background: color-mix(in oklab, var(--color-amber-500) 15%, transparent); color: var(--color-amber-700); }
+.dark .tint-amber { color: var(--color-amber-300); }
+.tint-emerald { background: color-mix(in oklab, var(--color-emerald-500) 15%, transparent); color: var(--color-emerald-700); }
+.dark .tint-emerald { color: var(--color-emerald-300); }
+.tint-zinc { background: color-mix(in oklab, var(--color-zinc-500) 15%, transparent); color: var(--color-zinc-700); }
+.dark .tint-zinc { color: var(--color-zinc-300); }
+.tint-rose { background: color-mix(in oklab, var(--color-rose-500) 15%, transparent); color: var(--color-rose-700); }
+.dark .tint-rose { color: var(--color-rose-300); }
+.tint-cyan { background: color-mix(in oklab, var(--color-cyan-500) 15%, transparent); color: var(--color-cyan-700); }
+.dark .tint-cyan { color: var(--color-cyan-300); }
+.tint-indigo { background: color-mix(in oklab, var(--color-indigo-500) 15%, transparent); color: var(--color-indigo-700); }
+.dark .tint-indigo { color: var(--color-indigo-300); }
+.tint-fuchsia { background: color-mix(in oklab, var(--color-fuchsia-500) 15%, transparent); color: var(--color-fuchsia-700); }
+.dark .tint-fuchsia { color: var(--color-fuchsia-300); }
+.tint-orange { background: color-mix(in oklab, var(--color-orange-500) 15%, transparent); color: var(--color-orange-700); }
+.dark .tint-orange { color: var(--color-orange-300); }

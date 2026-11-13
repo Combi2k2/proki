@@ -279,6 +279,7 @@ type Tools = {
   reset_program: Done
   switch_program: Done
   set_value: Done  // a variable's value, set now, as an action would
+  save_records: { ids: number[] }
   add_record: { id: number }  // a record of a kind of record (work.tasks), added last
   change_record: Done
   remove_record: Done  // and what's its

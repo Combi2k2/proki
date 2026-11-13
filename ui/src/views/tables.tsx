@@ -1,3 +1,4 @@
+import { ErrorDialog } from "@/components/error-dialog"
 // Tables: each kind of record (a task, a group, yours), and each other list of records (every app seen),
 // picked from a list, its records as the same table a list of records opens as anywhere: a row each and
 // a column a field, changed where it's read, rows added, moved and taken out, all kept with Save. The
@@ -8,7 +9,7 @@ import { PageHeader, SearchBox } from "@/components/page"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Reference, Type, VarDetail, Weighed } from "@/lib/proki"
 import { recallJson, rememberJson } from "@/lib/remember"
-import { schemaOf } from "@/views/fields"
+import { schemaOf } from "@/views/field-parts"
 import { Inspect, matches } from "@/views/inspect"
 import { useSetter } from "@/views/resources"
 
@@ -62,7 +63,7 @@ export function TablesView() {
         )}>
         <SearchBox value={query} onChange={setQuery} label={`Search ${kind || "the records"}`} />
       </PageHeader>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <ErrorDialog message={error} onClose={() => setError("")} />}
       {read && (
         <>
           <p className="-mt-2 text-xs text-muted-foreground tabular-nums">

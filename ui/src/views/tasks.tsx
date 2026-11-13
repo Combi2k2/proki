@@ -30,7 +30,7 @@ import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { dayOf, dueText, endOf, type Board, type TaskGr, type Task, type TaskOp } from "@/lib/proki"
-import { Composer, ItemList, Notes, Editable, Section, TagEditor, rowsOf, useDrag } from "@/views/task-parts"
+import { Composer, ItemList, Notes, AutoSaveText, Section, TagEditor, rowsOf, useDrag } from "@/views/task-parts"
 import { TaskDialog } from "@/views/task-dialog"
 
 type Change = (request: object) => Promise<number | null>  // a request to the board: the id it gives, if any
@@ -38,7 +38,6 @@ type Change = (request: object) => Promise<number | null>  // a request to the b
 const minutes = (m: number) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`)
 const sortId = (id: number) => `g${id}`
 
-export { useDrag }
 
 // a card over another card first, else over the row the pointer's in
 const landing: CollisionDetection = (args) => {
@@ -268,7 +267,7 @@ function GroupCard({ group, board, onChange, onClose }: {
         <LayoutGrid className="mt-1.5 size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1 pr-8">
           <DialogTitle className="sr-only">{group.name}</DialogTitle>
-          <Editable value={group.name} multiline className="text-lg font-semibold" onSave={(name) => set({ name })} />
+          <AutoSaveText label="Group name" value={group.name} multiline className="text-lg font-semibold" onSave={(name) => set({ name })} />
           {finished && <Badge variant="secondary" className="mt-1 ml-1.5 capitalize">{group.status}</Badge>}
         </div>
       </div>

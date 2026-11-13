@@ -1,13 +1,13 @@
 // Text changed where it's read: no input box until you click it.
 
-import { createContext, useContext, useRef, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { colour, FitClone, useFit } from "@/views/code"
 
-const PLAIN = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const  // names and formulas, as typed
+export const PLAIN = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const  // names and formulas, as typed
 
 /** A dialog's Escape while you're typing in it: the text put back, the dialog left open. */
 export const typing = (e: Event) => void (document.activeElement?.matches("input, textarea") && e.preventDefault())
@@ -155,9 +155,10 @@ export const useStaged = () => useContext(Stage)
 /** Around a dialog's parts: what's changed in them is held, marked, and kept on Save or dropped on
  * Cancel, both at the bottom, shown once something's changed (`reserve`: never, when nothing in it can
  * change). `onSave`: the changes together (the mistake, if any). `children` may take what's held. */
-export function Staging({ onSave, reserve = true, onCancel, children }: {
+export function Staging({ onSave, reserve = true, onCancel, onDirtyChange, children }: {
   onSave: (patch: Record<string, unknown>) => Promise<string | null>
   reserve?: boolean
+  onDirtyChange?: (dirty: boolean) => void
   onCancel?: () => void  // something new: its bar is always there, and Cancel leaves
   children: ReactNode | ((staged: Staged) => ReactNode)
 }) {
@@ -184,6 +185,7 @@ export function Staging({ onSave, reserve = true, onCancel, children }: {
     },
   } as Staged
   const dirty = Object.keys(patch).length > 0
+  useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange])
   const cancel = () => (onCancel ? onCancel() : (setPatch({}), setError("")))
   Object.assign(staged, { dirty, error, save: keep, cancel, dismiss: () => setError("") })
   return (

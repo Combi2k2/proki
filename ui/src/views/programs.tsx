@@ -9,13 +9,13 @@
 //
 // Each change goes to the engine as one (`apply_changes`): checked, and kept only if every
 // program still runs. A state renamed takes its new name in the transitions to it, and as the
-// program's start; a transition to a state not there yet makes it.
+// program's start; a transition to a state not there yet adds it, in the same Save.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
-import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core"
+import { DndContext, closestCenter } from "@dnd-kit/core"
 import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable"
-import { ArrowLeft, ArrowRight, ChevronRight, Code, Plus, RotateCcw, Trash2, X } from "lucide-react"
+import { ArrowLeft, ChevronRight, Code, Plus, RotateCcw, Trash2, X } from "lucide-react"
 import { Confirm } from "@/components/confirm"
 import { ErrorDialog } from "@/components/error-dialog"
 import { PageHeader, SearchBox } from "@/components/page"
@@ -26,7 +26,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from "@/components/ui/switch"
 import { GLOBAL, type ActionSpec, type BranchSpec, type Change, type GlobalSpecs, type ProgramDetail, type ProgramSpecs, type Reference, type Scope, type Where } from "@/lib/proki"
 import { cn } from "@/lib/utils"
-import { ACTIONS, ActionForm, cleaned, contextOf, PopupFields, type Picks, Tinted, type Save } from "@/views/program-forms"
+import { ACTIONS, ActionForm, cleaned, PopupFields, type Picks, Tinted, type Save } from "@/views/program-forms"
+import { contextOf } from "@/lib/context"
 import { ActionRows, ACTION_ROWS } from "@/views/action-rows"
 import { AskJev, AskLlm, START } from "@/views/ask-actions"
 import { exprText, parseExpr } from "@/lib/typed"
@@ -38,7 +39,7 @@ import { TransitionForm, Way } from "@/views/transition"
 import { forgetGraph, GraphView } from "@/views/program-graph"
 import { action } from "@/views/program-inspect"
 import { NewProgram, ProgramDialog, TagChip } from "@/views/program-new"
-import { useDrag } from "@/views/tasks"
+import { useDrag } from "@/views/task-parts"
 import { friendly, humane, light } from "@/lib/friendly"
 import { Apply, Block, CHANGED, FLASH, GO, Line, OPEN, opening, Path, Running, revert, useLeave, useSpecs, bus } from "@/views/scope-shared"
 import { Corner } from "@/views/resources"
@@ -435,8 +436,9 @@ function ProgramMain({ name, specs, detail, reference, change, act, setError, on
 
   return (
     <>
-      <div role={specs ? "button" : undefined} onClick={() => specs && setEditing(true)} title={specs ? "Its name, icon, description and tags" : undefined}
-           className={cn("flex items-stretch gap-4 rounded-xl border bg-card p-4 shadow-xs", specs && "cursor-pointer hover:ring-1 hover:ring-foreground/20")}>
+      <div role={specs ? "button" : undefined} tabIndex={specs ? 0 : undefined}
+           onKeyDown={(e) => { if (specs && e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setEditing(true) } }} onClick={() => specs && setEditing(true)} title={specs ? "Its name, icon, description and tags" : undefined}
+           className={cn("flex items-stretch gap-4 rounded-xl border bg-card p-4 shadow-xs focus-visible:outline-2 focus-visible:outline-ring", specs && "cursor-pointer hover:ring-1 hover:ring-foreground/20")}>
         <span className={cn("grid size-14 shrink-0 self-center place-items-center rounded-2xl", detail.on ? "bg-primary/12 text-primary" : "bg-muted text-muted-foreground")}>
           <Icon aria-hidden className="size-6" />
         </span>
@@ -479,7 +481,7 @@ function ProgramMain({ name, specs, detail, reference, change, act, setError, on
   )
 }
 
-function StateMain({ name, state, specs, detail, change, onGo, onTitle }: ScopeProps & { state: string; onTitle: (name: string | null) => void }) {
+function StateMain({ name, state, specs, detail, change, setError, onGo, onTitle }: ScopeProps & { state: string; onTitle: (name: string | null) => void }) {
   const live = detail.states.find((s) => s.name === state)
   const spec = specs?.states.find((s) => s.name === state)
   if (!live) return <p className="text-sm text-muted-foreground">No state {state}.</p>
@@ -498,6 +500,8 @@ function StateMain({ name, state, specs, detail, change, onGo, onTitle }: ScopeP
     const acts = p.actions as Item<ActionSpec>[] | undefined
     const ways = (p.branches as Item<BranchSpec>[] | undefined)?.map((x) => ({ ...x, data: { ...x.data, goto: x.data.goto === state ? renamed : x.data.goto } }))
     const changes: Change[] = [...(acts ? diffed("action", at, keptA, acts) : []), ...(ways ? diffed("branch", at, keptB, ways) : [])]
+    const newStates = [...new Set((ways ?? []).map((x) => x.data.goto))].filter((to) => to !== renamed && !specs.states.some((s) => s.name === to))
+    changes.unshift(...newStates.map((name): Change => ({ op: "add", kind: "state", data: { program: at.program, name } })))
     if ("name" in p || "desc" in p || every !== undefined) {
       changes.push({ op: "update", kind: "state", data: { program: name, name: state, changes: { name: renamed, desc: p.desc ?? spec.desc, every: every === undefined ? spec.every : `${every}s` } } })
     }
@@ -511,10 +515,12 @@ function StateMain({ name, state, specs, detail, change, onGo, onTitle }: ScopeP
     }
     const mistake = await change(changes)
     if (mistake) return mistake
-    for (const x of acts ?? []) {  // a poke's or a question's pictures and sounds, once it's there
-      const { picks } = x.data as ActionSpec & { picks?: Picks }
-      if (picks) await window.proki.tool("set_picks", { id: `${name}.${renamed}.${x.data.name}`, keys: [...picks.image, ...picks.sound] })
-    }
+    const picked = await Promise.all((acts ?? []).map(({ data }) => {  // a poke's or a question's pictures and sounds, once it's there
+      const { picks } = data as ActionSpec & { picks?: Picks }
+      return picks && window.proki.tool("set_picks", { id: `${name}.${renamed}.${data.name}`, keys: [...picks.image, ...picks.sound] })
+    }))
+    const failed = picked.find((done) => done?.error)
+    if (failed) setError(`The state is saved, but not its pictures and sounds: ${failed.error}`)  // the state is kept already: a retry would add it twice
     if (renamed !== state) onGo({ program: name, state: renamed }, true)
     return null
   }
@@ -718,13 +724,14 @@ function ActionSeen({ spec, at, update, remove, form, close }: {
     window.proki.tool("get_picks", { id: spec.id }).then((answer) => !answer.error && setPicks({ image: answer.media.filter((m: { kind: string }) => m.kind === "image").map((m: { key: string }) => m.key),
                                                                                               sound: answer.media.filter((m: { kind: string }) => m.kind === "sound").map((m: { key: string }) => m.key) }))
   }, [spec.id, popup, held])
-  const holds  = (k: string) => k in ACTION_ROWS || k === "ask_llm" || k === "ask_jev"  // its parts are changed where they're read, held with Save
-  const inline = popup || holds(spec.kind)  // else the kind's own form, with its own Save
-  const [refused, setRefused] = useState("")
-  const shown    = (st: Staged) => (st.patch.kind as string | undefined) ?? spec.kind  // the kind, as changed and not kept yet
-  const switchTo = async (k: string, st: Staged) => {  // between kinds held with Save: held with the rest until it; else at once
-    if (holds(k) && holds(spec.kind)) return (st.put("kind", k, spec.kind), Object.entries(START[k] ?? {}).forEach(([key, v]) => st.put(key, v, spec.params[key])))
-    setRefused((await send({ kind: k, params: popup && (k === "poke" || k === "ask_usr") ? cleaned(k, spec.params) : {} })) ?? "")
+  const [dirty, setDirty] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const dismiss = () => dirty ? setLeaving(true) : close()
+  const shown = (st: Staged) => (st.patch.kind as string | undefined) ?? spec.kind
+  const switchTo = (kind: string, st: Staged) => {  // the last kind's params go, its description and pictures stay
+    Object.keys(st.patch).filter((key) => key !== "desc" && key !== "picks").forEach((key) => st.put(key, spec.params[key], spec.params[key]))
+    st.put("kind", kind, spec.kind)
+    if (kind !== spec.kind) Object.entries(START[kind] ?? {}).forEach(([key, value]) => st.put(key, value, spec.params[key]))
   }
   const send   = (patch: Record<string, unknown>) => update({ name: spec.name, desc: spec.desc, kind: spec.kind, params: spec.params, ...patch })
   const commit = (patch: Record<string, unknown>) => send({ params: cleaned(spec.kind, { ...spec.params, ...patch }) })
@@ -740,27 +747,26 @@ function ActionSeen({ spec, at, update, remove, form, close }: {
     return mistake
   }
   return (
-    <Dialog open onOpenChange={(open) => !open && close()}>
+    <Dialog open onOpenChange={(open) => !open && dismiss()}>
       <DialogContent className={"max-h-[85vh] overflow-x-hidden overflow-y-auto sm:max-w-lg sm:has-[[data-wide]]:max-w-[38.5rem]"} onEscapeKeyDown={typing}>
-        <Staging reserve={inline} onSave={keep}>
+        <Staging onSave={keep} onDirtyChange={setDirty}>
           {(st) => (
             <>
               <DialogHeader>
-                <DialogTitle className="pr-24">
-                  <Pick label="Kind" value={shown(st)} arrow className="gap-2 text-base"
-                        options={Object.entries(ACTIONS).map(([k, [name, Of, on]]) => [k, <><Tinted icon={Of} tint={on} />{name}</>])}
-                        onPick={(k) => switchTo(k, st)} />
-                </DialogTitle>
+                <DialogTitle className="pr-24 font-mono">{spec.id}</DialogTitle>
                 <DialogDescription asChild>
-                  <div>
-                    {inline ? <Editable label="Description" long placeholder="No description" {...st.field("desc", spec.desc)} />
-                            : <Editable label="Description" value={spec.desc} long placeholder="No description" onSave={(t) => send({ desc: t })} />}
-                  </div>
+                  <div><Editable label="Description" long placeholder="No description" {...st.field("desc", spec.desc)} /></div>
                 </DialogDescription>
               </DialogHeader>
+              <dl className="spec-rows items-center">
+                <dt className="text-muted-foreground">Kind</dt>
+                <dd><Pick label="Kind" value={shown(st)} arrow
+                          options={Object.entries(ACTIONS).map(([k, [name, Of, on]]) => [k, <><Tinted icon={Of} tint={on} />{name}</>])}
+                          onPick={(k) => switchTo(k, st)} /></dd>
+              </dl>
               <Corner what="action" name={said} onDelete={() => (remove(), close())} />
-              {popup ? (
-                <PopupFields ask={spec.kind === "ask_usr"} kind={spec.kind} params={spec.params} commit={commit} saved={picks} picks={(st.patch.picks as Picks | undefined) ?? picks}
+              {shown(st) === "poke" || shown(st) === "ask_usr" ? (
+                <PopupFields ask={shown(st) === "ask_usr"} kind={shown(st)} params={spec.params} commit={commit} saved={picks} picks={(st.patch.picks as Picks | undefined) ?? picks}
                              pick={(which, keys) => st.put("picks", { ...((st.patch.picks as Picks | undefined) ?? picks), [which]: keys }, picks)} />
               ) : shown(st) === "ask_llm" || shown(st) === "ask_jev" ? (() => {
                 const { desc: _d, picks: _p, kind: _k, ...patch } = st.patch  // what's held of its params, over what's kept
@@ -773,7 +779,7 @@ function ActionSeen({ spec, at, update, remove, form, close }: {
             </>
           )}
         </Staging>
-        {refused && <ErrorDialog message={refused} onClose={() => setRefused("")} />}
+        <Discard open={leaving} onOpenChange={setLeaving} title="Discard action changes?" description="Your changes to this action have not been saved." action="Discard" onDrop={close} />
       </DialogContent>
     </Dialog>
   )

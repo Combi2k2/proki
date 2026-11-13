@@ -11,11 +11,11 @@ import { humane } from "@/lib/friendly"
 import { type BranchSpec, type ProgramDetail } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { Expr } from "@/views/code"
-import { Mark, Pill, SOURCES, TAG } from "@/views/fields"
+import { Mark, Pill, SOURCES, TAG } from "@/views/field-parts"
 import { Editable, Pick, Staging, type Staged } from "@/views/in-place"
 import { NAMES } from "@/views/action-rows"
 import { useLeave } from "@/views/scope-shared"
-import { useDrag } from "@/views/tasks"
+import { useDrag } from "@/views/task-parts"
 import { Truth } from "@/views/value-parts"
 
 type Live = ProgramDetail["states"][number]["next"][number]
@@ -108,6 +108,7 @@ export function TransitionForm({ spec, start, at, index, states, live, onSave, o
 function Body({ st, spec, start, at, index, states, live, rules, onDirty }: {
   st: Staged; spec?: BranchSpec; start?: string; at: { program: string; state: string }; index: number; states: string[]; live?: Live; rules: string[]; onDirty?: () => void
 }) {
+  const [making, setMaking] = useState(false)
   const was  = spec?.when ?? []
   const sensors = useDrag()
   const [blank, setBlank] = useState<number[]>([])  // rows picked as a rule, with none chosen yet
@@ -131,12 +132,15 @@ function Body({ st, spec, start, at, index, states, live, rules, onDirty }: {
       <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t pt-4 text-xs">
         <span className="font-medium">Goto</span>
         <span>
-          <Pick label="Goto" value={goto} arrow changed={"goto" in st.patch}
+          {making ? <Editable label="New state name" value={goto} editing placeholder="new_state" code
+                              onSave={async (value) => (hold("goto", value.trim(), spec?.goto ?? ""), null)}
+                              onType={(value) => hold("goto", value.trim(), spec?.goto ?? "")} /> : <Pick label="Goto" value={goto} arrow changed={"goto" in st.patch}
                 options={(states.includes(goto) ? states : [...states, goto]).filter(Boolean).map((s) => [s, <span key={s} className="font-mono">{humane(s)}</span>])}
                 onPick={(s) => hold("goto", s, spec?.goto ?? start ?? states[0] ?? "")}
                 className="rounded-md border bg-muted px-3 py-1 font-mono text-xs no-underline hover:no-underline">
             <span className="font-mono">{humane(goto) || "a state"}</span>
-          </Pick>
+          </Pick>}
+          {!making && <Button type="button" size="xs" variant="ghost" onClick={() => { hold("goto", "", spec?.goto ?? ""); setMaking(true) }}>New state</Button>}
         </span>
         <span className="font-medium">When</span>
         <span className="flex h-6 items-center justify-between">

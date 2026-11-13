@@ -11,11 +11,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { Type } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { TemplateBox } from "@/views/code"
-import { ANSWERS, Criteria, KindTabs, OptionsFrom, SchemaFields, TypeIcon } from "@/views/fields"
+import { ANSWERS, Criteria, KindTabs, OptionsFrom, SchemaFields, TypeIcon } from "@/views/field-parts"
 import { CHANGED, Drafted, Editable, typing } from "@/views/in-place"
 import { NAMES, RowFields } from "@/views/action-rows"
-import { contextOf } from "@/views/program-forms"
-import { useDrag } from "@/views/tasks"
+import { contextOf } from "@/lib/context"
+import { useDrag } from "@/views/task-parts"
 
 type Params = Record<string, unknown>
 type Put    = (key: string, value: unknown) => void

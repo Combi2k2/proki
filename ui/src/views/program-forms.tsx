@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import type { MediaItem, StateSpec } from "@/lib/proki"
+import type { MediaItem } from "@/lib/proki"
+import { contextOf } from "@/lib/context"
 import { cn } from "@/lib/utils"
-import { BARE, CodeInput } from "@/views/code"
-import { KindTabs, OptionsFrom } from "@/views/fields"
+import { BARE } from "@/views/code"
+import { KindTabs, OptionsFrom } from "@/views/field-parts"
 import { CHANGED_LINE, Editable, Pick, useStaged } from "@/views/in-place"
 import { file, MediaPicker } from "@/views/media"
 import { ActionRows, ACTION_ROWS, NAMES, RowFields, rowField } from "@/views/action-rows"
@@ -24,17 +25,17 @@ export { NAMES }
 
 const TIMEOUT: Record<string, number> = { ask_usr: 120, ask_jev: 10, ask_llm: 10 }  // seconds, unless it says
 export const ACTIONS: Record<string, [string, LucideIcon, string]> = {  // each action's name, its icon, and the tint behind it
-  poke:    ["Poke",   Bell,                      "bg-sky-500/15 text-sky-700 dark:text-sky-300"],
-  ask_usr: ["Ask",    MessageCircleQuestionMark, "bg-sky-500/15 text-sky-700 dark:text-sky-300"],
-  lock:    ["Lock",   Lock,                      "bg-amber-500/15 text-amber-700 dark:text-amber-300"],
-  open:    ["Open",   AppWindow,                 "bg-amber-500/15 text-amber-700 dark:text-amber-300"],
-  ask_llm: ["LLM",    Bot,                       "bg-violet-500/15 text-violet-700 dark:text-violet-300"],
-  ask_jev: ["Jev",    KeySquare,                 "bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300"],
-  set:     ["Set",    Equal,                     "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"],
-  add:     ["Add",    Plus,                      "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"],
-  sub:     ["Sub",    Minus,                     "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"],
-  append:  ["Append", ListPlus,                  "bg-orange-500/15 text-orange-700 dark:text-orange-300"],
-  remove:  ["Remove", ListMinus,                 "bg-orange-500/15 text-orange-700 dark:text-orange-300"],
+  poke:    ["Poke",   Bell,                      "tint-sky"],
+  ask_usr: ["Ask",    MessageCircleQuestionMark, "tint-sky"],
+  lock:    ["Lock",   Lock,                      "tint-amber"],
+  open:    ["Open",   AppWindow,                 "tint-amber"],
+  ask_llm: ["LLM",    Bot,                       "tint-violet"],
+  ask_jev: ["Jev",    KeySquare,                 "tint-fuchsia"],
+  set:     ["Set",    Equal,                     "tint-emerald"],
+  add:     ["Add",    Plus,                      "tint-emerald"],
+  sub:     ["Sub",    Minus,                     "tint-emerald"],
+  append:  ["Append", ListPlus,                  "tint-orange"],
+  remove:  ["Remove", ListMinus,                 "tint-orange"],
 }
 
 /** An action's icon on its tint, as its state shows it. */
@@ -134,30 +135,6 @@ function Form({ children, onSave, onCancel, saveLabel = "Save", plain, onDirty }
   )
 }
 
-/** A field: its label, a hint beside it, then what it holds (`group`: several controls of their
- *  own, so a click on one isn't taken as one on the first). */
-function Field({ label, hint, group, children, className }: { label: string; hint?: string; group?: boolean; children: ReactNode; className?: string }) {
-  const Box = group ? "div" : "label"
-  return (
-    <Box role={group ? "group" : undefined} aria-label={group ? label : undefined} className={cn("flex min-w-0 flex-col gap-1", className)}>
-      <span className="text-xs font-medium">{label}{hint && <span className="ml-1.5 font-normal text-muted-foreground">{hint}</span>}</span>
-      {children}
-    </Box>
-  )
-}
-
-function Text({ value, onChange, code, names, ...props }: {
-  value: string
-  onChange: (value: string) => void
-  code?: boolean
-  names?: boolean
-} & Omit<React.ComponentProps<"input">, "value" | "onChange">) {
-  if (names || code) return <CodeInput value={value} onChange={(e) => onChange(e.target.value)} list={names ? NAMES : undefined} className="h-8 text-xs" {...props} />
-  return <Input value={value} onChange={(e) => onChange(e.target.value)} className={cn("h-8 text-sm", code && "font-mono text-xs")} spellCheck={!code} {...props} />
-}
-
-// --- a program, a state, a way out ----------------------------------------------------------
-
 // --- an action ------------------------------------------------------------------------------
 
 type Params = Record<string, unknown>
@@ -197,14 +174,15 @@ export function ActionForm({ spec, at, taken, onSave, onCancel, onDirty }: {
     <Form onCancel={onCancel} onSave={save} plain onDirty={onDirty}>
       {!spec && (
         <DialogHeader>
-          <DialogTitle>
-            <Pick label="Kind" value={kind} arrow className="gap-2 text-base"
-                  options={Object.entries(ACTIONS).map(([k, [said, Icon, tint]]) => [k, <><Tinted icon={Icon} tint={tint} />{said}</>])}
-                  onPick={(k) => { if (name === free(kind, taken)) setName(free(k, taken)); setKind(k); setParams(START[k] ?? {}) }} />
-          </DialogTitle>
+          <DialogTitle>New action</DialogTitle>
           <DialogDescription asChild><div><Editable label="Description" value={desc} long placeholder="No description" onSave={async (t) => (setDesc(t), null)} className="text-sm text-muted-foreground" /></div></DialogDescription>
         </DialogHeader>
       )}
+      <dl className="spec-rows items-center">
+        <dt className="text-muted-foreground">Kind</dt>
+        <dd><Pick label="Kind" value={kind} arrow options={Object.entries(ACTIONS).map(([k, [said, Icon, tint]]) => [k, <><Tinted icon={Icon} tint={tint} />{said}</>])}
+                  onPick={(k) => { onDirty?.(); if (name === free(kind, taken)) setName(free(k, taken)); setKind(k); setParams(START[k] ?? {}) }} /></dd>
+      </dl>
       {kind in ACTION_ROWS && <ActionRows kind={kind} field={rowField(params, set)} />}
       {kind === "poke" && <PopupFields kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />}
       {kind === "ask_usr" && <PopupFields ask kind={kind} params={params} commit={async (patch) => (Object.entries(patch).forEach(([k, v]) => set(k, v)), null)} picks={picks} pick={pick} />}
@@ -239,13 +217,6 @@ export function cleaned(kind: string, params: Params): Params {
   return kept
 }
 
-export type Pair = [string, string]
-
-/** What's said, as the popup shows it: its text with {name}s filled from expressions. */
-export const contextOf = (value: unknown) => {
-  const context = typeof value === "string" ? { format: value, values: {} } : (value as { format?: string; values?: Record<string, string> | Pair[] }) ?? {}
-  return { format: context.format ?? "", values: (Array.isArray(context.values) ? context.values : Object.entries(context.values ?? {})) as Pair[] }
-}
 
 /** What's new in `now` (a flag each), and where something of `was` isn't any more (the place among `now` it was at). */
 function compared(was: string[], now: string[]) {
@@ -287,9 +258,9 @@ function OptionsTable({ options, was, preselected, preselectChanged, onChange }:
   const take = (i: number) => onChange(options.filter((_, j) => j !== i), preselected === undefined || preselected === i ? undefined : preselected > i ? preselected - 1 : preselected)
   return (
     <div className="relative rounded-md border text-xs">
-      <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 border-b bg-muted/40 py-1 pr-16 pl-2 text-muted-foreground"><span>Index</span><span>Label</span></div>
+      <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 bg-muted/40 py-1 pr-16 pl-2 text-muted-foreground"><span>Index</span><span>Label</span></div>
       {options.map((label, i) => (
-        <div key={i} className={cn("group/row relative border-b last:border-b-0", preselected === i && "bg-muted/50", diff?.added[i] && "bg-added/10")}>
+        <div key={i} className={cn("group/row relative border-t", preselected === i && "bg-muted/50", diff?.added[i] && "bg-added/10")}>
           {lost(i).length > 0 && <Gone labels={lost(i)} className="-top-[5px]" />}
           <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-3 px-2 py-2.5 pr-16">
             <span className="text-muted-foreground tabular-nums">{i}</span>

@@ -8,10 +8,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Pick } from "@/views/in-place"
 import { cn } from "@/lib/utils"
 import { dayOf, endOf, type Task } from "@/lib/proki"
-import { Editable, ItemList, Notes, Section } from "@/views/task-parts"
+import { AutoSaveText, ItemList, Notes, Section } from "@/views/task-parts"
 
 /** A task over its group's dialog, each part changed where it is and saved as you leave it (`onChange`: a request to the board). */
 export function TaskDialog({ task, tasks, onChange, onClose }: { task: Task; tasks: Task[]; onChange: (request: object) => Promise<unknown>; onClose: () => void }) {
@@ -26,7 +26,7 @@ export function TaskDialog({ task, tasks, onChange, onClose }: { task: Task; tas
           <div className="min-w-0 flex-1 pr-8">
             <DialogTitle className="sr-only">{task.name}</DialogTitle>
             <DialogDescription className="sr-only">What it is, what done looks like, what it waits for, and your notes on it.</DialogDescription>
-            <Editable value={task.name} multiline className="text-lg font-semibold" onSave={(name) => set({ name })} />
+            <AutoSaveText label="Task name" value={task.name} multiline className="text-lg font-semibold" onSave={(name) => set({ name })} />
             {task.status !== "open" && <Badge variant="secondary" className="mt-1 ml-1.5 capitalize">{task.status}</Badge>}
           </div>
         </div>
@@ -51,10 +51,10 @@ export function TaskDialog({ task, tasks, onChange, onClose }: { task: Task; tas
                             onClick={() => set({ after: task.after.filter((id) => id !== t.id) })}><X className="size-3" /></button>
                   </Badge>
                 ))}
-                <NativeSelect size="sm" value="" className="w-56" onChange={(e) => e.target.value && set({ after: [...task.after, Number(e.target.value)] })}>
-                  <NativeSelectOption value="">+ A task it needs first</NativeSelectOption>
-                  {tasks.filter((t) => t.id !== task.id && !task.after.includes(t.id)).map((t) => <NativeSelectOption key={t.id} value={t.id}>{t.name}</NativeSelectOption>)}
-                </NativeSelect>
+                <Pick label="Add a dependency" value="" arrow onPick={(id) => set({ after: [...task.after, Number(id)] })}
+                      options={tasks.filter((t) => t.id !== task.id && !task.after.includes(t.id)).map((t) => [String(t.id), t.name])}>
+                  + A task it needs first
+                </Pick>
               </div>
             </Section>
 

@@ -15,11 +15,11 @@ import { cn } from "@/lib/utils"
 import { NAMES, parseSide, parseSpan, SpanField, type Save } from "@/views/program-forms"
 import { parseValue, valueText } from "@/lib/typed"
 import { Expr } from "@/views/code"
-import { Chip, fieldKeys, Pill, type Reader, ItemChange, kindOf, RecordFields, said, SCALARS, SchemaFields, schemaOf, StagedFields, TypeChange, TypeIcon } from "@/views/fields"
+import { RecordFields } from "@/views/fields"
+import { Chip, fieldKeys, Pill, type Reader, ItemChange, kindOf, said, SCALARS, SchemaFields, schemaOf, StagedFields, TypeChange, TypeIcon } from "@/views/field-parts"
 import { Editable, Pick, Staging, Term, typing, useStaged } from "@/views/in-place"
 import { shown, SYMBOL } from "@/views/program-inspect"
 import { Collection, emptyOf, Inspect } from "@/views/inspect"
-import { same } from "@/views/value-draft"
 import { collection, Flag, Opens, Scalar, Truth } from "@/views/value-parts"
 import { goToPlace, Places } from "@/views/places"
 import { AddButton, Detail, Apply, CHANGED, Kind, LINE, RESOURCE, Running, Spec, goTo, takeover, useSpecs } from "@/views/scope-shared"
@@ -329,46 +329,14 @@ async function setValue(name: string, to: unknown): Promise<string | null> {
   return (answer.error as string | undefined) ?? null
 }
 
-type Rec = Record<string, unknown>
-
-/** A variable's value kept as `after`. A table's records are kept by the changes that make it (one taken out, added, changed or moved: as the board
- * itself does them), anything else as one value. */
-async function keepValue(name: string, before: unknown, after: unknown): Promise<string | null> {
+/** A value saved once; record tables use their atomic row operation to preserve ids and links. */
+async function keepValue(name: string, after: unknown): Promise<string | null> {
   const read = Array.isArray(after) ? await window.proki.fields({ op: "read", record: name }) : null
-  if (!read || read.error || !read.records.includes(name)) return setValue(name, after)
-  const keys  = new Set(read.fields.map((f) => f.key))
-  const were  = (Array.isArray(before) ? before : []) as Rec[]
-  const rows  = after as Rec[]
-  const ids   = new Set(rows.map((r) => r.id))
-  const call  = async (tool: "add_record" | "change_record" | "remove_record" | "move_record", args: object) => (await window.proki.tool(tool, { name, ...args })) as { error?: string; id?: number }
-  for (const r of were.filter((r) => !ids.has(r.id))) {
-    const done = await call("remove_record", { id: r.id })
-    if (done.error) return done.error
-  }
-  const order: number[] = []
-  for (const row of rows) {
-    const fields = Object.fromEntries(Object.entries(row).filter(([k]) => keys.has(k)))
-    if (row.id == null) {
-      const done = await call("add_record", { fields })
-      if (done.error) return done.error
-      order.push(done.id!)
-      continue
-    }
-    const old     = were.find((r) => r.id === row.id)
-    const changed = Object.fromEntries(Object.entries(fields).filter(([k, v]) => !same(old?.[k], v)))
-    if (Object.keys(changed).length) {
-      const done = await call("change_record", { id: row.id, fields: changed })
-      if (done.error) return done.error
-    }
-    order.push(row.id as number)
-  }
-  const there = [...were.map((r) => r.id as number).filter((id) => ids.has(id)), ...order.filter((id) => !were.some((r) => r.id === id))]  // as it stands now
-  if (!same(there, order)) {
-    for (let i = order.length - 1; i >= 0; i--) {
-      const done = await call("move_record", { id: order[i], before: order[i + 1] ?? null })
-      if (done.error) return done.error
-    }
-  }
+  if (!read || read.error || !read.records.includes(name)) return setValue(name, after)  // not a kind of record (track.all): kept as one value
+  const keys = new Set(["id", ...read.fields.map((f) => f.key)])
+  const rows = (after as Record<string, unknown>[]).map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => keys.has(key))))
+  const done = await window.proki.tool("save_records", { name, rows })
+  if (done.error) return done.error
   window.dispatchEvent(new Event(CHANGED))
   return null
 }
@@ -382,7 +350,7 @@ export function useSetter(name: string | undefined, active: boolean, value: unkn
     window.proki.tool("links", { name }).then((answer) => live && setYours(!answer.error && (answer as Links).writes.some((w) => w.from === "user" && !w.program)))
     return () => void (live = false)
   }, [name, active])
-  return yours && name ? (to) => keepValue(name, value, to) : undefined
+  return yours && name ? (to) => keepValue(name, to) : undefined
 }
 
 /** Its value now: a rule's, its chance. */
@@ -461,7 +429,7 @@ function Seen({ kind, row, spec, name, full, desc, type, value, settable: open =
   const own     = (spec as { type?: Type } | undefined)?.type
   const lasts   = persist ? "across restarts" : { special: "", global: "until Proki restarts", program: "until the automation starts over", state: "until it leaves this state" }[scope ?? "global"]
   const user    = open && kind === "variable" && !!links?.writes.some((w) => w.from === "user" && !w.program)
-  const put = (to: unknown) => keepValue(full, value, to)
+  const put = (to: unknown) => keepValue(full, to)
   const worked: Worked | undefined = kind === "signal" ? {
     said:   signal?.expr ?? expr ?? "",
     detail: signal && save ? <Formula expr={signal.expr} />
@@ -494,7 +462,7 @@ function Seen({ kind, row, spec, name, full, desc, type, value, settable: open =
                 gone={{ variable: kindOf(type) === "list" && (type as { items?: { type?: string } }).items?.type === "object" ? "Its records go with it." : "Its saved value goes with it.",
                         signal: "Its saved history goes with it." }[kind as string]}
                 onDelete={onDelete && !links?.reads.length ? () => (onDelete(), onClose()) : undefined} />
-        <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 border-t pt-4 text-xs">
+        <dl className="spec-rows items-baseline">
           {kind !== "rule" && <><Term>Type</Term><dd><TypeChange type={type} own={own} editable={!!save && !kept} kinds={kind === "signal" ? SCALARS : undefined} /></dd></>}
           <Term>Now</Term>
           <dd className="flex *:w-auto *:justify-start"><Value value={value} rule={kind === "rule"} name={name} full onPut={user ? put : undefined} string={said(type) === "string"} type={type} record={full} /></dd>
@@ -627,7 +595,7 @@ function Linked({ links, worked, rule, measured, user: set, onLeave }: {
   ].filter(Boolean) as Entry[]
   return (
     <TooltipProvider delayDuration={300}>
-      <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2 border-t pt-4 text-xs">
+      <dl className="spec-rows items-center">
         {!rule && <Chips title="Written by" rows={written} empty="None." onOpen={setOpen} />}
         <Chips title="Read by" rows={read} empty="None." onOpen={(id) => setOpen(`read:${id}`)} />
       </dl>
@@ -648,7 +616,7 @@ function Linked({ links, worked, rule, measured, user: set, onLeave }: {
         <Detail title={<><Pill by={open.slice(5) as Reader} /> Read by</>} about={open === "read:variable" ? "Each starts from its value." : `Each ${open.slice(5)} is worked out from it.`} onClose={() => setOpen(null)}>
           <ul className="flex flex-col rounded-md border text-xs">
             {named(open.slice(5)).map((n) => (
-              <li key={n} className="border-b last:border-b-0">
+              <li key={n} className="border-t first:border-t-0">
                 <button type="button" onClick={() => setSeen({ kind: open.slice(5) as Kind, name: n })}
                         className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left hover:bg-muted/60">
                   <code className="font-mono">{n}</code><ChevronRight className="size-3.5 text-muted-foreground" />
@@ -790,10 +758,11 @@ function Defining({ kind, where, onSave, onClose }: { kind: Kind; where: Where; 
       rule:     { lhs: "", cmp: "gt", rhs: "", softness: 0, level: 1 },
     }[kind]
     const table = kind === "variable" && where.scope === "global" && kindOf(type) === "list" && ((type as { items?: { type?: string } }).items?.type === "object")  // a table: made empty, its rows added after
-    const rows  = table && typeof given.value === "string" ? JSON.parse(given.value) as Rec[] : []
+    const rows  = table && typeof given.value === "string" ? JSON.parse(given.value) as Record<string, unknown>[] : []
     const mistake = await onSave({ name: "", desc: "", ...data, ...given, ...(table ? { value: null } : {}), ...(kind === "rule" ? {} : { type }), scope: where.scope })
     if (mistake) return mistake
-    for (const fields of rows) await window.proki.tool("add_record", { name: given.name, fields })
+    const filled = rows.length ? await window.proki.tool("save_records", { name: given.name, rows }) : null
+    if (filled?.error) return `The table is made, but not its rows: ${filled.error}`
     onClose()
     return null
   }
@@ -816,7 +785,7 @@ function Defining({ kind, where, onSave, onClose }: { kind: Kind; where: Where; 
                   </DialogTitle>
                   <DialogDescription asChild><div><Editable label="Description" long placeholder="No description" {...st.field("desc", "")} /></div></DialogDescription>
                 </DialogHeader>
-                <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 border-t pt-4 text-xs">
+                <dl className="spec-rows items-baseline">
                   {kind !== "rule" && <><Term>Type</Term><dd><TypeChange type="any" own="any" editable kinds={kind === "signal" ? SCALARS : undefined} /></dd></>}
                   {kind === "variable" && <ItemChange own="any" editable />}
                   {kind === "variable" && <><Term>Starts as</Term><dd><Starts type={type} name={name || "variable"} was="" editable /></dd></>}

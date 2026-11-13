@@ -2,15 +2,13 @@
 
 import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
 import { type ProgramDetail, type StateSpec } from "@/lib/proki"
 import { humane } from "@/lib/friendly"
 import { cn } from "@/lib/utils"
-import { CHANGED_LINE, type Staged } from "@/views/in-place"
+import { CHANGED_LINE, Editable, type Staged } from "@/views/in-place"
 
 type Live = ProgramDetail["states"][number]
 
-const PLAIN = { autoCapitalize: "off", autoCorrect: "off", spellCheck: false } as const  // names, as typed
 const SIZE  = 104, WIDTH = 7, RADIUS = (SIZE - WIDTH) / 2  // ring + period (8 + 28) is as tall as the name and the description beside them (16 + 4 + 32, 8, 16 + 4 + 60)
 
 /** Seconds left as a clock: 4:05, or 1:02:05 past an hour. */
@@ -67,21 +65,12 @@ export function StateHead({ st, state, spec, live, detail, onTitle }: { st: Stag
       </div>
     </div>
   )
-  const shown = (key: "name" | "desc") => (st.patch[key] as string | undefined) ?? spec[key]
   return (
     <div className="flex items-start gap-4">
       <Cycle text={String(st.patch.every ?? seconds)} waking={waking} changed={"every" in st.patch} onType={(t) => st.put("every", t, String(seconds))} />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Name</span>
-          <Input value={shown("name")} onChange={(e) => st.put("name", e.target.value, spec.name)} placeholder="waiting" {...PLAIN}
-                 className={cn("h-8 font-mono text-xs", st.lit("name") && CHANGED_LINE)} />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Description</span>
-          <Textarea value={shown("desc")} onChange={(e) => st.put("desc", e.target.value, spec.desc)} placeholder={live.desc || "An hour of work"}
-                    className={cn("h-[3.75rem] min-h-0 resize-none field-sizing-fixed text-sm", st.lit("desc") && CHANGED_LINE)} />
-        </label>
+        <Editable label="Name" {...st.field("name", spec.name)} className="font-mono text-sm font-medium" />
+        <Editable label="Description" long {...st.field("desc", spec.desc)} placeholder="No description." className="text-sm" />
       </div>
     </div>
   )

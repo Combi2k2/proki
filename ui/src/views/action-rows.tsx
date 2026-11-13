@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { Reference, Type } from "@/lib/proki"
 import { exprText, parseExpr } from "@/lib/typed"
 import { Editable, Pick } from "@/views/in-place"
-import { kindOf, schemaOf, TypeIcon } from "@/views/fields"
+import { kindOf, schemaOf, TypeIcon } from "@/views/field-parts"
 import { Making } from "@/views/inspect"
 import { Opens } from "@/views/value-parts"
 
@@ -64,7 +64,7 @@ function OpenRows({ field }: { field: Field }) {
   const card = PAGES.find(([v]) => v === shown.view)?.[2]
   const set  = (view: string, more: string) => void path.onSave?.(pathFrom(view, more))
   return (
-    <dl className="grid grid-cols-[6rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 border-t pt-4 text-xs">
+    <dl className="spec-rows items-start">
       <dt className="py-1.5 text-muted-foreground">Page</dt>
       <dd>
         <Pick label="Page" value={shown.view} arrow changed={path.changed} className="w-full justify-between rounded-md bg-muted px-2 py-1.5 text-xs hover:no-underline"

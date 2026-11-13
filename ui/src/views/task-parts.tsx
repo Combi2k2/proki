@@ -7,7 +7,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { Plus, Trash2, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select"
+import { Pick } from "@/views/in-place"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import type { Rows } from "@/lib/proki"
@@ -47,26 +47,22 @@ export function TagEditor({ tags, rows, onSave }: { tags: string[]; rows: Rows; 
         </SortableContext>
       </DndContext>
       {tags.length < 3 && (
-        <NativeSelect size="sm" value="" className="w-40" onChange={(e) => e.target.value && onSave([...tags, e.target.value])}>
-          <NativeSelectOption value="">+ Add a tag</NativeSelectOption>
-          {Object.entries(rows).map(([name, inRow]) => (
-            <NativeSelectOptGroup key={name} label={name}>
-              {inRow.filter((tag) => row[tag] === name && !tags.includes(tag)).map((tag) => <NativeSelectOption key={tag} value={tag}>{tag}</NativeSelectOption>)}
-            </NativeSelectOptGroup>
-          ))}
-        </NativeSelect>
+        <Pick label="Add a tag" value="" arrow onPick={(tag) => onSave([...tags, tag])}
+              options={Object.entries(rows).flatMap(([name, inRow]) => inRow.filter((tag) => row[tag] === name && !tags.includes(tag)).map((tag): [string, string] => [tag, `${name}: ${tag}`]))}>
+          + tag
+        </Pick>
       )}
     </div>
   )
 }
 
-/** A tag as a chip that's carried: the first, the most relevant, is filled. */
+/** A tag as a chip that's carried, grey: the first, the most relevant, outlined and brighter. */
 function SortableTag({ tag, first, onRemove }: { tag: string; first: boolean; onRemove: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: tag })
   return (
-    <Badge ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} {...attributes} {...listeners} variant={first ? "default" : "secondary"}
+    <Badge ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} {...attributes} {...listeners} variant="secondary"
            title={first ? "The most relevant: the card is in its row. Drag a tag to put it first." : "Drag to put it where it belongs"}
-           className={cn("h-6 cursor-grab touch-none", isDragging && "z-10 opacity-60 shadow-md")}>
+           className={cn("h-6 cursor-grab touch-none", first ? "font-medium text-foreground ring-1 ring-foreground/30" : "text-muted-foreground", isDragging && "z-10 opacity-60 shadow-md")}>
       {tag}
       <button aria-label={`Remove ${tag}`} onPointerDown={(e) => e.stopPropagation()} className="-mr-1 rounded-full p-0.5 opacity-60 hover:bg-foreground/10 hover:opacity-100" onClick={onRemove}><X className="size-3" /></button>
     </Badge>
@@ -80,7 +76,7 @@ export function ItemList({ items, add, placeholder, max, onSave }: { items: stri
       {items.map((item, i) => (
         <div key={`${i}-${item}`} className="group/item flex items-start gap-1.5">
           <span aria-hidden className="mt-2.5 size-1 shrink-0 rounded-full bg-muted-foreground" />
-          <Editable value={item} multiline className="text-sm" onSave={(t) => onSave(items.map((x, j) => (j === i ? t : x)))} />
+          <AutoSaveText label={`Item ${i + 1}`} value={item} multiline className="text-sm" onSave={(t) => onSave(items.map((x, j) => (j === i ? t : x)))} />
           <Button variant="ghost" size="icon-xs" aria-label={`Take out “${item}”`} title="Take it out" onClick={() => onSave(items.filter((_, j) => j !== i))}
                   className="mt-0.5 text-muted-foreground opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100 hover:text-destructive"><Trash2 /></Button>
         </div>
@@ -91,8 +87,8 @@ export function ItemList({ items, add, placeholder, max, onSave }: { items: stri
 }
 
 /** A line of text that's edited where it is: saved as you leave it, or with Enter. Escape: as it was. */
-export function Editable({ value, onSave, className, multiline = false }: {
-  value: string; onSave: (value: string) => void; className?: string; multiline?: boolean
+export function AutoSaveText({ label, value, onSave, className, multiline = false }: {
+  label: string; value: string; onSave: (value: string) => void; className?: string; multiline?: boolean
 }) {
   const [text, setText] = useState(value)
   useEffect(() => setText(value), [value])
@@ -111,10 +107,10 @@ export function Editable({ value, onSave, className, multiline = false }: {
   const style = cn("w-full min-w-0 rounded-md bg-transparent px-1.5 py-0.5 outline-none hover:bg-muted/70 focus:bg-background focus:ring-2 focus:ring-ring/40", className)
 
   return multiline ? (
-    <textarea value={text} rows={1} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={keys}
+    <textarea aria-label={label} value={text} rows={1} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={keys}
               className={cn(style, "field-sizing-content resize-none")} />
   ) : (
-    <input value={text} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={keys}
+    <input aria-label={label} value={text} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={keys}
            className={cn(style, "field-sizing-content max-w-full")} />
   )
 }

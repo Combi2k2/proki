@@ -19,12 +19,12 @@ export function Places({ places, onVisit }: { places: Place[]; onVisit: (p: Plac
   const ROW = "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] items-center gap-3 px-2"
   return (
     <div className="rounded-md border text-xs">
-      <div className={cn(ROW, "border-b bg-muted/40 py-1 text-xs text-muted-foreground")}><span>Automation</span><span>State</span><span>Where</span></div>
+      <div className={cn(ROW, "bg-muted/40 py-1 text-xs text-muted-foreground")}><span>Automation</span><span>State</span><span>Where</span></div>
       {places.map((p, i) => {
         const [name, Icon, tint] = p.by === "condition" ? [`Transition ${(p.at ?? 0) + 1}`, Split, "bg-muted text-muted-foreground"] : ACTIONS[p.kind ?? ""] ?? [p.kind ?? "action", Code, "bg-muted text-muted-foreground"]
         return (
           <button key={i} type="button" onClick={() => onVisit(p)}
-                  className={cn(ROW, "w-full border-b py-1.5 text-left last:border-b-0 hover:bg-muted/60")}>
+                  className={cn(ROW, "w-full border-t py-1.5 text-left hover:bg-muted/60")}>
             <span className="truncate font-mono font-medium">{p.program}</span>
             <span className="truncate font-mono">{humane(p.state ?? "")}</span>
             <span className="flex min-w-0 items-center gap-1.5">

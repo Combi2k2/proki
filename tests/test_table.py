@@ -136,3 +136,18 @@ def test_a_fields_jev_ask_is_checked_as_ask_jev_checks_it():
     Field("size", srcs=[{"from": "jev", "type": "score", "question": "How big?", "criteria": {"1": "tiny", "10": "huge"}}])
     with pytest.raises(ValueError):
         Field("size", srcs=[{"from": "jev", "type": "nope", "question": "How big?"}])
+
+
+def test_record_editor_batch_preserves_ids_and_rolls_back_on_invalid_row(tasks):
+    from proki.tools.records import save
+
+    a, b = tasks.set([{"title": "a", "estimate": 3}, {"title": "b", "estimate": 4}])
+    with pytest.raises(VariableError):
+        save(tasks.name, [{"id": b, "title": "changed"}, {"title": "bad", "estimate": "invalid"}])
+    assert [(r["id"], r["title"]) for r in tasks.current()] == [(a, "a"), (b, "b")]
+    ids = save(tasks.name, [{"id": b, "title": "changed"}, {"title": "new", "estimate": 5}])
+    assert ids[0] == b
+    assert [(r["id"], r["title"]) for r in tasks.current()] == [(b, "changed"), (ids[1], "new")]
+    assert tasks.current()[0]["estimate"] == 4
+    with pytest.raises(ValueError, match="only appear once"):
+        save(tasks.name, [{"id": b}, {"id": b}])

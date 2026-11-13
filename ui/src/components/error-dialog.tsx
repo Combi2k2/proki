@@ -18,7 +18,7 @@ export function ErrorDialog({ message, stuck = unresolvable(message), onClose }:
       <AlertDialogContent size="sm" onEscapeKeyDown={(e) => stuck && e.preventDefault()}>
         <AlertDialogHeader>
           <AlertDialogTitle>{stuck ? "Proki isn't answering" : "That didn't work"}</AlertDialogTitle>
-          <AlertDialogDescription className="break-words">{message}{stuck && `${/[.!?]$/.test(message) ? "" : "."} This goes away once it answers again.`}</AlertDialogDescription>
+          <AlertDialogDescription className="break-words">{message}{/[.!?]$/.test(message) ? "" : "."} {stuck ? "Check that Proki is running. This closes when it reconnects." : "Change what it names, then try again."}</AlertDialogDescription>
         </AlertDialogHeader>
         {!stuck && <AlertDialogFooter><AlertDialogAction onClick={onClose}>OK</AlertDialogAction></AlertDialogFooter>}
       </AlertDialogContent>

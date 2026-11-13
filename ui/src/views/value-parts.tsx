@@ -4,7 +4,7 @@
 import { useState } from "react"
 import { Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { parsed } from "@/views/fields"
+import { parsed } from "@/views/field-parts"
 import { Editable, HELD } from "@/views/in-place"
 import { shown } from "@/views/program-inspect"
 
@@ -46,8 +46,8 @@ export function Opens({ value, onOpen, className }: { value: unknown; onOpen: ()
 
 /** Whether something holds: a green tick, a red cross, a dash when it isn't known. */
 export function Truth({ value }: { value: unknown }) {
-  if (value === true)  return <Check aria-label="true" className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-  if (value === false) return <X aria-label="false" className="size-3.5 shrink-0 text-red-600 dark:text-red-400" />
+  if (value === true)  return <Check aria-label="true" className="size-3.5 shrink-0 text-added" />
+  if (value === false) return <X aria-label="false" className="size-3.5 shrink-0 text-destructive" />
   return <span aria-label="unknown" className="w-3.5 shrink-0 text-center text-muted-foreground">–</span>
 }
 

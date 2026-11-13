@@ -33,13 +33,30 @@ React uses composition and variants for shared behaviour and styles. Do not buil
 | Button, input, dialog and table primitives | `ui/src/components/ui/` | Its existing variant, size and `className` APIs |
 | Destructive confirmation | `ui/src/components/confirm.tsx` | The action and loss described in its props |
 | Page title and search | `ui/src/components/page.tsx` | `PageHeader` and `SearchBox` props |
-| Read/edit values, choices and drafts | `ui/src/views/in-place.tsx` | `Editable`, `Pick` and `Staging` props |
+| Read/edit values, choices and drafts | `ui/src/views/in-place.tsx` | `Editable`, `Pick`, `Staging` (and `onDirtyChange` to ask before closing), `PLAIN` for names typed |
+| Task text saved as you leave it | `ui/src/views/task-parts.tsx` | `AutoSaveText`, always given a `label`; `useDrag` for every sortable list |
 | Expression and template rendering | `ui/src/views/code.tsx` | `Expr`, `TemplateBox` and the shared fit behaviour |
 | Resource and record values | `ui/src/views/inspect.tsx`, `ui/src/views/value-parts.tsx` | `Inspect`, `Collection` and scalar or collection variants |
-| Source, reader, type and tag chips | `ui/src/views/fields.tsx`, `ui/src/views/program-new.tsx` | `Chip`, `Pill`, `TypeIcon` and `TagChip`; move cross-feature owners out of view files as they are consolidated |
+| Source, reader, type and tag chips, the fields table's parts | `ui/src/views/field-parts.tsx`, `ui/src/views/program-new.tsx` | `Chip`, `Pill`, `TypeIcon`, `SOURCES` and `TagChip` (`fields.tsx` is the record-fields feature, not an owner) |
+| A prompt's text and values | `ui/src/lib/context.ts` | `contextOf` |
+| Spec rows and chip tints | `ui/src/index.css` | `spec-rows` (with `items-*` at the call site), `tint-<hue>` |
+| A table of records kept | `save_records` (`proki/tools/records.py`) | One call for the whole draft: every row kept or none. The one-record tools are for single edits |
 | Repeated section actions | `ui/src/views/scope-shared.tsx` | `AddButton` and `Block`; preserve heading semantics when a table heading differs from a section heading |
 
-The repeated spec-row grid in `fields.tsx`, `resources.tsx` and `action-rows.tsx` has no owner yet. Give its spacing and columns one focused component or style recipe, while leaving each kind's data and rows in its own view. Keep module dependencies one-way: shared primitives must not import a feature view. `tasks.tsx` also has a local `Editable`, but it saves on blur while spec values use a staged draft; keep those save policies explicit when consolidating either component.
+Keep module dependencies one-way: an owner above never imports a feature view, and one feature view never imports another (the Automations views once imported the Tasks page for `useDrag`). Spec values are staged until Save; task text saves as you leave it. These are the only two save policies, and their names say which is which.
+
+### What a refactor should achieve
+
+A refactor of `ui/src` is done when these hold. Check them with the commands in section 5 and the import scan, not by reading.
+
+1. **One save path for each level.** An inner dialog's Save hands its draft back, and only the bottom dialog writes. One user Save is one engine call, or a batch that is kept whole (`apply_changes`, `save_records`). A follow-up call made after the batch (such as pictures and sounds) reports its own failure without undoing the batch, and never asks for a retry that would repeat it.
+2. **One bar.** Every Save / Cancel is the `Staging` bar. No dialog builds its own.
+3. **One owner for each kind of thing.** A table in section 0 says where each one lives. A second copy of a const, a class recipe, a grid or a fetch is a finding, even when it is small.
+4. **No cycles and no feature-to-feature imports.** A shared part moves to the owner table before a second view imports it.
+5. **Nothing left behind.** No unused import, export or helper (`tsc --noUnusedLocals` is clean for the touched files). No file grows past 1,000 lines.
+6. **Native elements first.** A click target is a `<button>` or a link. A `role=button` div is only for a surface holding other controls, and then it has `tabIndex`, Enter and Space, and a visible focus ring.
+7. **Colour from `index.css`.** Use tokens, `tint-*` and `--type-*`, never a palette class in a view.
+8. **No change to what you decided.** A refactor keeps a behaviour or a look that a commit chose, even when an older line here says otherwise. Fix the line instead, and ask before changing the behaviour.
 
 ## 1. Style consistency
 
@@ -50,7 +67,7 @@ The repeated spec-row grid in `fields.tsx`, `resources.tsx` and `action-rows.tsx
 | Confirm at every level | A change is confirmed at each dialog it passes through, until the last. An action's or a transition's dialog has its own Save, which hands the change back to the dialog below and marks that row (blue: changed, green: new); a bin or a drag out of the dialog marks nothing, it takes the row out. Nothing reaches the engine until the bottom dialog's Save: a state dialog's one Save (at its foot) keeps its actions, its transitions, and its name, description and cycle together. Check that no inner dialog writes straight through, and that every level has the same Save / Cancel at its foot |
 | Table rows, no line at the foot | A table's rows are divided with `border-t` (the header has no line of its own), never `border-b last:border-b-0`: a drag list adds hidden elements after its rows, so the last row isn't `:last-child` and keeps a line under it, doubled with the table's border. Check every table with a drag list (conditions, questions) |
 | Dragging out deletes | A sortable row dragged beyond its dialog turns red with a bin and "Drop to delete" (`useLeave`). Dropping marks it for deletion in a draft, with Undo until Save; an immediate deletion asks first. Check actions, transitions and conditions. Jev questions, schema fields and options are still gaps where they are sortable |
-| Open entry, one layout | An entry opened from a card (an action, a transition, a question) follows the existing-spec dialog contract: identifying path, description, divider, rows, then Save for changed drafts. A state or program still edited in an inline form is inconsistent |
+| Open entry, one layout | An entry opened from a card (an action, a transition, a question) follows the existing-spec dialog contract: identifying path, description, divider, rows, then Save for changed drafts. A state's and a program's own head (name, description) are boxed fields like the search box, by choice; their rows below follow the contract |
 | Typed-over boxes | **Severe, anywhere there is one.** A box that draws coloured text under a transparent field you type in (the `Template` boxes: Prompt, Content, Context, Question; a long expression in an `Editable`) is never shorter than the typed text: `useFit` measures it and the box holds a spacer that high. Otherwise the field scrolls its own text inside a box too short for it, and a second, offset copy of the text runs over the border. Check with a long, many-line text that wraps, its end selected: the selection lies exactly on the coloured text, the field's `scrollHeight` equals its `clientHeight`, and the last line clears the bottom border. Any new box built this way uses `useFit` |
 | Overall palette | Only tokens from `index.css`, never a raw hex. Types use `--type-<kind>`; tints follow the sidebar. Change marks: blue underline (edited), green row (added), red arrow (taken out) |
 | Specs dialog design | Every spec follows the shared dialog contract. The same kind has the same rows in the same order. A spec dialog makes room for the Resources panel; a collection table is the full-window exception |
@@ -155,13 +172,13 @@ with an undo.
 **Media (F-008)**: pictures grid, sounds list, yours first → add by button or drop; rename keeps its key → pools are named sets.
 The picker inside an action dialog is the same grid, in a fixed-size box with "Add pictures" at the bottom.
 
-**Apps (F-009)**: a table of apps and sites → label, who gave it, how sure, tracked → click a label to choose from the list;
-a label you pick is yours. Filter by what's left to you.
+**Apps (F-009)**: a table of apps and sites, fitting the window → each led by its own icon (an app's, a site's favicon; else a window or a globe), its name cut short with …; label, depth, who gave it, as plain text (`user`, `dev`, `jev, 85%`), tracked, and a trash as you point at the row (asked first: it's gone until it's seen again) → click a label to choose from the list;
+a label you pick is yours. Filter by what's left to you; the search finds who gave it and the depth too.
 
 **Metrics (F-010)**: charts over a horizon → toggle signals, change kept time and buckets in the signal's own dialog.
 
 **Automations list (F-011)**: every automation as one card, in one list sorted by title, with a switch → one click opens the
-automation, the switch turns it on or off without opening. Under the title only "Little helpers that work on their own." (no counts); its buttons are just Reset (the global settings, when changed) and New. No grouping of its own: the 20 most used tags sit on top as `#tag`
+automation, the switch turns it on or off without opening. Under the title only "Little helpers that work on their own." (no counts); its buttons are just Reset (the global settings, when changed) and New. The cards are in groups by tag: the tag most of them have first, and so on, the untagged last. The groups have no titles and a hairline between them; each keeps the title order. Tag chips are grey (`bg-muted`); the one picked is brighter, with a thin ring. The 20 most used tags sit on top as `#tag`
 chips, and one clicked (or a tag on a card clicked) shows only the automations with it, clicked again shows all. A search box at the
 top right narrows by title, name, description or tag, together with the tag. A card is: its icon at the left, the title and the
 switch, what it does under the title, up to three `#tag` chips (`…` for the rest), and a foot with the state it is in (its name
@@ -174,7 +191,7 @@ ellipsis past two lines), the `#tag` chips under it; at the right the on/off swi
 it has changes to lose) and Delete icons, each asked first. The room above the switch equals the room below the icons, whatever the description's
 height. No state name or ball (the card in the list shows those). A click anywhere on its main opening button (but not the switch or the icons) opens the automation's
 dialog: its display name as title, code name beside it, description under them with room for four lines, and tags (chips with a ×, and a dashed `+ tag` that lists the tags in use and finds or makes one by
-what's typed). Existing values read as text and change in place; boxed fields belong to the New automation dialog. Changes are held and marked as elsewhere (a blue underline on changed text, a ring on a changed icon, a tag added green, a tag taken
+what's typed). The display name, code name and description are boxed fields, as in New automation and like the search box. Changes are held and marked as elsewhere (a blue underline on changed text, a ring on a changed icon, a tag added green, a tag taken
 out red and struck through with an arrow to put it back); Cancel and Save appear at the foot once something's changed, and a refused Save is told in the
 error dialog. The first view of a graph is fitted to the window, a program made new included.
 
@@ -182,18 +199,18 @@ error dialog. The first view of a graph is fitted to the window, a program made 
 drag to rearrange → the Resources panel lists inputs, signals, variables and rules for the scope you're in.
 
 **A state's dialog**: its path as title, description, Actions (ordered, drag to reorder, `+ Add`), Transitions (ordered, `+ Add`) → each row opens its own
-dialog over this one. Rows read as one line: icon, kind, what it does. The state's own details change in this dialog, in place, and are kept with its Save.
+dialog over this one. Rows read as one line: icon, kind, what it does. The state's name and description are boxed fields at its head; they, its cycle, its actions and its transitions are kept together with its one Save.
 
 **An action's dialog**: its path is the title and its description sits under it. Kind (Poke, Ask, LLM, Jev, Set, Add, Sub, Append, Remove, Lock, Open) is the first choice row; hover shows the arrow and click lists the kinds, in a new action and an existing one. Below it, the kind's own parts are changed where read,
 held until Save. Poke and Ask look like their popups: pictures and sound on the left, title and text on the right,
 Placeholders (name → expression) as a table, then Answer, Save to, Timeout, Deferrable, and Options as a table
 with a preselect mark. LLM and Jev: **proposed**, to be laid out the same way.
 
-**A transition's dialog**: its path and description, then where it goes and the conditions under When. The state's Check every value sets the frequency; it is not a transition row. Conditions are choices or expressions in a table. Changes are staged until Save, like other spec dialogs.
+**A transition's dialog**: its path and description, then where it goes and the conditions under When. Goto lists the states and has **New state**; a state named there is made with the state's Save, in the same batch as the transition. The state's Check every value sets the frequency; it is not a transition row. Conditions are choices or expressions in a table. Changes are staged until Save, like other spec dialogs.
 
 **A resource's dialog** (variable, signal, rule, input): the name and description, then rows for that kind in the order in section 2. The same kind keeps the same rows everywhere; different kinds have different rows. A rule has Now, Condition, Softness and Level, without Written by. A variable has Type, Now and Starts as; a signal has Type, Now, Expression and Keep. Inputs show their measured Now and Keep. Written by and Read by follow where applicable. Editable definitions are held until Save; a user-set Now value follows the value editor's save flow.
 
-**New things**: the New automation dialog uses boxed fields with labels. New resource specs use the existing spec rows with empty values. Once made, values read as the spec dialog does and change where read. Kind and type use a choice in a row, not a dropdown box in the title.
+**New things**: the New automation dialog uses boxed fields with labels, as the program's and the state's own heads do. New resource specs use the existing spec rows with empty values. Once made, values read as the spec dialog does and change where read. Kind and type use a choice in a row, not a dropdown box in the title.
 
 **Signals and formulas (F-012)**: an expression in Python, coloured; a name you type shows its current value on hover.
 Mistakes say what is wrong and where, in plain words.
@@ -216,18 +233,21 @@ minute → every function and action found by typing.
 4. Report what was and wasn't rendered. Don't fix unless asked; don't commit unless asked.
 
 **Errors**: never written across the top of a page. One the person can resolve (a name already used, a change refused) opens a dialog,
-"That didn't work", with the message, a concrete next step and OK. A lost engine connection says "Proki isn't answering. Check that Proki is running; this closes when it reconnects." It has no button or ×, Escape does nothing, and it closes when Proki answers again. A missing field is told by the field ("Give it a title.").
+"That didn't work", with the message, a concrete next step and OK. The caller's message says what's wrong in a sentence; the dialog adds the step. A save that was kept but whose follow-up failed says so ("The state is saved, but not its pictures and sounds: …"), so nobody saves it twice. A lost engine connection says "Proki isn't answering. Check that Proki is running; this closes when it reconnects." It has no button or ×, Escape does nothing, and it closes when Proki answers again. A missing field is told by the field ("Give it a title.").
 
 ## 6. Known inconsistencies in the workflow (to work down)
 
-- States and programs still edit inline; move their existing details into spec dialogs with the shared anatomy.
-- Dragging out exists for actions, transitions and conditions. Add it to other sortable lists where the gesture is useful; keep the trash action for every removable row.
-- A transition's Goto lists existing states only. Add a path to create a destination state without restoring inline state editing.
-- Dragging out currently commits some deletions immediately while the trash asks. Stage the drag deletion with Undo, or ask before committing it.
-- Jev options still lack the same per-row change marks used by conditions and questions.
-- The action editor still puts Kind in the title. Move it to a row and keep the identifying title and description above the divider.
-- The existing program editor still uses boxed fields. Show its values as text that changes in place, as other existing spec dialogs do.
-- The task card's local `Editable` inputs have no accessible name. Name each input for its group or task, even while its save-on-blur policy stays distinct from staged spec editing.
-- Shared UI primitives live in feature view files, and `action-rows`, `ask-actions`, `fields`, `inspect`, `places`, `program-forms` and `value-parts` import in a cycle. Move shared primitives to neutral owners before adding more cross-view imports.
-- Spec-row layout classes repeat in `fields.tsx`, `resources.tsx` and `action-rows.tsx`; use one owner for the shared grid without merging the different content.
-- Action and source chip colours still use palette utilities directly; give the shared meanings tokens in `index.css`.
+Checked on 2026-11-13 against the working tree.
+
+- **Decide:** the uncommitted pass replaced the boxed head fields (`0757da3`) with in-place text. This page describes them as boxed. The tag groups it removed are back.
+- `Drafted` and `ProgramDialog` each draw their own Save bar. Give them the `Staging` bar.
+- The state dialog's `Over` duplicates the shared dialog (portal, Escape, inert, focus). Use `DialogContent`'s `over` variant.
+- `reference` is fetched in 10 places, some every 5 seconds. One hook should own it.
+- A `Line`'s trash asks for confirmation, while dragging the row out stages the delete. Stage both, with Undo.
+- Dragging out exists for actions, transitions and conditions. Jev questions, schema fields and options are sortable without it; add it where the gesture is useful.
+- Jev criteria rows have no per-row change marks.
+- `media.tsx:255` and `:273` are `role=button` divs without keys.
+- Raw palette classes are left in `program-graph.tsx`, `support.tsx`, `notes.tsx` and `resources.tsx:895`.
+- `resources.tsx` is 939 lines. Split `Defining` and `Linked` out before it passes 1,000.
+
+Done since the last round: atomic record Save, one action draft with Kind as a row, named task fields, reduced motion for shake and flash, two choice controls, `border-t` rows, one spec-row grid, chip tints in `index.css`, Goto's New state, page errors in the dialog, and no import cycle.

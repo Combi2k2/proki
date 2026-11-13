@@ -78,6 +78,20 @@ def move(name: str, id: int, at: datetime | None = None, /, before: int | None =
     made.set([*rest[:place], moved, *rest[place:]], at)
 
 
+def save(name: str, rows: list[dict], at: datetime | None = None) -> list[int]:
+    """A table's edited rows, in order, kept together or not at all. Existing ids must still exist."""
+    made = table(name)
+    ids  = [row["id"] for row in rows if row.get("id") is not None]
+    if len(ids) != len(set(ids)):
+        raise ValueError("A record can only appear once. Reload the table and try again.")
+    kept = []
+    for row in rows:
+        old    = found(made, row["id"]) if row.get("id") is not None else {}
+        fields = {k: v for k, v in row.items() if k not in STAMPS}
+        kept.append(dict(old) | given(made, fields))
+    return made.set(kept, at)
+
+
 def given(made: Records, fields: dict) -> dict:
     """Fields as a record keeps them: a time (or its ISO text) as minutes since 1970."""
     timed = {k for k, f in made.fields.items() if f.type == "time"}
@@ -99,6 +113,9 @@ def tools() -> list[Tool]:
              {"name": NAME}, lambda args: {"records": read(args["name"]),
                                            "fields" : {k: {"desc": f.desc, "type": schema(f.type)} for k, f in table(args["name"]).fields.items() if f.kept}},
              ("name",), readonly=True),
+        Tool("save_records", "The table's edited records in order, all kept or none. Existing ids are preserved; omitted records are deleted.",
+             {"name": NAME, "rows": {"type": "array", "items": {"type": "object"}}},
+             lambda args: {"ids": save(args["name"], args["rows"], now())}, ("name", "rows"), undoable=True),
         Tool("add_record", "A new record, last: its fields, the ones it needs at least (a task: its group and name). Its id.",
              {"name": NAME, "fields": FIELDS}, lambda args: {"id": add(args["name"], now(), **args["fields"])}, ("name", "fields")),
         Tool("change_record", "Some of a record's fields. A `status` of open, done, or dropped (set aside, kept).",

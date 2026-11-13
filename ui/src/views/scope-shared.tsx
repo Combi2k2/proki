@@ -150,11 +150,11 @@ export function Line({ id, named, refused, lit, plain, mark, children, onEdit, o
     <div ref={(el) => void (setNodeRef(el), box.current = el)} style={{ transform: CSS.Translate.toString(transform), transition }}
          className={cn("group flex items-center gap-2 rounded-lg border bg-card py-1.5 pr-3 pl-1 text-xs hover:bg-muted/50",
                        mark === "added" && "bg-added/10", mark === "changed" && "bg-changed/10", isDragging && "opacity-40", refused && "animate-shake ring-2 ring-destructive/50",
-                       lit && "animate-[flash_2.4s_ease-out] ring-2 ring-brand/60")}>
+                       lit && "animate-flash ring-2 ring-brand/60")}>
       <button {...attributes} {...listeners} aria-label={`Move ${named}`} className="cursor-grab touch-none text-muted-foreground hover:text-foreground">
         <GripVertical className="size-3.5" />
       </button>
-      <div className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left" onClick={onEdit}>{children}</div>
+      <button type="button" aria-label={`Edit ${named}`} className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left" onClick={onEdit}>{children}</button>
       <div className="flex shrink-0 items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100">
         {!plain && <Button size="icon-sm" variant="ghost" aria-label={`Edit ${named}`} title="Edit" onClick={onEdit}><Pencil /></Button>}
         <Confirm title={`Delete ${named}?`} description="This can't be undone." action="Delete" onConfirm={onDelete}>

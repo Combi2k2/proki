@@ -21,7 +21,7 @@ import { recallJson, rememberJson } from "@/lib/remember"
 import type { Type } from "@/lib/proki"
 import { cn } from "@/lib/utils"
 import { BARE, Expr } from "@/views/code"
-import { kindOf, parsed, said, TypeIcon } from "@/views/fields"
+import { kindOf, parsed, said, TypeIcon } from "@/views/field-parts"
 import { CHANGED, Editable, HELD, typing } from "@/views/in-place"
 import { at, same, useDraft, type Path } from "@/views/value-draft"
 import { atomic, collection, holds, isRecord, Opens, plain, Scalar, WRAP } from "@/views/value-parts"
@@ -444,7 +444,7 @@ export function Making({ record, type, sample, onAdd, onClose, title = "New row"
         </DialogHeader>
         <div className="flex flex-col text-xs">
           {asks.filter((a) => a.ask).map((a) => (
-            <div key={a.key} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-3 border-b py-1.5 last:border-b-0">
+            <div key={a.key} className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-center gap-3 border-t py-1.5 first:border-t-0">
               <span className="flex min-w-0 items-center gap-1.5"><TypeIcon type={a.type} /><code className="truncate font-medium">{a.key}</code></span>
               {names ? <Editable label={a.key} code long list={names} placeholder="expression" className="w-full rounded-md bg-muted px-2 py-1.5 text-xs"
                                  value={String(given[a.key] ?? "")} onType={(t) => setGiven({ ...given, [a.key]: t })} onSave={async (t) => (setGiven({ ...given, [a.key]: t.trim() || undefined }), null)} />

@@ -10,7 +10,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } f
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Pick } from "@/views/in-place"
 import type { Buckets, Horizon, Method, Metric } from "@/lib/proki"
 import { recall, recallJson, remember } from "@/lib/remember"
 import { cn } from "@/lib/utils"
@@ -95,15 +95,13 @@ function Signals({ metrics, onChange }: { metrics: Metric[]; onChange: (name: st
           <span className="truncate text-xs text-muted-foreground" title={m.expr}>{m.desc || m.expr}</span>
           <span className="text-xs text-muted-foreground tabular-nums">{pace(m.pace)}</span>
           {m.persist ? (
-            <NativeSelect size="sm" value={m.keep ?? ""} onChange={(e) => onChange(m.name, { keep: Number(e.target.value) })} aria-label="keep">
-              {m.keep !== null && !KEEPS.some(([k]) => k === m.keep) && <NativeSelectOption value={m.keep}>{pace(m.keep)}</NativeSelectOption>}
-              {KEEPS.map(([k, label]) => <NativeSelectOption key={k} value={k}>{label}</NativeSelectOption>)}
-            </NativeSelect>
+            <Pick label="Keep history" value={String(m.keep ?? "")} arrow
+                  options={[...(m.keep !== null && !KEEPS.some(([k]) => k === m.keep) ? [[String(m.keep), pace(m.keep)] as [string, string]] : []), ...KEEPS.map(([k, label]): [string, string] => [String(k), label])]}
+                  onPick={(value) => onChange(m.name, { keep: Number(value) })} />
           ) : <span className="text-xs text-muted-foreground">–</span>}
           {m.persist ? (
-            <NativeSelect size="sm" value={m.method} onChange={(e) => onChange(m.name, { method: e.target.value as Method })} aria-label="bucket">
-              {METHODS.map((method) => <NativeSelectOption key={method} value={method}>{method}</NativeSelectOption>)}
-            </NativeSelect>
+            <Pick label="Bucket" value={m.method} arrow options={METHODS.map((method) => [method, method])}
+                  onPick={(value) => onChange(m.name, { method: value as Method })} />
           ) : <span className="text-xs text-muted-foreground">–</span>}
         </div>
       ))}
