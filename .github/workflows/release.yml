@@ -1,6 +1,10 @@
 # proki's installers, built on each OS by packaging/build.sh: the macOS .dmg (Apple silicon) and the
 # Windows installer. Run it by hand for a build to try (the Actions run keeps them), or push a tag
-# like v0.1.0 for a release that carries them.
+# like v0.1.0 for a release that carries them. The tests run in test.yml, on every push to main.
+#
+# The macOS app is signed with the certificate in the secrets APPLE_CERTIFICATE (a .p12, base64),
+# APPLE_CERTIFICATE_PASSWORD and APPLE_SIGNING_IDENTITY (its name), made by packaging/signing-cert.sh, so
+# macOS keeps the permissions it was given from one release to the next; without them it's signed ad hoc.
 name: release
 
 on:
@@ -23,6 +27,7 @@ jobs:
     env:
       UV_PYTHON: "3.12"   # the Python proki is tested on
       PYTHONUTF8: "1"     # files read as UTF-8, as the shipped engine reads them (not Windows' code page)
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.3
@@ -31,9 +36,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: ui/app }
-      - run: uv run pytest -q   # installers only from code that passes its tests, on each OS
-      - run: npm ci && npx tsc -b
-        working-directory: ui
+      - name: The signing certificate, in a keychain of its own and trusted for signing code
+        if: runner.os == 'macOS' && env.APPLE_SIGNING_IDENTITY != ''
+        env:
+          APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/proki.p12"
+          security create-keychain -p ci "$kc" && security set-keychain-settings "$kc" && security unlock-keychain -p ci "$kc"
+          security import "$RUNNER_TEMP/proki.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -k "$kc"
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$kc" > /dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          openssl pkcs12 -in "$RUNNER_TEMP/proki.p12" -nokeys -passin env:APPLE_CERTIFICATE_PASSWORD -out "$RUNNER_TEMP/proki.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/proki.pem"
+          rm "$RUNNER_TEMP/proki.p12"
       - run: bash packaging/build.sh
         shell: bash
       - uses: actions/upload-artifact@v7

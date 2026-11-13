@@ -5,7 +5,8 @@
 #     packaging/build.sh
 #
 # Needs uv, Node and Rust. macOS makes a .dmg, Windows (Git Bash) an installer .exe; both land in
-# ui/app/target/release/bundle/. Neither is signed: see the README for opening them.
+# ui/app/target/release/bundle/. The .dmg is signed with the certificate APPLE_SIGNING_IDENTITY names, else
+# ad hoc; neither is notarized: see the README for opening them.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -47,7 +48,15 @@ cp build/nats/"$name"/nats-server* build/engine/proki-engine/
 
 cd ui
 npm ci
-CI=true npx tauri build --config app/tauri.release.json --bundles "$bundles"   # CI: the .dmg without asking Finder to lay out its window
+# Signed with the certificate named in APPLE_SIGNING_IDENTITY when there is one (in a keychain, trusted for
+# signing code: packaging/signing-cert.sh), so macOS keeps its permissions across releases; else ad hoc, as the release config says.
+if [ -n "${APPLE_SIGNING_IDENTITY:-}" ]; then
+  signed=(--config "{\"bundle\":{\"macOS\":{\"signingIdentity\":\"$APPLE_SIGNING_IDENTITY\"}}}")
+else
+  unset APPLE_SIGNING_IDENTITY   # set but empty: no secret
+  signed=()
+fi
+CI=true npx tauri build --config app/tauri.release.json ${signed[@]+"${signed[@]}"} --bundles "$bundles"   # CI: the .dmg without asking Finder to lay out its window
 if [ "$os" = darwin ]; then
   codesign --verify --deep --strict --verbose=2 app/target/release/bundle/macos/Proki.app
 fi
