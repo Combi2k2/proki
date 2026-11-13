@@ -9,7 +9,7 @@ to break a todo into steps.
 
 ## How it works
 - A card per group, in the row of its most relevant tag; drag a card along a row or into
-  another of its tags. A group opens to its tasks as a checklist.
+  another of its tags. A group opens to its tasks as a checklist, and a task opens in its own dialog over the group's (its description, what done looks like, its dependencies and notes; its time, day, checkpoint, done and delete at the side). Open questions and "done when" are lists, added to one at a time. A group's tags are carried along the line to reorder them. The page has a search box.
 - Everything is edited in place and saved as you leave the field.
 - Tasks are weighed by their fields (estimate, deadline, ...) so the next one comes first. Add
   fields of your own in [F-013](F-013-tables.md).

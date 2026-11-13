@@ -9,50 +9,36 @@
 // each to accept or not. A ready task's ▶ works on it now: a focus session on it, its time
 // counted. Reloads when the window is focused.
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
-import {
-  DndContext, DragOverlay, KeyboardSensor, PointerSensor, closestCenter, pointerWithin, useDroppable, useSensor, useSensors,
-  type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
-} from "@dnd-kit/core"
-import {
-  SortableContext, arrayMove, horizontalListSortingStrategy, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
-} from "@dnd-kit/sortable"
+import { useCallback, useEffect, useState } from "react"
+import { DndContext, DragOverlay, closestCenter, pointerWithin, useDroppable, type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent } from "@dnd-kit/core"
+import { SortableContext, arrayMove, horizontalListSortingStrategy, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import {
-  AlignLeft, ArrowLeft, Calendar, Check, ChevronDown, CircleHelp, Clock, Flag, GripVertical, LayoutGrid, ListChecks, Lock, Play, Plus,
-  Pencil, RotateCcw, Sparkles, StickyNote, Tag, Trash2, X,
-} from "lucide-react"
+import { AlignLeft, Check, CircleHelp, Clock, Flag, GripVertical, LayoutGrid, ListChecks, Lock, Play, Plus, Pencil, RotateCcw, Sparkles, StickyNote, Tag, Trash2 } from "lucide-react"
 import { Confirm } from "@/components/confirm"
-import { PageHeader } from "@/components/page"
+import { PageHeader, SearchBox } from "@/components/page"
 import { ErrorDialog } from "@/components/error-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item"
-import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select"
 import { Progress } from "@/components/ui/progress"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { dayOf, dueText, endOf, type Board, type TaskGr, type Rows, type Task, type TaskOp } from "@/lib/proki"
+import { dayOf, dueText, endOf, type Board, type TaskGr, type Task, type TaskOp } from "@/lib/proki"
+import { Composer, ItemList, Notes, Editable, Section, TagEditor, rowsOf, useDrag } from "@/views/task-parts"
+import { TaskDialog } from "@/views/task-dialog"
 
 type Change = (request: object) => Promise<number | null>  // a request to the board: the id it gives, if any
 
-// each tag's row: the first it's in
-const rowsOf = (rows: Rows) => Object.fromEntries(Object.entries(rows).reverse().flatMap(([row, tags]) => tags.map((tag) => [tag, row])))
-const lines = (text: string) => text.split("\n").map((line) => line.trim()).filter(Boolean)
 const minutes = (m: number) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`)
 const sortId = (id: number) => `g${id}`
 
-// a card is picked up once the pointer's moved a little: a click still opens it
-export const useDrag = () => useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-                                        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
+export { useDrag }
 
 // a card over another card first, else over the row the pointer's in
 const landing: CollisionDetection = (args) => {
@@ -64,6 +50,7 @@ const landing: CollisionDetection = (args) => {
 export function TasksView({ open, onOpen }: { open: number | null; onOpen: (group: number | null) => void }) {
   const [board, setBoard] = useState<Board>({ groups: [], tasks: [], ops: [], rows: {} })
   const [showDone, setShowDone] = useState(false)
+  const [find, setFind] = useState("")
   const [error, setError] = useState("")
   const [carried, setCarried] = useState<TaskGr | null>(null)  // the card picked up
   const [over, setOver] = useState<{ row: string; takes: boolean } | null>(null)  // the row it's over
@@ -91,7 +78,9 @@ export function TasksView({ open, onOpen }: { open: number | null; onOpen: (grou
 
   const left = board.tasks.filter((t) => t.status === "open" && board.groups.some((p) => p.id === t.group && p.status === "open"))
   const group = board.groups.find((p) => p.id === open) ?? null
-  const shown = board.groups.filter((p) => showDone || p.status === "open")
+  const words = find.trim().toLowerCase()
+  const matches = (p: TaskGr) => !words || [p.name, p.desc, ...p.tags, ...p.questions, ...board.tasks.filter((t) => t.group === p.id).flatMap((t) => [t.name, t.desc])].join(" ").toLowerCase().includes(words)
+  const shown = board.groups.filter((p) => (showDone || p.status === "open") && matches(p))
   const row = rowsOf(board.rows)
   const rowOf = (p: TaskGr) => (p.tags.length ? row[p.tags[0]] : "")  // "": no tags
   const rowsFor = (p: TaskGr) => (p.tags.length ? p.tags.map((tag) => row[tag]) : [""])  // the rows it can go in
@@ -129,6 +118,7 @@ export function TasksView({ open, onOpen }: { open: number | null; onOpen: (grou
           <Switch id="show-done" checked={showDone} onCheckedChange={setShowDone} />
           <FieldLabel htmlFor="show-done" className="font-normal text-muted-foreground">Show finished</FieldLabel>
         </Field>
+        <SearchBox value={find} onChange={setFind} label="Search the tasks" />
       </PageHeader>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-8 py-5">
@@ -137,8 +127,8 @@ export function TasksView({ open, onOpen }: { open: number | null; onOpen: (grou
           <Empty className="mt-6">
             <EmptyHeader>
               <EmptyMedia variant="icon"><LayoutGrid /></EmptyMedia>
-              <EmptyTitle>No groups yet</EmptyTitle>
-              <EmptyDescription>Add one below, or write down what you need to do with “New note”: Proki plans it into tasks.</EmptyDescription>
+              <EmptyTitle>{find.trim() ? "No group matches" : "No groups yet"}</EmptyTitle>
+              <EmptyDescription>{find.trim() ? "Try another word." : "Add one below, or write down what you need to do with “New note”: Proki plans it into tasks."}</EmptyDescription>
             </EmptyHeader>
           </Empty>
         )}
@@ -259,7 +249,7 @@ function GroupCard({ group, board, onChange, onClose }: {
   const ops = board.ops.filter((o) => o.group === group.id)
   const done = tasks.filter((t) => t.status === "done").length
   const [hideDone, setHideDone] = useState(false)
-  const [opened, setOpened] = useState<number | null>(null)  // the task whose details show
+  const [opened, setOpened] = useState<number | null>(null)  // the task whose dialog is open
   const set = (fields: object) => onChange({ op: "change", record: "work.groups", id: group.id, ...fields })
   const finished = group.status !== "open"
   const listed = tasks.filter((t) => !hideDone || t.status !== "done")
@@ -283,7 +273,7 @@ function GroupCard({ group, board, onChange, onClose }: {
         </div>
       </div>
 
-      <div className="grid grid-cols-[1fr_11rem] gap-6 px-6 pb-6 max-[640px]:grid-cols-1">
+      <div className="grid grid-cols-[1fr_10rem] gap-6 px-6 pb-6 max-[640px]:grid-cols-1">
         <div className="flex min-w-0 flex-col gap-6">
           <Section icon={<Tag />} title="Tags">
             <TagEditor tags={group.tags} rows={board.rows} onSave={(tags) => set({ tags })} />
@@ -294,8 +284,7 @@ function GroupCard({ group, board, onChange, onClose }: {
           </Section>
 
           <Section icon={<CircleHelp />} title="Open questions">
-            <Notes value={group.questions.join("\n")} list placeholder="What only you can answer yet, one a line…"
-                   onSave={(text) => set({ questions: lines(text) })} />
+            <ItemList items={group.questions} add="Add a question" placeholder="What only you can answer yet…" onSave={(questions) => set({ questions })} />
           </Section>
 
           {ops.length > 0 && <Suggestions ops={ops} tasks={tasks} onChange={onChange} />}
@@ -313,8 +302,7 @@ function GroupCard({ group, board, onChange, onClose }: {
               <SortableContext items={listed.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                 <div className="mt-2 flex flex-col">
                   {listed.map((task) => (
-                    <TaskEntry key={task.id} task={task} tasks={tasks} opened={opened === task.id} onChange={onChange}
-                               onToggle={() => setOpened(opened === task.id ? null : task.id)} />
+                    <TaskEntry key={task.id} task={task} tasks={tasks} onChange={onChange} onOpen={() => setOpened(task.id)} />
                   ))}
                 </div>
               </SortableContext>
@@ -330,7 +318,7 @@ function GroupCard({ group, board, onChange, onClose }: {
           <FieldGroup className="gap-4">
             <Field>
               <FieldLabel htmlFor="group-due">Due date</FieldLabel>
-              <Input id="group-due" type="date" value={dayOf(group.deadline)} onChange={(e) => set({ deadline: endOf(e.target.value) })} />
+              <Input id="group-due" type="date" value={dayOf(group.deadline)} onChange={(e) => set({ deadline: endOf(e.target.value) })} className="w-full" />
             </Field>
             <Field>
               <FieldLabel htmlFor="group-estimate">Estimate, in minutes</FieldLabel>
@@ -353,13 +341,14 @@ function GroupCard({ group, board, onChange, onClose }: {
           </FieldGroup>
         </aside>
       </div>
+      {tasks.find((t) => t.id === opened) && <TaskDialog task={tasks.find((t) => t.id === opened)!} tasks={tasks} onChange={onChange} onClose={() => setOpened(null)} />}
     </DialogContent>
   )
 }
 
 // --- the changes suggested, each to accept or not ---------------------------------------------
 
-const LABEL: Record<string, string> = { name: "Name", desc: "About", estimate: "Time", deadline: "Due", done_when: "Done when", checkpoint: "Checkpoint", after: "Do first", note: "Note" }
+const LABEL: Record<string, string> = { name: "Name", desc: "About", estimate: "Time", deadline: "Due", done_when: "Done when", checkpoint: "Checkpoint", after: "Dependencies", note: "Note" }
 const said = (name: string, value: unknown): string =>
   value === null || value === undefined || value === "" || (Array.isArray(value) && !value.length) ? "nothing"
   : name === "estimate" ? minutes(Number(value))
@@ -455,21 +444,17 @@ function Changed({ label, before, after }: { label: string; before: string | nul
   )
 }
 
-/** A task in the checklist: ticked, renamed, carried. Clicked: what it is, and your notes. */
-function TaskEntry({ task, tasks, opened, onChange, onToggle }: {
-  task: Task; tasks: Task[]; opened: boolean; onChange: Change; onToggle: () => void
-}) {
+/** A task in the checklist: ticked, carried. Clicked: its dialog opens over the group's. */
+function TaskEntry({ task, tasks, onChange, onOpen }: { task: Task; tasks: Task[]; onChange: Change; onOpen: () => void }) {
   const set = (fields: object) => onChange({ op: "change", record: "work.tasks", id: task.id, ...fields })
   const done = task.status === "done"
   const due = dueText(task.deadline)
-  const needs = tasks.filter((t) => task.after.includes(t.id))
-  const waiting = needs.filter((t) => t.status === "open")  // what it waits for
+  const waiting = tasks.filter((t) => task.after.includes(t.id) && t.status === "open")  // what it waits for
   const ready = task.status === "open" && waiting.length === 0  // the only ones you can carry
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id, disabled: !ready })
 
   return (
-    <Collapsible open={opened} onOpenChange={onToggle} ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }}
-                 className={cn("relative rounded-lg", opened && "bg-muted/60", isDragging && "z-10 bg-card shadow-lg ring-1 ring-foreground/10")}>
+    <div ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} className={cn("relative rounded-lg", isDragging && "z-10 bg-card shadow-lg ring-1 ring-foreground/10")}>
       <div className="group/task flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-muted/60">
         <button {...attributes} {...listeners} aria-label="Move" disabled={!ready}
                 className={cn("touch-none text-muted-foreground/50 opacity-0 disabled:invisible", ready && "cursor-grab group-hover/task:opacity-100 focus-visible:opacity-100")}>
@@ -477,9 +462,7 @@ function TaskEntry({ task, tasks, opened, onChange, onToggle }: {
         </button>
         <Checkbox checked={done} onCheckedChange={(on) => set({ status: on ? "done" : "open" })} aria-label={`${task.name}: done`} />
         {task.checkpoint && <Flag className="size-3.5 shrink-0 text-primary" aria-label="a checkpoint" />}
-        <button onClick={onToggle}
-                className={cn("min-w-0 flex-1 truncate py-0.5 text-left text-sm", ready ? "font-medium" : "text-muted-foreground",
-                              task.status !== "open" && "line-through")}>
+        <button onClick={onOpen} className={cn("min-w-0 flex-1 truncate py-0.5 text-left text-sm", ready ? "font-medium" : "text-muted-foreground", task.status !== "open" && "line-through")}>
           {task.name}
         </button>
         {!done && waiting.length > 0 && (
@@ -491,224 +474,9 @@ function TaskEntry({ task, tasks, opened, onChange, onToggle }: {
             <Play />
           </Button>
         )}
-        {(task.desc || task.note) && !opened && <StickyNote className="size-3.5 text-muted-foreground" aria-label="has notes" />}
+        {(task.desc || task.note) && <StickyNote className="size-3.5 text-muted-foreground" aria-label="has notes" />}
         {due && <Badge variant={due === "overdue" && !done ? "destructive" : "secondary"}>{due}</Badge>}
         <Badge variant="outline" className="tabular-nums">{minutes(task.estimate)}</Badge>
-        <Button variant="ghost" size="icon-xs" onClick={onToggle} aria-label={opened ? "Close" : "Open"} className="text-muted-foreground">
-          <ChevronDown className={cn("transition-transform", opened && "rotate-180")} />
-        </Button>
-      </div>
-
-      <CollapsibleContent>
-        <FieldGroup className="gap-4 px-8 pt-1 pb-3">
-          <Editable value={task.name} multiline className="text-sm font-medium" onSave={(name) => set({ name })} />
-          <Field>
-            <FieldLabel>Description</FieldLabel>
-            <Notes value={task.desc} placeholder="What is it, exactly?" onSave={(desc) => set({ desc })} />
-          </Field>
-          <Field>
-            <FieldLabel>Done when</FieldLabel>
-            <Notes value={task.done_when.join("\n")} list placeholder="What done looks like: a check anyone could make, one a line (3 at most)…"
-                   onSave={(text) => set({ done_when: lines(text).slice(0, 3) })} />
-          </Field>
-          <Field>
-            <FieldLabel>Do these first</FieldLabel>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {needs.map((t) => (
-                <Badge key={t.id} variant="secondary" className={cn("h-6", t.status !== "open" && "line-through")}>
-                  {t.name}
-                  <button aria-label={`Remove ${t.name}`} className="-mr-1 rounded-full p-0.5 opacity-60 hover:bg-foreground/10 hover:opacity-100"
-                          onClick={() => set({ after: task.after.filter((id) => id !== t.id) })}><X className="size-3" /></button>
-                </Badge>
-              ))}
-              <NativeSelect size="sm" value="" className="w-56" onChange={(e) => e.target.value && set({ after: [...task.after, Number(e.target.value)] })}>
-                <NativeSelectOption value="">+ A task it needs first</NativeSelectOption>
-                {tasks.filter((t) => t.id !== task.id && !task.after.includes(t.id)).map((t) => <NativeSelectOption key={t.id} value={t.id}>{t.name}</NativeSelectOption>)}
-              </NativeSelect>
-            </div>
-          </Field>
-          <Field>
-            <FieldLabel>Note</FieldLabel>
-            <Notes value={task.note} placeholder="Your own notes: links, where you left off…" onSave={(note) => set({ note })} />
-          </Field>
-          <div className="flex flex-wrap items-end gap-4">
-            <Field className="w-24">
-              <FieldLabel htmlFor={`estimate-${task.id}`}><Clock /> Minutes</FieldLabel>
-              <Input id={`estimate-${task.id}`} type="number" min={5} max={600} step={5} defaultValue={task.estimate} key={task.estimate}
-                     onBlur={(e) => Number(e.target.value) > 0 && Number(e.target.value) !== task.estimate && set({ estimate: Number(e.target.value) })} />
-            </Field>
-            <Field className="w-40">
-              <FieldLabel htmlFor={`due-${task.id}`}><Calendar /> Due</FieldLabel>
-              <Input id={`due-${task.id}`} type="date" value={dayOf(task.deadline)} onChange={(e) => set({ deadline: endOf(e.target.value) })} />
-            </Field>
-            <Field orientation="horizontal" className="w-auto pb-2" title="A check it all works together, and what's next">
-              <Checkbox id={`checkpoint-${task.id}`} checked={task.checkpoint} onCheckedChange={(on) => set({ checkpoint: on === true })} />
-              <FieldLabel htmlFor={`checkpoint-${task.id}`} className="font-normal">Checkpoint</FieldLabel>
-            </Field>
-            <Confirm title={`Delete “${task.name}”?`} description="The task and your notes on it are deleted. This can't be undone."
-                     onConfirm={() => onChange({ op: "remove", record: "work.tasks", id: task.id })}>
-              <Button variant="ghost" size="icon-sm" aria-label="Delete the task" className="ml-auto text-muted-foreground hover:text-destructive"><Trash2 /></Button>
-            </Confirm>
-          </div>
-        </FieldGroup>
-      </CollapsibleContent>
-    </Collapsible>
-  )
-}
-
-// --- the pieces ---------------------------------------------------------------------------
-
-function Section({ icon, title, action, children }: { icon: ReactNode; title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <section>
-      <div className="mb-2 flex items-center gap-3 [&_svg]:size-4 [&_svg]:text-muted-foreground">
-        {icon}
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <span className="ml-auto">{action}</span>
-      </div>
-      <div className="pl-7">{children}</div>
-    </section>
-  )
-}
-
-/** A group's tags, the most likely first, 3 at most: the first one's row is where its card is.
- * A tag moves up with its arrow, goes with its cross, and comes in from the list, by row. */
-function TagEditor({ tags, rows, onSave }: { tags: string[]; rows: Rows; onSave: (tags: string[]) => void }) {
-  const row = rowsOf(rows)
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {tags.map((tag, i) => (
-        <Badge key={tag} variant={i === 0 ? "default" : "secondary"} className="group/tag h-6"
-               title={i === 0 ? "The most relevant: the card is in its row" : undefined}>
-          {i > 0 && (
-            <button aria-label={`${tag}: more relevant`} className="-ml-1 hidden rounded-full p-0.5 opacity-60 group-hover/tag:inline hover:bg-foreground/10 hover:opacity-100"
-                    onClick={() => onSave([...tags.slice(0, i - 1), tag, tags[i - 1], ...tags.slice(i + 1)])}>
-              <ArrowLeft className="size-3" />
-            </button>
-          )}
-          {tag}
-          <button aria-label={`Remove ${tag}`} className="-mr-1 rounded-full p-0.5 opacity-60 hover:bg-foreground/10 hover:opacity-100" onClick={() => onSave(tags.filter((t) => t !== tag))}><X className="size-3" /></button>
-        </Badge>
-      ))}
-      {tags.length < 3 && (
-        <NativeSelect size="sm" value="" className="w-40" onChange={(e) => e.target.value && onSave([...tags, e.target.value])}>
-          <NativeSelectOption value="">+ Add a tag</NativeSelectOption>
-          {Object.entries(rows).map(([name, inRow]) => (
-            <NativeSelectOptGroup key={name} label={name}>
-              {inRow.filter((tag) => row[tag] === name && !tags.includes(tag)).map((tag) => <NativeSelectOption key={tag} value={tag}>{tag}</NativeSelectOption>)}
-            </NativeSelectOptGroup>
-          ))}
-        </NativeSelect>
-      )}
-    </div>
-  )
-}
-
-/** A line of text that's edited where it is: saved as you leave it, or with Enter. Escape: as it was. */
-function Editable({ value, onSave, className, multiline = false }: {
-  value: string; onSave: (value: string) => void; className?: string; multiline?: boolean
-}) {
-  const [text, setText] = useState(value)
-  useEffect(() => setText(value), [value])
-  const save = () => (text.trim() && text.trim() !== value ? onSave(text.trim()) : setText(value))
-  const keys = (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      e.currentTarget.blur()
-    }
-    if (e.key === "Escape") {
-      e.stopPropagation()  // not the card: only the edit
-      setText(value)
-      setTimeout(() => (document.activeElement as HTMLElement)?.blur())
-    }
-  }
-  const style = cn("w-full min-w-0 rounded-md bg-transparent px-1.5 py-0.5 outline-none hover:bg-muted/70 focus:bg-background focus:ring-2 focus:ring-ring/40", className)
-
-  return multiline ? (
-    <textarea value={text} rows={1} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={keys}
-              className={cn(style, "field-sizing-content resize-none")} />
-  ) : (
-    <input value={text} onChange={(e) => setText(e.target.value)} onBlur={save} onKeyDown={keys}
-           className={cn(style, "field-sizing-content max-w-full")} />
-  )
-}
-
-/** Free text, like a card's description: shown as it is (`list`: a line each, as a list), and a
- * box to write in once clicked. */
-function Notes({ value, placeholder, onSave, list = false }: { value: string; placeholder: string; onSave: (value: string) => void; list?: boolean }) {
-  const [editing, setEditing] = useState(false)
-  const [text, setText] = useState(value)
-  useEffect(() => setText(value), [value])
-  const save = () => {
-    setEditing(false)
-    if (text !== value) onSave(text.trim())
-  }
-
-  if (!editing) {
-    return (
-      <button onClick={() => setEditing(true)}
-              className={cn("w-full rounded-lg px-3 py-2 text-left text-sm whitespace-pre-wrap",
-                            value ? "hover:bg-muted/70" : "min-h-14 bg-muted/60 text-muted-foreground hover:bg-muted")}>
-        {!value ? placeholder : list ? (
-          <ul className="flex list-disc flex-col gap-0.5 pl-4">{lines(value).map((line, i) => <li key={i}>{line}</li>)}</ul>
-        ) : value}
-      </button>
-    )
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      <Textarea autoFocus value={text} placeholder={placeholder} onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save()
-                  if (e.key === "Escape") {
-                    e.stopPropagation()
-                    setText(value)
-                    setEditing(false)
-                  }
-                }}
-                className="min-h-24" />
-      <div className="flex items-center gap-1">
-        <Button size="sm" onClick={save}>Save</Button>
-        <Button size="sm" variant="ghost" onClick={() => { setText(value); setEditing(false) }}>Cancel</Button>
-        <span className="ml-auto text-[11px] text-muted-foreground">⌘ Enter to save</span>
-      </div>
-    </div>
-  )
-}
-
-/** "+ Add a …": a box to name a new one. Enter adds it and stays open for the next. */
-function Composer({ label, placeholder, onAdd }: { label: string; placeholder: string; onAdd: (name: string) => unknown }) {
-  const [adding, setAdding] = useState(false)
-  const [name, setName] = useState("")
-  const box = useRef<HTMLTextAreaElement>(null)
-  const add = async () => {
-    if (name.trim()) await onAdd(name.trim())
-    setName("")
-    box.current?.focus()
-  }
-
-  if (!adding) {
-    return <Button variant="ghost" className="w-full justify-start text-muted-foreground" onClick={() => setAdding(true)}><Plus data-icon="inline-start" /> {label}</Button>
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      <Textarea ref={box} autoFocus rows={2} value={name} placeholder={placeholder} onChange={(e) => setName(e.target.value)}
-                onBlur={() => !name.trim() && setAdding(false)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    add()
-                  }
-                  if (e.key === "Escape") {
-                    e.stopPropagation()
-                    setName("")
-                    setAdding(false)
-                  }
-                }}
-                className="min-h-0 resize-none bg-card" />
-      <div className="flex items-center gap-1">
-        <Button size="sm" onMouseDown={(e) => e.preventDefault()} onClick={add}>{label}</Button>
-        <Button size="icon-sm" variant="ghost" aria-label="Cancel" onClick={() => { setName(""); setAdding(false) }}><X /></Button>
       </div>
     </div>
   )
