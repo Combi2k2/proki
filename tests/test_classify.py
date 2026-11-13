@@ -229,3 +229,19 @@ def test_an_app_taken_out_on_the_apps_page_is_gone_until_seen_again(track):
     assert "Krita" not in {app["key"] for app in read("track.all")} and "Krita" not in {app.key for app in track.apps.db.read()}
     with pytest.raises(ValueError, match="no app"):
         on_apps({"op": "remove", "key": "Krita"}, track.apps)
+
+
+def test_a_windows_program_s_icon_is_what_powershell_found(monkeypatch, tmp_path):
+    import subprocess
+    from proki import icons
+
+    asked = {}
+    def ran(command, **kw):
+        asked.update(kw["env"])
+        return subprocess.CompletedProcess(command, 0, stdout="iVBORw0KGgo=\n" if kw["env"]["PROKI_APP"] == "Code.exe" else "")
+    monkeypatch.setattr(icons.sys, "platform", "win32")
+    monkeypatch.setattr(icons.subprocess, "run", ran)
+    monkeypatch.setattr(icons, "KEPT", tmp_path)
+    assert icons.found("Code.exe") == "data:image/png;base64,iVBORw0KGgo="
+    assert asked["PROKI_APP"] == "Code.exe"
+    assert icons.found("Gone.exe") is None and (tmp_path / "Gone.exe").read_bytes() == b""   # none, kept as none

@@ -1,6 +1,6 @@
 """An installed app's icon, by its name, kept once found (a website's favicon the app asks the website for itself):
 
-    icons(keys)   {key: a png data URL} for each app found installed here (macOS only); the rest are left out
+    icons(keys)   {key: a png data URL} for each app found here (macOS, Windows); the rest are left out
 
 One not found is looked for again after a week.
 """
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import os
 import plistlib
 import re
 import subprocess
@@ -46,8 +47,38 @@ def bundles() -> dict[str, Path]:
     return found
 
 
+# Windows: the program's file, from a running copy or else where it's registered, and its icon as a png
+FROM_EXE = r"""
+$n = $env:PROKI_APP
+$p = (Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($n)) -ErrorAction SilentlyContinue | Where-Object Path | Select-Object -First 1).Path
+foreach ($h in 'HKCU:', 'HKLM:') {
+  $k = "$h\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\$n"
+  if (-not $p -and (Test-Path $k)) { $p = (Get-ItemProperty $k).'(default)' }
+}
+if (-not $p) { exit 1 }
+$p = $p.Trim('"')
+if (-not (Test-Path $p)) { exit 1 }
+Add-Type -AssemblyName System.Drawing
+$m = New-Object IO.MemoryStream
+[Drawing.Icon]::ExtractAssociatedIcon($p).ToBitmap().Save($m, [Drawing.Imaging.ImageFormat]::Png)
+[Convert]::ToBase64String($m.ToArray())
+"""
+
+
+def of_exe(key: str) -> bytes | None:
+    """A Windows program's icon, by its file name ("Code.exe"), as a 32px png (None: not found here)."""
+    done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", FROM_EXE], capture_output=True, text=True, timeout=20,
+                          env={**os.environ, "PROKI_APP": key}, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    try:
+        return base64.b64decode(done.stdout.strip(), validate=True) if done.returncode == 0 and done.stdout.strip() else None
+    except ValueError:
+        return None
+
+
 def of_app(key: str) -> bytes | None:
     """An app's icon as a 32px png (None: not installed here)."""
+    if sys.platform == "win32":
+        return of_exe(key)
     if (app := bundles().get(key.lower())) is None:
         return None
     try:
@@ -80,10 +111,10 @@ async def icons(keys: list[str]) -> dict[str, str]:
     """Each key's icon as a data URL; a key with none is left out."""
     if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
         raise ValueError(f"keys is a list of app names ({keys!r})")
-    if sys.platform != "darwin":
+    if sys.platform not in ("darwin", "win32"):
         return {}
     def look() -> dict[str, str]:
-        bundles()  # once, before the threads
+        if sys.platform == "darwin":  bundles()  # once, before the threads
         with ThreadPoolExecutor(8) as pool:
             return {k: url for k, url in zip(keys, pool.map(found, keys)) if url}
     return await asyncio.to_thread(look)

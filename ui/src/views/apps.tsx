@@ -216,8 +216,8 @@ export function AppsView() {
   )
 }
 
-/** Whether a key is a website's host, not an app's name. */
-const site = (key: string) => key.includes(".") && !key.includes(" ")
+/** Whether a key is a website's host, not an app's name (on Windows an app goes by its file, "Code.exe"). */
+const site = (key: string) => key.includes(".") && !key.includes(" ") && !/\.exe$/i.test(key)
 
 /** Who gave its label: user, dev (Proki's list) or jev (null: no label yet). */
 function from(app: App): "user" | "dev" | "jev" | null {
