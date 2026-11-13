@@ -1,5 +1,5 @@
 :root {
-  font-family: var(--font-sans);
+  font-family: -apple-system, system-ui, "Segoe UI", sans-serif;   /* the system's, as its own menus have */
   font-size: 13px;
   font-synthesis: none;
   color-scheme: light dark;

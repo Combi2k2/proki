@@ -13,6 +13,7 @@ use crate::{bus, launcher, on_menu, proki};
 
 const WIDTH: f64 = 280.0;
 const HEIGHT: f64 = 230.0;
+const MARGIN: f64 = 12.0;  // the least room left between the panel and the screen's right edge
 
 static HIDDEN: Mutex<Option<Instant>> = Mutex::new(None); // when the panel last hid as it lost focus
 static TOUCHED: Mutex<Option<Instant>> = Mutex::new(None); // when the panel last gained or lost focus, or was shown
@@ -101,7 +102,8 @@ pub fn toggle(app: &AppHandle, rect: Rect, position: PhysicalPosition<f64>) {
         let area   = monitor.work_area();
         let (left, top)     = (area.position.x as f64 / scale, area.position.y as f64 / scale);
         let (right, bottom) = (left + area.size.width as f64 / scale, top + area.size.height as f64 / scale);
-        let x     = anchor.x.clamp(left, (right - WIDTH).max(left));
+        let room  = anchor.x + WIDTH + MARGIN <= right;                       // its left edge on the icon's, else its right edge on the icon's
+        let x     = (if room { anchor.x } else { anchor.x + icon.width - WIDTH }).clamp(left, (right - WIDTH).max(left));
         let below = anchor.y + icon.height;
         let y     = if below + HEIGHT <= bottom { below } else { anchor.y - HEIGHT };  // under the icon, else over it
         let at    = LogicalPosition::new(x, y.clamp(top, (bottom - HEIGHT).max(top)));
