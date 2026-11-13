@@ -220,3 +220,12 @@ def test_dwell_uses_the_cycle_clock_even_before_programs_tick(track, monkeypatch
         Stream.tick(at)
         assert read("track.since") == pytest.approx(seconds / 60)
         Program.now = at
+
+
+def test_an_app_taken_out_on_the_apps_page_is_gone_until_seen_again(track):
+    from proki.serve import on_apps
+    track.focus_on(("Krita", None), 0)
+    assert on_apps({"op": "remove", "key": "Krita"}, track.apps) == {}
+    assert "Krita" not in {app["key"] for app in read("track.all")} and "Krita" not in {app.key for app in track.apps.db.read()}
+    with pytest.raises(ValueError, match="no app"):
+        on_apps({"op": "remove", "key": "Krita"}, track.apps)

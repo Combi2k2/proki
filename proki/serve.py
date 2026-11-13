@@ -63,6 +63,8 @@ you pick is confirmed, so it's never asked about again, and `track` is whether i
     {"op": "read"}                                                → {"apps": [...], "labels": [...]}
     {"op": "change", "key": "vimeo.com", "label": 3}              → {}          a label's id
     {"op": "change", "key": "vimeo.com", "track": false}          → {}          its label is kept
+    {"op": "remove", "key": "vimeo.com"}                          → {}          gone, until it's seen again
+    {"op": "icons", "keys": ["Code", "Krita"]}                    → {"Code": "data:image/png;base64,…"}   the apps installed here
 
 A mistake answers {"error": "..."}. Times, deadlines too, go as ISO text.
 """
@@ -70,6 +72,7 @@ A mistake answers {"error": "..."}. Times, deadlines too, go as ISO text.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
@@ -79,6 +82,7 @@ from proki.core.actions import ACTIONS
 from proki.core.programs import Program
 from proki.core.records import ASKS, STAMPS, Field, Records
 from proki.core.signals import Signal, Stream
+from proki.icons import icons
 from proki.metrics import Metrics
 from proki.model.model import Model
 from proki.programs.code.base import find_variable
@@ -142,16 +146,17 @@ async def serve(bus: Bus, work: Work, quit: Callable[[], None],
     await bus.subscribe("proki.app.tasks", answering(lambda request: on_tasks(request, work)))
     await bus.subscribe("proki.app.notes", answering(on_notes))
     await bus.subscribe("proki.app.fields", answering(lambda request: on_fields(request, work, reload)))
-    await bus.subscribe("proki.app.apps", answering(lambda request: on_apps(request, apps)))
+    await bus.subscribe("proki.app.apps", answering(lambda request: icons(request.get("keys")) if request.get("op") == "icons" else on_apps(request, apps)))
     await bus.subscribe("proki.app.today", answering(lambda request: today(work)))
     await bus.subscribe("proki.app.metrics", answering(lambda request: on_metrics(request, metrics, signals(), model)))
 
 
-def answering(handle: Callable[[dict], dict]) -> Callable[[dict], Any]:
-    """A handler that answers {"error": ...} for a mistake, instead of no answer."""
+def answering(handle: Callable[[dict], Any]) -> Callable[[dict], Any]:
+    """A handler (its answer, or one to wait for) that answers {"error": ...} for a mistake, instead of no answer."""
     async def answer(request: dict) -> dict:
         try:
-            return handle(request)
+            given = handle(request)
+            return await given if inspect.isawaitable(given) else given
         except (KeyError, TypeError, ValueError) as e:
             return {"error": f"{e.__class__.__name__}: {e}"}
     return answer
@@ -289,7 +294,7 @@ def sorts_at() -> float | None:
 
 
 def on_apps(request: dict, apps: Apps | None) -> dict:
-    """Each app and website, its label by its id (None: none yet), and every label, or one app changed."""
+    """Each app and website, its label by its id (None: none yet), and every label; or one app changed, or taken out."""
     op, key = request.get("op"), request.get("key")
     if op == "read":
         if apps is None:
@@ -297,8 +302,11 @@ def on_apps(request: dict, apps: Apps | None) -> dict:
         known = apps.known()
         return {"apps"  : [plain(app) | {"label": app.label if app.label in known else None} for app in apps.rows.values()],
                 "labels": [plain(label) | {"depth": label.depth.value} for label in known.values()]}
-    if op != "change":                         raise ValueError(f"op is read or change ({op!r})")
+    if op not in ("change", "remove"):         raise ValueError(f"op is read, change, remove or icons ({op!r})")
     if apps is None or apps.get(key) is None:  raise ValueError(f"no app or website {key!r}")
+    if op == "remove":
+        apps.forget(key)
+        return {}
     changed = {}
     if "label" in request:
         label = request["label"]

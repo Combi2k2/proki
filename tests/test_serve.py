@@ -223,7 +223,8 @@ async def test_a_wrong_change_to_an_app_is_answered():
     assert "no label" in (await ask({"key": "youtube.com", "label": max(apps.known()) + 1}))["error"]
     assert "no label" in (await ask({"key": "youtube.com", "label": True}))["error"]
     assert "its label or track" in (await ask({"key": "youtube.com"}))["error"]
-    assert "op is read or change" in (await local.request("proki.app.apps", {"op": "remove"}, 1))["error"]
+    assert "op is read, change, remove or icons" in (await local.request("proki.app.apps", {"op": "rename"}, 1))["error"]
+    assert "no app or website" in (await local.request("proki.app.apps", {"op": "remove", "key": "Krita"}, 1))["error"]
 
 
 async def test_the_fields_through_the_bus():
