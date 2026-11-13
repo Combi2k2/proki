@@ -1,17 +1,18 @@
-// Metrics: Charts, each reported signal over a horizon, in buckets that fit it; Signals, every
-// global signal, to report or not, and how its buckets are made.
+// Metrics: Charts, each reported signal over a horizon of its own, in buckets that fit it, each opened or
+// closed (closed, its title); Signals, every global signal, to report or not, and how its buckets are made.
 
 import { useCallback, useEffect, useState } from "react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import { ChartLine } from "lucide-react"
+import { ChartLine, ChevronRight } from "lucide-react"
 import { PageHeader } from "@/components/page"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import type { Buckets, Horizon, Method, Metric } from "@/lib/proki"
+import { recall, recallJson, remember } from "@/lib/remember"
 import { cn } from "@/lib/utils"
 
 // the series color, chosen for each mode's surface (validated: lightness, chroma, 3:1 contrast)
@@ -24,7 +25,6 @@ const title = (name: string) => name.replaceAll("_", " ").replace(/^./, (c) => c
 export function MetricsView() {
   const [metrics, setMetrics] = useState<Metric[]>([])
   const [page, setPage] = useState<"charts" | "signals">("charts")
-  const [horizon, setHorizon] = useState<Horizon>("week")
   const [error, setError] = useState("")
 
   const load = useCallback(async () => {
@@ -55,20 +55,7 @@ export function MetricsView() {
             <TabsTrigger value="charts">Charts</TabsTrigger>
             <TabsTrigger value="signals">Signals <span className="text-muted-foreground tabular-nums">{reported.length}</span></TabsTrigger>
           </TabsList>
-        </Tabs>}>
-        {page === "charts" && (
-          <div role="group" aria-label="Over" className="flex gap-1 rounded-lg bg-muted p-1">
-            {HORIZONS.map(([h, label, size]) => (
-              <button key={h} onClick={() => setHorizon(h)} title={`a bar every ${size}`}
-                      aria-pressed={horizon === h}
-                      className={cn("rounded-md px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
-                                    horizon === h && "bg-background font-medium text-foreground shadow-xs")}>
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </PageHeader>
+        </Tabs>} />
       {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
       {page === "signals" ? <Signals metrics={metrics} onChange={change} /> : reported.length === 0 ? (
@@ -81,7 +68,7 @@ export function MetricsView() {
         </Empty>
       ) : (
         <div className="grid gap-4">
-          {reported.map((m) => <Chart key={m.name} metric={m} horizon={horizon} />)}
+          {reported.map((m) => <Chart key={m.name} metric={m} />)}
         </div>
       )}
     </div>
@@ -136,17 +123,20 @@ function pace(minutes: number | null): string {
   return `${Math.round(minutes / 1440)} d`
 }
 
-/** One metric over the horizon, a bar a bucket. */
-function Chart({ metric, horizon }: { metric: Metric; horizon: Horizon }) {
+/** One metric over a horizon of its own, a bar a bucket; its title opens it and closes it (both kept in this window). */
+function Chart({ metric }: { metric: Metric }) {
+  const [horizon, setHorizon] = useState<Horizon>(() => recall(`metric.${metric.name}.horizon`, HORIZONS.map(([h]) => h), "week"))
+  const [open, setOpen] = useState(() => recallJson(`metric.${metric.name}.open`, true))
   const [read, setRead] = useState<Buckets | null>(null)  // null: still loading
 
   useEffect(() => {
+    if (!open) return
     let live = true
     window.proki.metrics({ op: "read", name: metric.name, horizon }).then((answer) => live && !answer.error && setRead(answer))
     return () => {
       live = false
     }
-  }, [metric.name, metric.method, horizon])
+  }, [metric.name, metric.method, horizon, open])
 
   const shown = (value: number | null) =>
     value == null ? "–" : Math.abs(value) < 10 ? value.toFixed(2).replace(/\.?0+$/, "") || "0" : `${Math.round(value)}`
@@ -155,23 +145,39 @@ function Chart({ metric, horizon }: { metric: Metric; horizon: Horizon }) {
     : horizon === "month" ? t.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "numeric" })
     : t.toLocaleDateString(undefined, { month: "short", day: "numeric" })
   const data = (read?.buckets ?? []).map(([t, value]) => ({ label: label(new Date(t)), value }))
-  const latest = [...data].reverse().find((d) => d.value != null)
+  const filled = data.some((d) => d.value != null)
   const config = { value: { label: title(metric.name), theme: SERIES } } satisfies ChartConfig
   const axisText = { fill: "var(--muted-foreground)", fontSize: 11 }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-mono">{title(metric.name)}</CardTitle>
-        <CardDescription>
-          {latest ? <>latest <span className="font-medium text-foreground tabular-nums">{shown(latest.value)}</span> · </> : null}
-          {metric.method} per {HORIZONS.find(([h]) => h === horizon)![2]}
-        </CardDescription>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="font-mono">
+            <button type="button" aria-expanded={open} onClick={() => (remember(`metric.${metric.name}.open`, JSON.stringify(!open)), setOpen(!open))}
+                    className="flex items-center gap-1.5 rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+              <ChevronRight aria-hidden className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-90")} />
+              {title(metric.name)}
+            </button>
+          </CardTitle>
+          {open && (
+            <div role="group" aria-label={`${title(metric.name)}, over`} className="flex gap-1 rounded-lg bg-muted p-1">
+              {HORIZONS.map(([h, label, size]) => (
+                <button key={h} onClick={() => (remember(`metric.${metric.name}.horizon`, h), setHorizon(h))} title={`a bar every ${size}`} aria-pressed={horizon === h}
+                        className={cn("rounded-md px-3 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                                      horizon === h && "bg-background font-medium text-foreground shadow-xs")}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </CardHeader>
+      {open && (
       <CardContent>
         {read === null ? (
           <p className="py-16 text-center text-sm text-muted-foreground">Loading…</p>
-        ) : !latest ? (
+        ) : !filled ? (
           <p className="py-16 text-center text-sm text-muted-foreground">No data in this range yet.</p>
         ) : horizon === "year" ? (
           <Days buckets={read!.buckets} shown={shown} />
@@ -187,6 +193,7 @@ function Chart({ metric, horizon }: { metric: Metric; horizon: Horizon }) {
           </ChartContainer>
         )}
       </CardContent>
+      )}
     </Card>
   )
 }

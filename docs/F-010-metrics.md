@@ -7,7 +7,7 @@
 Your focus and activity across days and weeks.
 
 ## How it works
-- Charts: each reported signal over a horizon, in buckets that fit it.
+- Charts: each reported signal over a horizon of its own (day, week, month or year), in buckets that fit it. Each chart opens and closes from its title; closed, only the title shows.
 - Signals: every global signal, to report or not. A persisted one also sets how long it's kept
   and how its buckets are made (mean, sum, ...).
 - The shipped ones: `focus_history` and `engaged_history` (a week), `session.daily` (a year).
