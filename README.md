@@ -28,14 +28,16 @@
   </a>
 </p>
 
-<p align="center">
-  <a href="#why-proki">Why Proki</a> ·
-  <a href="#what-you-can-do">Features</a> ·
-  <a href="#your-day-stays-yours">Privacy</a> ·
-  <a href="#try-proki">Try it</a> ·
-  <a href="#for-builders">Builders</a> ·
-  <a href="#support">Support</a>
-</p>
+## 📑 Table of contents
+
+- [Why Proki](#why-proki)
+- [Features](#features)
+- [Planned and exploring](#planned)
+- [Privacy](#privacy)
+- [Try Proki](#try-proki)
+- [Docs](#docs)
+- [Support](#support)
+- [License](#license)
 
 ---
 
@@ -48,8 +50,8 @@ Choose a principle that matters to you, then express it through signals and a fo
 
 With MCP, a connected AI assistant can help you design, explain, or revise those formulas and routines whenever your approach changes. Your philosophy stays yours; Proki helps you make it actionable.
 
-<a id="what-you-can-do"></a>
-## 🧭 What you can do
+<a id="features"></a>
+## 🧭 Features
 
 ### 🚀 Getting started
 
@@ -83,6 +85,30 @@ With MCP, a connected AI assistant can help you design, explain, or revise those
 | Know where time goes | Choose how each app or website counts toward focus, breaks, or distractions. | ⚪ |
 | Watch the trend | Explore focus and activity patterns across days and weeks. | 🟡 |
 
+### 🌱 Routines that come with it
+
+Proki ships with a set of routines built on ideas from *Deep Work* and *Atomic Habits*. Each one is yours to switch off or change.
+
+| Routine | When it speaks up | The idea behind it |
+| --- | --- | --- |
+| Morning start | When your day starts: a hello for the time of day, today's first task, and time to settle in if you want it. | A start ritual; make the next step obvious |
+| Focus sessions | During a session: a word when you drift, a break after 50 minutes, a "nice one" when you stop. | Deep work in blocks; make it satisfying |
+| Session suggestions | When you're already deep in work: offers a session, at most every 2 hours. | Protect the flow you're in |
+| Task picker | At a session's start: what it's for. | Say what you'll do and when |
+| Time on tasks | Counts a task's time; checks in after a break, or when it runs past its estimate. | Know what work really costs |
+| Task reminders | A task due soon or put off again and again: start it, or say what's in the way. | Make it easy: split what's too big |
+| Planner | Talks a todo through and turns it into tasks. | Plan the work, then work the plan |
+| Inbox guard | Email or chat during a session, once a session: it can wait. | Hub and spoke |
+| Busywork check | Once a day, if small tasks take over 30% of your time. | A budget for shallow work |
+| Thought catcher | After 5 minutes of distraction: anything on your mind? | Write it down to let it go |
+| Note sorter | Sorts your notes quietly; asks only when one sounds urgent, or when it isn't sure. | Keep the thought, lose the clutter |
+| App labels | A new app or website: does it count, and what kind is it? | Know where time goes |
+| End of workday | As the workday winds down: what's still open, on Fridays the week, then you're free. | Shutdown complete |
+| Bedtime | From 22:00: time to wind down; past midnight, offers to lock the screen. | Rest is part of the work |
+| Day clock | Never: it counts your focused minutes and your streak. | Keep score of the lead measure |
+
+Proki keeps quiet between the questions it asks on its own, 30 minutes by default. A question you leave unanswered makes the next wait twice as long.
+
 ### 🎛️ Make it yours
 
 | What you need | How Proki helps | Status |
@@ -92,16 +118,63 @@ With MCP, a connected AI assistant can help you design, explain, or revise those
 | Organize your information | Create tables for tasks, notes, and other records. | ✅ |
 | Learn as you go | Try expressions and actions on sample data in the built-in Help area. | ✅ |
 
-### 🤝 AI and assistants
+### 💬 Support
 
 | What you need | How Proki helps | Status |
 | --- | --- | --- |
-| AI when you need it | Choose a provider for AI-assisted planning and prompts. | ✅ |
-| Connect an assistant | Let Claude Code, Codex, OpenClaw, or another compatible assistant use your Proki tasks and routines. | ✅ |
-| Share feedback | Send a suggestion, even when you’re offline; Proki queues it to send later. | 🟡 |
+| Get started | Three first steps in Help, each with the button that takes it, and answers to common questions. | ✅ |
+| Share feedback | Send a suggestion with up to three screenshots, even offline; Proki sends it once you're back online. | 🟡 |
+| Back the project | The Support page links Proki's code on GitHub and its Buy me a coffee page. | ✅ |
+
+<a id="ai-agent"></a>
+### 🤖 AI Agent
+
+Let Claude Code, Codex, OpenClaw, or any MCP-compatible agent read and modify your tasks,
+notes, routines, media and settings, over a local, token-protected connection. With the
+**proki-automation** skill, it turns plain requests like *"remind me to stretch every hour,
+but not in calls"* into a routine, edits one, or explains why one did or didn't fire.
+
+1. Connect your agent to Proki's MCP server (commands for each agent below).
+2. Add the skill:
+
+   ```bash
+   npx skills add Combi2k2/proki --skill proki-automation
+   ```
+
+   This works for any agent the [skills CLI](https://github.com/vercel-labs/skills) supports.
+   Otherwise, copy [`skills/proki-automation/`](skills/proki-automation) into your agent's
+   skills folder.
+
+<details>
+<summary><b>Claude Code</b></summary>
+
+```bash
+claude mcp add proki -- proki mcp
+```
+
+</details>
+
+<details>
+<summary><b>Codex</b></summary>
+
+```bash
+codex mcp add proki -- proki mcp
+```
+
+</details>
+
+<details>
+<summary><b>OpenClaw</b></summary>
+
+```bash
+openclaw mcp set proki '{"command":"proki","args":["mcp"]}'
+```
+
+</details>
 
 *Status: ✅ ready · 🟡 needs polish · ⚪ not reviewed.*
 
+<a id="planned"></a>
 ### 📋 Planned and exploring
 
 These ideas are not available yet. The planned items are the next product foundations; the rest need more thought before they become commitments.
@@ -116,74 +189,67 @@ These ideas are not available yet. The planned items are the next product founda
 
 *📌 Planned means intended, not released. 🔍 Exploring means the approach is still open.*
 
-<a id="your-day-stays-yours"></a>
-## 🔒 Your day stays yours
+<a id="privacy"></a>
+## 🔒 Privacy
 
-ActivityWatch keeps activity history on your computer, such as app names, window titles, and browser pages. Its optional input watcher records activity counts, not the keys you press.
+ActivityWatch keeps your activity history on your computer: app names, window titles, and
+browser pages. Its optional input watcher counts keys and clicks; it never records which keys
+you press.
 
-If you connect an AI service, Proki sends it the context needed for each request. You choose the provider; its key stays on your computer.
+Proki's own parts talk to each other only inside your computer. If you connect an AI service,
+Proki sends it just the context each request needs. You choose the provider, and its key stays
+on your computer.
 
 <a id="try-proki"></a>
 ## 🚀 Try Proki
 
-Proki is an early build. macOS (Apple silicon) is tested; Windows is not yet tested on a real machine, and Linux installers are not available.
+Proki is an early build for macOS (Apple silicon) and Windows. There's no Linux version yet.
 
-### 📦 From installer
+### 📦 From [installer](#download)
 
-The current macOS and Windows preview installers are linked at the top of this README. They come from the latest release (v0.1.3); every release is on the Releases page. ActivityWatch is included in setup and its browser extension is offered on first launch.
+Every release is on the [Releases page](https://github.com/Combi2k2/proki/releases).
+Setup includes ActivityWatch; Proki offers its browser extension on first launch.
 
-- **macOS:** Open the `.dmg` and drag Proki to Applications. If macOS blocks the unsigned app, run `xattr -cr /Applications/Proki.app` once.
-- **Windows:** Run the installer. If SmartScreen appears, choose **More info → Run anyway**.
+**macOS**
 
-### [⬆️ Back to installer downloads](#download)
+1. Open the `.dmg` and drag **Proki** into **Applications**.
+2. Before opening it, run these two commands in Terminal. The first lets macOS open an app
+   that isn't notarized by Apple yet; the second clears permissions left by an older version.
+
+   ```bash
+   xattr -cr /Applications/Proki.app
+   tccutil reset All app.proki.ui
+   ```
+
+3. Open Proki. In **System Settings › Privacy & Security**, turn Proki on under
+   **Accessibility** and **Input Monitoring**, so it can see which app you're in and whether
+   you're active.
+
+Run the same two commands after each update.
+
+**Windows**
+
+Run the installer. If SmartScreen appears, choose **More info › Run anyway**.
 
 ### 🧑‍💻 From source
 
-Install ActivityWatch, NATS, [uv](https://docs.astral.sh/uv/), and [Node.js](https://nodejs.org/). On macOS, install NATS with `brew install nats-server`, then from the repo folder:
+Install [ActivityWatch](https://activitywatch.net), [uv](https://docs.astral.sh/uv/),
+[Node.js](https://nodejs.org/) and NATS. On macOS:
+
+```bash
+brew install nats-server
+```
+
+Then, from the repository folder, build the app and start Proki:
 
 ```bash
 uv sync
-cd ui && npm install && npm run app
-cd ..
+cd ui && npm install && npm run app && cd ..
 uv run launch.py
 ```
 
-For browser tracking, add ActivityWatch’s browser extension. Quit Proki or press `Ctrl-C` to stop it.
-
-### Local connections
-
-Settings lets you choose the ActivityWatch, message bus, and app tools ports. Each must be a
-different whole number from 1 to 65535. Defaults work for most computers; change them when a
-port is already in use. Save, then quit and reopen Proki to apply the changes together.
-If you run ActivityWatch separately or use its browser extension, configure the same
-ActivityWatch port there too. All three services stay on the loopback interface.
-
-Ports are saved in the `[ports]` section of `config.toml`, alongside the LLM and Jev
-connections. Saving a connection preserves your port settings. Proki uses the dark theme.
-
-<a id="for-builders"></a>
-## 🛠️ For builders
-
-Compatible AI assistants can access Proki’s tasks, routines, media, and settings through its local, token-protected MCP connection.
-
-Choose **Install command-line tool…** in the tray menu, then add `proki mcp` to your assistant:
-
-```bash
-claude mcp add proki -- proki mcp
-codex mcp add proki -- proki mcp
-openclaw mcp set proki '{"command":"proki","args":["mcp"]}'
-```
-
-Then give your assistant the **proki-automation** skill, so it can turn what you say in everyday words
-("remind me to stretch every hour, but not in calls") into an automation, change one, or explain why one did or
-didn't fire:
-
-```bash
-npx skills add Combi2k2/proki --skill proki-automation
-```
-
-It installs into Claude Code, Codex, Cursor and the other agents the [skills CLI](https://github.com/vercel-labs/skills)
-supports; or copy [`skills/proki-automation/`](skills/proki-automation) into your agent's skills folder yourself.
+<a id="docs"></a>
+## 📚 Docs
 
 Each feature has a one-minute page in [docs](docs/README.md), starting with the [architecture](docs/NF-001-architecture.md).
 
@@ -198,6 +264,7 @@ Support page helps just as much.
   <a href="https://buymeacoffee.com/combi2k2"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee" /></a>
 </p>
 
+<a id="license"></a>
 ## 📄 License
 
 [MIT](LICENSE)
