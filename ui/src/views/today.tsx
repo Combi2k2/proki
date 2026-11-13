@@ -77,7 +77,10 @@ export function TodayView({ onGo }: { onGo: Go }) {
     <Card size="sm" className="h-full">
       <CardHeader>
         <CardTitle>Your focus today</CardTitle>
-        <CardDescription>How focused you were, each 5 minutes at the computer. Drag a line to move it; double-click to add or remove one.</CardDescription>
+        <CardDescription>
+          <span className="block">Drag a line to move it.</span>
+          <span className="block">Double-click to add or remove one.</span>
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col">
         {today ? <Spread day={today.day} now={today.focus} onMove={move} /> : <Skeleton className="size-full" />}
@@ -87,8 +90,7 @@ export function TodayView({ onGo }: { onGo: Go }) {
   const goal = (
     <Card size="sm" className="h-full">
       <CardHeader>
-        <CardTitle>Daily goal</CardTitle>
-        <CardDescription>Focused time</CardDescription>
+        <CardTitle>Focused time</CardTitle>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col items-center gap-2">
         {today ? <Goal day={today.day} /> : <Skeleton className="aspect-square h-full rounded-full" />}
@@ -169,13 +171,13 @@ function Between({ across }: { across?: boolean }) {
 /** A panel's card: its title, what it holds, a way to all of it at its corner, and what it shows,
  * scrolling when it's more than the panel. */
 function Panel({ title, about, go, children, className }: {
-  title: string; about: ReactNode; go: { label: string; onClick: () => void }; children: ReactNode; className?: string
+  title: string; about?: ReactNode; go: { label: string; onClick: () => void }; children: ReactNode; className?: string
 }) {
   return (
     <Card size="sm" className="h-full">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{about}</CardDescription>
+        {about && <CardDescription>{about}</CardDescription>}
         <CardAction>
           <Button variant="link" size="sm" className="h-auto px-0" onClick={go.onClick}>{go.label} <ArrowRight data-icon="inline-end" /></Button>
         </CardAction>
@@ -333,15 +335,14 @@ function Legend({ bands }: { bands: Band[] }) {
   )
 }
 
-/** The focused time today against the time you aim for, as a ring filling up; under it, what's left,
- * the days in a row you reached it and the week so far. */
+/** The focused time today against the time you aim for, as a ring filling up; under it, the goal and the days in a row you reached it. */
 function Goal({ day }: { day: FocusDay }) {
   const size = 128, stroke = 10, r = (size - stroke) / 2, around = 2 * Math.PI * r
   const share = day.goal > 0 ? Math.min(day.focused / day.goal, 1) : 0
   return (
     <>
       <figure className="relative aspect-square min-h-0 max-w-full flex-1" aria-label={`${hm(day.focused)} focused of your ${hm(day.goal)} goal`}>
-        <svg viewBox={`0 0 ${size} ${size}`} className="size-full" aria-hidden>
+        <svg viewBox={`0 0 ${size} ${size}`} className="absolute inset-[7%] size-[86%]" aria-hidden>
           <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
             <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--muted)" strokeWidth={stroke} />
             <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--focused)" strokeWidth={stroke} strokeLinecap="round"
@@ -353,16 +354,18 @@ function Goal({ day }: { day: FocusDay }) {
           </text>
         </svg>
       </figure>
-      <p className="flex shrink-0 flex-wrap justify-center gap-x-3 text-xs text-muted-foreground tabular-nums">
-        <span className="font-medium text-foreground">{share >= 1 ? "Goal reached" : `${hm(day.goal - day.focused)} to go`}</span>
-        {!!day.streak && <span className="flex items-center gap-1"><Flame className="size-3 text-shallow" />{day.streak} {day.streak === 1 ? "day" : "days"} in a row</span>}
-        {day.week != null && <span>{hm(day.week)} this week</span>}
+      <p className="flex shrink-0 flex-wrap items-center justify-center gap-x-2 text-xs text-muted-foreground tabular-nums">
+        <span>Daily goal: <span className="font-medium text-foreground">{hm(day.goal)}</span></span>
+        {!!day.streak && <span className="flex items-center gap-1">· <Flame className="size-3 text-shallow" aria-hidden />{day.streak} {day.streak === 1 ? "day" : "days"} streak</span>}
       </p>
     </>
   )
 }
 
 // --- your tasks -----------------------------------------------------------------------------
+
+/** The columns of the tasks after the next: each its own room, what's too long cut short. */
+const AFTER = "grid grid-cols-[minmax(0,1fr)_7rem_3rem] items-center gap-3"
 
 function Tasks({ today, onWork, onGo }: { today: Today | null; onWork: (id: number) => void; onGo: Go }) {
   const next = today?.next
@@ -383,17 +386,16 @@ function Tasks({ today, onWork, onGo }: { today: Today | null; onWork: (id: numb
         <p className="text-sm text-muted-foreground">Nothing to start yet. Write down what you need to do, and Proki plans it into tasks.</p>
       )}
       {today && today.after.length > 0 && (
-        <ul className="flex flex-col">
+        <div className="flex flex-col">
+          <div className={cn(AFTER, "px-1 pb-1 text-xs text-muted-foreground")}><span>Task</span><span>Group</span><span className="text-right">Time</span></div>
           {today.after.map(({ task, group }) => (
-            <li key={task.id}>
-              <button onClick={() => onGo("tasks", group.id)} className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-sm hover:bg-muted">
-                <span className="min-w-0 flex-1 truncate">{task.name}</span>
-                <span className="max-w-32 shrink-0 truncate text-xs text-muted-foreground">{group.name}</span>
-                <span className="w-10 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{hm(task.estimate)}</span>
-              </button>
-            </li>
+            <button key={task.id} onClick={() => onGo("tasks", group.id)} className={cn(AFTER, "w-full rounded-md border-t px-1 py-1.5 text-left text-sm hover:bg-muted")}>
+              <span className="truncate" title={task.name}>{task.name}</span>
+              <span className="truncate text-xs text-muted-foreground" title={group.name}>{group.name}</span>
+              <span className="text-right text-xs text-muted-foreground tabular-nums">{hm(task.estimate)}</span>
+            </button>
           ))}
-        </ul>
+        </div>
       )}
     </Panel>
   )
@@ -444,10 +446,9 @@ function Capture({ onGo }: { onGo: Go }) {
 }
 
 function Helping({ programs, onGo }: { programs: Reference["programs"]; onGo: Go }) {
-  const on   = programs.filter((p) => p.on)
-  const busy = on.filter((p) => doing(p).busy).length
+  const on = programs.filter((p) => p.on)
   return (
-    <Panel title="Helping you" about={`${on.length} on${busy ? `, ${busy} working now` : ""}`}
+    <Panel title="Your helpers" about="Little helpers that work on their own."
            go={{ label: "All automations", onClick: () => onGo("programs") }} className="gap-1.5">
       {on.length === 0 && <p className="text-sm text-muted-foreground">No automations are on.</p>}
       {on.map((p) => {
@@ -457,8 +458,8 @@ function Helping({ programs, onGo }: { programs: Reference["programs"]; onGo: Go
           <button key={p.name} onClick={() => onGo("programs", p.name)} title={`See how ${title} works`}
                   className="-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
             <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate font-mono">{title}</span>
-            <span className={cn("ml-auto shrink-0 text-xs", now.busy ? "font-medium text-brand" : "text-muted-foreground")}>{now.busy ? now.text : "Ready"}</span>
+            <span className="truncate text-xs font-medium">{title}</span>
+            <span className={cn("ml-auto shrink-0 text-xs", now.busy ? "font-medium text-focused" : "text-muted-foreground")}>{now.busy ? now.text : "Ready"}</span>
           </button>
         )
       })}
