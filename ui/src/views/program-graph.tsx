@@ -13,7 +13,8 @@
 // when it waits. The start is marked, the one open (`picked`) ringed. A box opens the state (a
 // click, or Enter or Space on it), a capsule the way out (`onInspect`); a click on nothing, `onPane`.
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import {
   Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider,
   getBezierPath, getSmoothStepPath, getStraightPath, useInternalNode, useNodesInitialized, useNodesState, useReactFlow,
@@ -39,7 +40,7 @@ const STYLES = ["curved", "elbow", "straight", "springs"] as const  // springs: 
 type Style = (typeof STYLES)[number]
 type XY = { x: number; y: number }
 type State = ProgramDetail["states"][number]
-type StateData = { state: State; start: boolean; lit: boolean; picked: boolean; fixed: boolean; waking: string | null; onOpen: () => void }
+type StateData = { onLink?: (e: React.PointerEvent) => void; state: State; start: boolean; lit: boolean; picked: boolean; fixed: boolean; waking: string | null; onOpen: () => void }
 type Box = SimulationNodeDatum & { id: string; w: number }
 type WayData = { label: string; hint: string; number: number; tried: boolean | null; flowing: boolean; dashed: boolean; lane: number; lanes: number; style: Style; onOpen: () => void }
 type StateNode = Node<StateData, "state">
@@ -100,11 +101,17 @@ export function forgetGraph(name: string) {
 /** A button down the graph's left side: its own box, its icon big. */
 const SIDE = "rounded-xl bg-background/90 shadow-sm backdrop-blur [&_svg]:size-6!"
 
+/** A box lit to be connected: its own edge, thick and cyan. */
+const EDGE = "border-cyan-400! shadow-[inset_0_0_0_1.5px_var(--color-cyan-400)]"
+
+const Linking = createContext<{ from: string; over: string | null } | null>(null)  // a connection being dragged: from which box, over which
+
 type GraphProps = {
   detail: ProgramDetail
   picked?: string | null
   onInspect: (next: Inspected) => void
   onPane?: () => void
+  onLink?: (from: string, to: string) => void           // a connection dragged from one box to another
   onAdd?: () => void                                    // a "+" to make a new state
   sweep?: { names: string[]; onSweep: () => void }      // a broom to delete the states nothing leads to (`names`)
 }
@@ -113,7 +120,7 @@ export function GraphView(props: GraphProps) {
   return <ReactFlowProvider><Graph {...props} /></ReactFlowProvider>
 }
 
-function Graph({ detail, picked, onInspect, onPane, onAdd, sweep }: GraphProps) {
+function Graph({ detail, picked, onInspect, onPane, onAdd, onLink, sweep }: GraphProps) {
   const placesKey = `graph.${detail.name}.places`, viewKey = `graph.${detail.name}.view`, fixedKey = `graph.${detail.name}.fixed`
   const shape = JSON.stringify(detail.states.map((s) => [s.name, s.next.map((b) => b.goto)]))  // what the layout depends on
   const auto = useMemo(() => Object.fromEntries(springs(detail, layout(detail)).tick(400).nodes().map((b) => [b.id, corner(b)])), [shape])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -135,10 +142,34 @@ function Graph({ detail, picked, onInspect, onPane, onAdd, sweep }: GraphProps) 
   const checking = !!now && !doing && (!detail.waking || Date.parse(detail.waking) <= Date.now())  // its wait over: it tries its ways out
   const dark = document.documentElement.classList.contains("dark")
 
+  const [link, setLink] = useState<{ from: string; x: number; y: number; over: string | null } | null>(null)
+  const start = useRef<(from: string, e: React.PointerEvent) => void>(() => {})
+  const done  = useRef(onLink)
+  done.current = onLink
+  start.current = (from, e) => {  // dragged from a box's edge: a line follows the pointer, and the box under it lights; dropped on one, it's a new way out to it
+    e.stopPropagation()
+    e.preventDefault()
+    const at = (ev: { clientX: number; clientY: number }) => {
+      const p = flow.screenToFlowPosition({ x: ev.clientX, y: ev.clientY })
+      const over = flow.getNodes().find((n) => n.id !== from && p.x >= n.position.x && p.x <= n.position.x + (n.measured?.width ?? width(n.id)) && p.y >= n.position.y && p.y <= n.position.y + (n.measured?.height ?? H))
+      return { from, x: ev.clientX, y: ev.clientY, over: over?.id ?? null }
+    }
+    setLink(at(e.nativeEvent))
+    const move = (ev: PointerEvent) => setLink(at(ev))
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move)
+      const l = at(ev)
+      setLink(null)
+      if (l.over) done.current?.(from, l.over)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up, { once: true })
+  }
   const made = (s: State): StateNode => ({
     id: s.name, type: "state", position: places[s.name] ?? auto[s.name] ?? { x: 0, y: 0 },
     data: { state: s, start: s.name === detail.initial, lit: s.name === now, picked: s.name === picked, fixed: live && fixed.includes(s.name),
-            waking: s.name === now ? detail.waking : null, onOpen: () => onInspect({ kind: "state", state: s.name }) },
+            waking: s.name === now ? detail.waking : null, onOpen: () => onInspect({ kind: "state", state: s.name }),
+            onLink: onLink ? (e) => start.current(s.name, e) : undefined },
   })
   const [nodes, setNodes, onNodesChange] = useNodesState<StateNode>(detail.states.map((s) => made(s)))
   useEffect(() => {  // what the states say, as it changes; each box kept as it is (where, its size), so it's not measured again
@@ -252,6 +283,7 @@ function Graph({ detail, picked, onInspect, onPane, onAdd, sweep }: GraphProps) 
            const id = (e.key === "Enter" || e.key === " ") && (e.target as HTMLElement).closest<HTMLElement>(".react-flow__node")?.dataset.id
            if (id) (e.preventDefault(), onInspect({ kind: "state", state: id }))
          }}>
+      <Linking.Provider value={link ? { from: link.from, over: link.over } : null}>
       <ReactFlow<StateNode, WayEdge>
         nodes={nodes} edges={edges} onNodesChange={onNodesChange} nodeTypes={NODES} edgeTypes={EDGES}
         onNodeDragStart={(_, __, moved) => live && (moved.forEach((n) => held.current.add(n.id)), hold(moved), sim.current?.alphaTarget(0.3).restart())}
@@ -308,6 +340,39 @@ function Graph({ detail, picked, onInspect, onPane, onAdd, sweep }: GraphProps) 
           </ToggleGroup>
         </Panel>
       </ReactFlow>
+      </Linking.Provider>
+      {link && (() => {  // the arrow being dragged: curved as the diagram can draw them, out of the edge of its box toward the pointer, and ending at the edge of the box it's over
+        const zoom = flow.getZoom()
+        const rect = (id: string) => {
+          const n = flow.getNode(id)
+          if (!n) return null
+          const [w, h] = [(n.measured?.width ?? width(id)) * zoom, (n.measured?.height ?? H) * zoom]
+          const c = flow.flowToScreenPosition({ x: n.position.x + (n.measured?.width ?? width(id)) / 2, y: n.position.y + (n.measured?.height ?? H) / 2 })
+          return { ...c, hw: w / 2 + 3, hh: h / 2 + 3 }
+        }
+        type Rect = { x: number; y: number; hw: number; hh: number }
+        const edge = (r: Rect, to: XY): XY & { side: Position } => {  // where a ray from the middle of a box toward `to` leaves it, and which side that is
+          const [dx, dy] = [to.x - r.x, to.y - r.y]
+          const t = Math.min(dx ? r.hw / Math.abs(dx) : Infinity, dy ? r.hh / Math.abs(dy) : Infinity)
+          const across = Math.abs(dx) * r.hh > Math.abs(dy) * r.hw
+          return { x: r.x + dx * t, y: r.y + dy * t, side: across ? (dx > 0 ? Position.Right : Position.Left) : dy > 0 ? Position.Bottom : Position.Top }
+        }
+        const from = rect(link.from), over = link.over ? rect(link.over) : null
+        if (!from) return null
+        if (Math.abs(link.x - from.x) < from.hw && Math.abs(link.y - from.y) < from.hh) return null  // still within its own box
+        const begin = edge(from, over ?? { x: link.x, y: link.y, hw: 0, hh: 0 })
+        const end   = over ? edge(over, from) : { x: link.x, y: link.y, side: ({ [Position.Left]: Position.Right, [Position.Right]: Position.Left, [Position.Top]: Position.Bottom, [Position.Bottom]: Position.Top })[begin.side] }
+        const [path] = getBezierPath({ sourceX: begin.x, sourceY: begin.y, sourcePosition: begin.side, targetX: end.x, targetY: end.y, targetPosition: end.side, curvature: 0.3 })  // as the curved arrows are
+        return createPortal(
+          <svg aria-hidden className="pointer-events-none fixed inset-0 z-[90] size-full">
+            <defs>
+              <marker id="linking-head" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse">
+                <path d="M2 2 L10 6 L2 10" fill="none" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="stroke-muted-foreground" />
+              </marker>
+            </defs>
+            <path d={path} fill="none" strokeWidth={1.6} markerEnd="url(#linking-head)" className="stroke-muted-foreground" />
+          </svg>, document.body)
+      })()}
     </div>
   )
 }
@@ -316,6 +381,8 @@ function Graph({ detail, picked, onInspect, onPane, onAdd, sweep }: GraphProps) 
  * anywhere on its edge, so its handles are only there to be bound to, unseen. */
 function StateBox({ data, dragging }: NodeProps<StateNode>) {
   const { state: s, start, lit, picked, fixed, waking } = data
+  const linking = useContext(Linking)
+  const glow = !!linking && (linking.over === s.name || linking.from === s.name)
   const [, tick] = useState(0)
   useEffect(() => {
     if (!waking) return
@@ -328,11 +395,12 @@ function StateBox({ data, dragging }: NodeProps<StateNode>) {
   return (
     <div title={[s.desc, fixed && "fixed where it is: double-click to free it"].filter(Boolean).join(" · ") || undefined} style={{ width: width(s.name), height: H }}
          aria-label={fixed ? `${s.name}, fixed` : undefined}
-         className={cn("relative flex flex-col items-center justify-center rounded-xl bg-card px-3 text-card-foreground shadow-xs transition-colors",
+         className={cn("group/box relative flex flex-col items-center justify-center rounded-xl bg-card px-3 text-card-foreground shadow-xs transition-colors",
                        fixed ? "border-[3px] border-foreground" : "border-[1.5px]",
                        lit ? "border-primary bg-primary text-primary-foreground" : !fixed && "hover:border-foreground/30", dragging && "shadow-md",
+                       data.onLink && (glow ? EDGE : "hover:border-cyan-400! hover:shadow-[inset_0_0_0_1.5px_var(--color-cyan-400)]"),
                        picked && "ring-2 ring-ring ring-offset-2 ring-offset-background")}>
-      {lit && <span aria-hidden className={cn("pointer-events-none absolute -inset-1.5 rounded-[16px]", doing ? "animate-round" : "border-2 border-brand/60 motion-safe:animate-breathe")} />}
+      {doing && <span aria-hidden className="pointer-events-none absolute -inset-1.5 rounded-[16px] animate-round" />}
       {start && <span className="absolute -top-5 left-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">start</span>}
       <span className="max-w-full truncate font-mono text-[14px] font-medium">{humane(s.name)}</span>
       <span className={cn("flex items-center gap-1 text-xs", lit ? "text-primary-foreground/80" : "text-muted-foreground")}>
@@ -344,6 +412,13 @@ function StateBox({ data, dragging }: NodeProps<StateNode>) {
           <><Loader2 className="size-3 motion-safe:animate-spin" aria-hidden />checking</>
         ) : <>{s.do.length ? `${s.do.length} action${s.do.length > 1 ? "s" : ""}` : "waits"} · {minutes(s.every)}</>}
       </span>
+      {data.onLink && (  // the box's own edge turns thick cyan as you point at it; pressed there and dragged to another box, it makes a way out to it
+        <>
+          {["inset-x-0 -top-1.5 h-3.5", "inset-x-0 -bottom-1.5 h-3.5", "inset-y-0 -left-1.5 w-3.5", "inset-y-0 -right-1.5 w-3.5"].map((side) => (
+            <span key={side} aria-hidden onPointerDown={data.onLink} className={cn("nodrag nopan absolute cursor-crosshair", side)} />
+          ))}
+        </>
+      )}
       <Handle type="source" position={Position.Right} className="!invisible" isConnectable={false} />
       <Handle type="target" position={Position.Left} className="!invisible" isConnectable={false} />
     </div>

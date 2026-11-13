@@ -40,7 +40,7 @@ import { action } from "@/views/program-inspect"
 import { NewProgram, ProgramDialog, TagChip } from "@/views/program-new"
 import { useDrag } from "@/views/tasks"
 import { friendly, humane, light } from "@/lib/friendly"
-import { Apply, Block, CHANGED, FLASH, GO, Line, Path, Running, revert, useLeave, useSpecs, bus } from "@/views/scope-shared"
+import { Apply, Block, CHANGED, FLASH, GO, Line, OPEN, opening, Path, Running, revert, useLeave, useSpecs, bus } from "@/views/scope-shared"
 import { Corner } from "@/views/resources"
 
 const depth = (p: Path) => (p.program === null ? 0 : p.state === null ? 1 : 2)
@@ -361,8 +361,8 @@ function ProgramScope({ name, state, before, reference, onGo, onBack, onLoad }: 
   return (
     <Layout
       main={<>{error && <ErrorDialog message={error} onClose={() => setError("")} />}<ProgramMain {...props} /></>}
-      back={<GraphView key={detail.name} detail={detail} picked={state} onInspect={(next) => next && onGo({ program: name, state: next.state })}
-                       onAdd={specs ? addState : undefined} sweep={specs ? { names: lost, onSweep: sweepStates } : undefined}
+      back={<GraphView key={detail.name} detail={detail} picked={state} onInspect={(next) => next && (next.kind === "way" && opening({ program: name, state: next.state, kind: "branch", at: next.index }), onGo({ program: name, state: next.state }))}
+                       onAdd={specs ? addState : undefined} onLink={specs ? (from, to) => (opening({ program: name, state: from, kind: "branch", goto: to }), onGo({ program: name, state: from })) : undefined} sweep={specs ? { names: lost, onSweep: sweepStates } : undefined}
                        onPane={() => onGo({ program: name, state: null })} />}
       over={state !== null && (
         <Over state={state} title={typed ? humane(typed) : undefined} before={before} onBack={onBack} onClose={() => onGo({ program: name, state: null })}
@@ -526,8 +526,8 @@ function StateMain({ name, state, specs, detail, change, onGo, onTitle }: ScopeP
                          seen={(x, how) => <ActionSeen spec={x.data} at={at} {...how} />} />
                 <Ordered title="Transitions" empty="None: it stays." kind="branch" at={at} {...b}
                          line={({ data, from }, i) => <Way branch={data} live={from === null ? undefined : live.next[from]} alone={b.items.length === 1} onGo={go} />}
-                         form={(x, i, onSave, onCancel, onDirty) => (
-                           <TransitionForm spec={x?.data} at={at} index={i} states={specs.states.map((s) => s.name)} live={x?.from == null ? undefined : live.next[x.from]} onSave={onSave} onCancel={onCancel} onDirty={onDirty} />
+                         form={(x, i, onSave, onCancel, onDirty, goto) => (
+                           <TransitionForm spec={x?.data} start={goto} at={at} index={i} states={specs.states.map((s) => s.name)} live={x?.from == null ? undefined : live.next[x.from]} onSave={onSave} onCancel={onCancel} onDirty={onDirty} />
                          )}
                          seen={(x, how) => (
                            <Dialog open onOpenChange={(o) => !o && how.close()}>
@@ -599,14 +599,14 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
   kept: Item<T>[]
   hold: (next: Item<T>[]) => void
   line: (item: Item<T>, index: number) => ReactNode
-  form: (item: Item<T> | undefined, index: number, onSave: Save, onCancel: () => void, onDirty?: () => void) => ReactNode
+  form: (item: Item<T> | undefined, index: number, onSave: Save, onCancel: () => void, onDirty?: () => void, goto?: string) => ReactNode
   seen: (item: Item<T>, how: { update: (changes: Record<string, unknown>) => Promise<string | null>; remove: () => void; form: ReactNode; close: () => void }) => ReactNode  // a click opens it over
 }) {
-  const [adding, setAdding]   = useState(false)
+  const [adding, setAdding]   = useState<{ goto?: string } | null>(null)  // a new one being made (`goto`: where a transition dragged to goes)
   const [viewing, setViewing] = useState<number | null>(null)
   const [leaving, setLeaving] = useState(false)  // asked whether to drop what's been set up
   const dirty = useRef(false)
-  const close = () => setAdding(false)
+  const close = () => setAdding(null)
   const put   = (i: number, data: Record<string, unknown>) => hold(items.map((x, j) => (j === i ? { ...x, data: { ...x.data, ...data } } : x)))
   const sensors = useDrag()
   const [lit, setLit] = useState<number | null>(null)  // the one a dialog's chip came to
@@ -622,13 +622,25 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
     window.addEventListener(FLASH, take)
     return () => window.removeEventListener(FLASH, take)
   }, [kind, at.program, at.state])
+  useEffect(() => {  // a way out opened from the diagram: one it has, or a new one to where a connection was dragged
+    const take = () => {
+      const o = bus.opening
+      if (!o || kind !== o.kind || o.program !== at.program || o.state !== at.state) return
+      bus.opening = null
+      if (o.at !== undefined) setViewing(o.at)
+      else (dirty.current = false, setAdding({ goto: o.goto }))
+    }
+    take()
+    window.addEventListener(OPEN, take)
+    return () => window.removeEventListener(OPEN, take)
+  }, [kind, at.program, at.state])
   const leave = useLeave((e) => e.over && e.active.id !== e.over.id && hold(arrayMove(items, Number(e.active.id) - 1, Number(e.over.id) - 1)),
                          (e) => hold(items.filter((_, j) => j !== Number(e.active.id) - 1)))  // dropped beyond the dialog: taken out, until Save
   const marked = (x: Item<T>) => x.from === null ? "added" : JSON.stringify(x.data) !== JSON.stringify(kept[x.from]?.data) ? "changed" : undefined
   const shown = viewing === null ? undefined : items[viewing]
 
   return (
-    <Block title={title} add={adding ? undefined : () => (dirty.current = false, setAdding(true))}>
+    <Block title={title} add={adding ? undefined : () => (dirty.current = false, setAdding({}))}>
       {items.length === 0 && !adding && <p className="text-xs text-muted-foreground">{empty}</p>}
       <div ref={leave.ref} className="flex flex-col gap-1.5">
         <DndContext sensors={sensors} collisionDetection={closestCenter} {...leave.props}>
@@ -651,7 +663,7 @@ function Ordered<T extends ActionSpec | BranchSpec>({ title, empty, kind, at, it
       })}
       {adding && (() => {
         const leaveNew = () => (dirty.current ? setLeaving(true) : close())  // what's set up isn't dropped unasked
-        const made = form(undefined, items.length, async (data) => (hold([...items, { from: null, data: data as T }]), close(), null), leaveNew, () => void (dirty.current = true))
+        const made = form(undefined, items.length, async (data) => (hold([...items, { from: null, data: data as T }]), close(), null), leaveNew, () => void (dirty.current = true), adding.goto)
         return (
           <>
             <Dialog open onOpenChange={(o) => !o && leaveNew()}>

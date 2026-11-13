@@ -75,9 +75,14 @@ export function useSpecs<T>(name: string | null, enabled = true, onChanged?: () 
 /** A way into a state with one of its actions or ways out lit, as a chip of a dialog asks. */
 type Flash = { program: string; state: string; kind: "action" | "branch"; at: number }
 
-export const bus: { arriving: Path | null; flashing: Flash | null } = { arriving: null, flashing: null }  // where you're going on the automations' page as it opens; the action or way out to light there
+/** A state's dialog opening with a way out open over it: one it has (`at`), or a new one going to `goto`. */
+type Opening = { program: string; state: string; kind: "branch"; at?: number; goto?: string }
+
+export const bus: { arriving: Path | null; flashing: Flash | null; opening: Opening | null } = { arriving: null, flashing: null, opening: null }  // where you're going on the automations' page as it opens; the action or way out to light there; the way out to open
 
 export const FLASH = "proki:flash"
+export const OPEN  = "proki:open"
+export const opening = (open: Opening) => (bus.opening = open, window.dispatchEvent(new Event(OPEN)))
 
 /** A program (null: the global scope) back to the default proki ships. */
 export async function revert(name: string | null): Promise<string | null> {

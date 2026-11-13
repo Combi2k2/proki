@@ -79,8 +79,9 @@ function ConditionRow({ id, mark, children, onDelete }: { id: number; mark?: "ad
 
 /** A transition, changed in a dialog: where it goes, and when (all of its conditions must hold; none: else). Nothing is kept until Save. `spec`: none, for a new one.
  * `onSave`: takes the transition (the mistake, if any); `onCancel`: leaves a new one; `onDirty`: told of the first change. */
-export function TransitionForm({ spec, at, index, states, live, onSave, onCancel, onDirty }: {
+export function TransitionForm({ spec, start, at, index, states, live, onSave, onCancel, onDirty }: {
   spec?: BranchSpec
+  start?: string  // where a new one goes, until it's changed
   at: { program: string; state: string }
   index: number
   states: string[]
@@ -93,19 +94,19 @@ export function TransitionForm({ spec, at, index, states, live, onSave, onCancel
   const [rules, setRules] = useState<string[]>([])
   useEffect(() => void window.proki.tool("reference").then((r) => !r.error && setRules(r.rules.map((x: { name: string }) => x.name))), [])
   const keep = (patch: Record<string, unknown>) => onSave({
-    goto: ((patch.goto as string | undefined) ?? spec?.goto ?? states[0] ?? "").trim(),
+    goto: ((patch.goto as string | undefined) ?? spec?.goto ?? start ?? states[0] ?? "").trim(),
     when: ((patch.when as string[] | undefined) ?? was).map((w) => w.trim()).filter(Boolean),
     desc: (patch.desc as string | undefined) ?? spec?.desc ?? "",
   })
   return (
     <Staging onSave={keep} onCancel={spec ? undefined : onCancel}>
-      {(st) => <Body st={st} spec={spec} at={at} index={index} states={states} live={live} rules={rules} onDirty={onDirty} />}
+      {(st) => <Body st={st} spec={spec} start={start} at={at} index={index} states={states} live={live} rules={rules} onDirty={onDirty} />}
     </Staging>
   )
 }
 
-function Body({ st, spec, at, index, states, live, rules, onDirty }: {
-  st: Staged; spec?: BranchSpec; at: { program: string; state: string }; index: number; states: string[]; live?: Live; rules: string[]; onDirty?: () => void
+function Body({ st, spec, start, at, index, states, live, rules, onDirty }: {
+  st: Staged; spec?: BranchSpec; start?: string; at: { program: string; state: string }; index: number; states: string[]; live?: Live; rules: string[]; onDirty?: () => void
 }) {
   const was  = spec?.when ?? []
   const sensors = useDrag()
@@ -113,7 +114,7 @@ function Body({ st, spec, at, index, states, live, rules, onDirty }: {
   const last = useRef(was.length)                   // the row just added, opened to type in
   const hold = (key: string, value: unknown, kept: unknown) => (onDirty?.(), st.put(key, value, kept))
   const when = (st.patch.when as string[] | undefined) ?? was
-  const goto = (st.patch.goto as string | undefined) ?? spec?.goto ?? states[0] ?? ""
+  const goto = (st.patch.goto as string | undefined) ?? spec?.goto ?? start ?? states[0] ?? ""
   const set  = (next: string[]) => hold("when", next, was)
   const put  = (i: number, text: string) => set(when.map((x, j) => (j === i ? text : x)))
   const gone = (i: number) => (setBlank(blank.filter((b) => b !== i).map((b) => (b > i ? b - 1 : b))), set(when.filter((_, j) => j !== i)))
@@ -132,7 +133,7 @@ function Body({ st, spec, at, index, states, live, rules, onDirty }: {
         <span>
           <Pick label="Goto" value={goto} arrow changed={"goto" in st.patch}
                 options={(states.includes(goto) ? states : [...states, goto]).filter(Boolean).map((s) => [s, <span key={s} className="font-mono">{humane(s)}</span>])}
-                onPick={(s) => hold("goto", s, spec?.goto ?? states[0] ?? "")}
+                onPick={(s) => hold("goto", s, spec?.goto ?? start ?? states[0] ?? "")}
                 className="rounded-md border bg-muted px-3 py-1 font-mono text-xs no-underline hover:no-underline">
             <span className="font-mono">{humane(goto) || "a state"}</span>
           </Pick>
