@@ -10,6 +10,7 @@ Note a thought anywhere; Proki sorts it into a todo, an idea or a thought, and a
 - Notes come from the tray, Today, or a prompt (`capture` asks now and then, `shutdown` at the
   end of the day).
 - `note_sorter` sorts each one with Jev's guess, asking you when it isn't sure.
+- Each bucket is a table: title, content, when, and where it went. A click opens the note: its title and its content (shown as markdown, changed where it is), where it went, and when. Move, sort or delete it from there.
 - Ideas and thoughts stay here: edit, move between them, delete, or add one.
 - Unsorted notes have their own tab: sort one now, file it yourself, or leave it for later.
 - Todos go on to the task planner, and each says which group it became ([F-006](F-006-tasks.md)).

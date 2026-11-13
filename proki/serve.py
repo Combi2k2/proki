@@ -51,8 +51,8 @@ The notes, by bucket ("Unsorted", "Todo", "Idea", "Thought"):
     {"op": "read"}                                                → {"Unsorted": [...], "Todo": [...], ...}
                                                                      an unsorted note with its "sorts_at"; a
                                                                      note dealt with, where (its "link")
-    {"op": "add", "bucket": "Idea", "text": "..."}                → {"id": 12}
-    {"op": "change", "id": 12, "text": "..."}                     → {}
+    {"op": "add", "bucket": "Idea", "text": "...", "title": "..."} → {"id": 12}                  a title is optional
+    {"op": "change", "id": 12, "text": "..."}                     → {}          also "title"
     {"op": "change", "id": 12, "due": "..."}                      → {}          when it's sorted (ISO)
     {"op": "move", "id": 12, "to": "Todo"}                        → {}
     {"op": "remove", "id": 12}                                    → {}
@@ -261,14 +261,15 @@ def on_notes(request: dict) -> dict:
     op, id, notes = request.get("op"), request.get("id"), find_variable("note")
     iso = lambda m: None if m is None else moment(m).isoformat()
     if op == "read":
-        return {bucket: [{"id": n["id"], "text": n["content"], "at": iso(n["created_at"]), "due": iso(n.get("due")),
+        return {bucket: [{"id": n["id"], "title": n.get("title", ""), "text": n["content"], "at": iso(n["created_at"]), "due": iso(n.get("due")),
                           "guess": n.get("guess"), "conf": n.get("conf"), "sorts_at": iso(n.get("due")), "link": n.get("link")}
                          for n in notes.current() if n.get("bucket") == bucket] for bucket in BUCKETS}
     if op == "add":
-        return {"id": noted(request["text"], request.get("bucket", BUCKETS[0]))}
+        return {"id": noted(request["text"], request.get("bucket", BUCKETS[0]), request.get("title", ""))}
     if op not in ("change", "move", "remove"):          raise ValueError(f"op is read, add, change, move or remove ({op!r})")
     if (note := notes.get_row(id)) is None:             raise ValueError(f"no note {id!r}")
     changed = {"content": request["text"]} if "text" in request else {}
+    if "title" in request:  changed["title"] = request["title"]
     if "due" in request:  changed["due"] = minutes(datetime.fromisoformat(request["due"])) if request["due"] else sorts_at()
     if op == "move":      changed["bucket"] = request["to"]
     if op == "remove":    notes.set([n for n in notes.current() if n["id"] != id])
@@ -276,10 +277,10 @@ def on_notes(request: dict) -> dict:
     return {}
 
 
-def noted(text: str, bucket: str = BUCKETS[0]) -> int:
+def noted(text: str, bucket: str = BUCKETS[0], title: str = "") -> int:
     """A new note, as a program notes one: its id."""
     due = sorts_at() or minutes(datetime.now(timezone.utc))  # before a cycle: at once
-    return find_variable("note").add_row({"content": text, "bucket": bucket, "due": due})
+    return find_variable("note").add_row({"content": text, "bucket": bucket, "due": due, **({"title": title} if title else {})})
 
 
 def sorts_at() -> float | None:

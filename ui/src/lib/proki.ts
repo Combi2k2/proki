@@ -110,7 +110,7 @@ export type Weighed = {
 }
 
 /** A note (notes, in main.json), in its bucket. */
-export type Note = { id: number; text: string; at: string; due?: string | null; guess?: string | null; conf?: number | null; sorts_at?: string; link?: string | null }  // the rest: unsorted (sorts_at: when it's sorted); link: where it was dealt with, a page's path
+export type Note = { id: number; title: string; text: string; at: string; due?: string | null; guess?: string | null; conf?: number | null; sorts_at?: string; link?: string | null }  // the rest: unsorted (sorts_at: when it's sorted); link: where it was dealt with, a page's path
 export type Bucket = "Unsorted" | "Todo" | "Idea" | "Thought"
 
 /** An app or a website classify knows (proki/programs/code/classify.py), and its label by

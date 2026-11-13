@@ -53,7 +53,10 @@ async def test_the_board_through_the_bus(bus):
 
 async def test_notes_through_the_bus(bus):
     notes = lambda request: bus.request("proki.app.notes", request, 1)
-    idea = (await notes({"op": "add", "bucket": "Idea", "text": "a focus timer"}))["id"]
+    idea = (await notes({"op": "add", "bucket": "Idea", "text": "a focus timer", "title": "Timer"}))["id"]
+    assert (await notes({"op": "read"}))["Idea"][0]["title"] == "Timer"
+    await notes({"op": "change", "bucket": "Idea", "id": idea, "title": "Focus timer"})
+    assert (await notes({"op": "read"}))["Idea"][0]["title"] == "Focus timer"
     await notes({"op": "change", "bucket": "Idea", "id": idea, "text": "a focus timer that learns"})
     await notes({"op": "move", "id": idea, "from": "Idea", "to": "Thought"})
     buckets = await notes({"op": "read"})

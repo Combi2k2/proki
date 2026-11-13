@@ -77,10 +77,10 @@ const reference: Reference = {
 }
 
 const notes = {
-  Unsorted: [{ id: 1, text: "Look into a standing desk", at: ago(40), guess: "Idea", conf: 0.7, sorts_at: day(0.4) }],
-  Todo: [{ id: 2, text: "Email the landlord about the heater", at: ago(300), due: day(1) }],
-  Idea: [{ id: 3, text: "A weekly review that writes itself", at: ago(2000) }],
-  Thought: [{ id: 4, text: "Mornings go better after a walk", at: ago(4000) }],
+  Unsorted: [{ id: 1, title: "", text: "Look into a standing desk", at: ago(40), guess: "Idea", conf: 0.7, sorts_at: day(0.4) }],
+  Todo: [{ id: 2, title: "Heater", text: "Email the landlord about the heater", at: ago(300), due: day(1) }],
+  Idea: [{ id: 3, title: "Weekly review", text: "A weekly review that **writes itself**:\n\n- what got done\n- what slipped", at: ago(2000) }],
+  Thought: [{ id: 4, title: "", text: "Mornings go better after a walk", at: ago(4000) }],
 }
 
 let outbox = 0  // the suggestions waiting
