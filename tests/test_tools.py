@@ -237,7 +237,7 @@ def test_the_media_tools(tmp_path):
     assert call(tools, "get_media", keys=["bugcat/sad", key])[1]["media"][0]["key"] == key  # deleted: out
     assert [m["key"] for m in call(tools, "list_pools")[1]["questions"]] == [key]
     call(tools, "set_pool", name="questions", keys=[])
-    away = call(tools, "list_specs", kind="action", program="pomodoro")[1][5]["id"]  # a poke's
+    away = "pomodoro.away.been_away"  # a poke's
     call(tools, "set_picks", id=away, keys=[key, "alarm-clock"])
     assert [m["key"] for m in call(tools, "get_picks", id=away)[1]["media"]] == [key, "alarm-clock"]
     assert "still used" in call(tools, "remove_media", keys=[key])[1]["kept"][key]  # a poke's pick

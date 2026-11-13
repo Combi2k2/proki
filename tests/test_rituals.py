@@ -119,13 +119,17 @@ async def test_text_questions_and_urgent_ones_while_popup_open_says_so(ui):
     assert await typed == "buy milk" and await picked == 0 and not popup_open()
 
 
+QUIET = {"nudged_at": 0, "nudge_gap": 30}  # main.json's: how long proki stays quiet between the questions it asks on its own
+
+
 def shipped(tmp_path, *names, variables=()):
     """A config with the shipped program files `names`, the clock, and stand-in variables."""
     import shutil
 
     path = config(tmp_path, with_notes({"inputs": [{"name": "daytime"}, {"name": "time"}, {"name": "weekday"}],
-                                        "variables": [{"name": n, "value": v} for n, v in variables],
-                                        "signals": [{"name": "today", "expr": "time - daytime - (daytime < 240) * 1440"}]}))
+                                        "variables": [{"name": n, "value": v} for n, v in {**QUIET, **dict(variables)}.items()],
+                                        "signals": [{"name": "today", "expr": "time - daytime - (daytime < 240) * 1440"},
+                                                    {"name": "may_nudge", "expr": "time - nudged_at >= nudge_gap"}]}))
     for name in names:
         shutil.copyfile(settings.SHIPPED_DIR / f"{name}.json", path / f"{name}.json")
     return path
@@ -160,11 +164,13 @@ async def test_bedtime_from_the_config_pokes_then_rings(tmp_path, ui):
     await run(local(5, 22, 0, 10))
     [poke] = ui.questions()
     assert ui.labels(poke) == ["Later", "OK", "Lock screen"]
-    assert poke["context"].startswith("It's 22:00. Time to wrap up")
+    assert poke["context"].startswith("It's 22:00. Time to start winding down")
     await ui.click("Later")
     await run(local(5, 22, 9))
     assert len(ui.questions()) == 1  # snoozed until 22:10
-    await run(local(5, 22, 11))
+    await run(local(5, 22, 19))
+    assert len(ui.questions()) == 1  # and 20 minutes between pokes
+    await run(local(5, 22, 21))
     assert ui.labels(ui.questions()[-1]) == ["OK", "Lock screen"]  # one snooze a night
     await ui.click("OK")  # (a question holds bedtime till it's answered, or 2 min)
     await run(local(5, 23, 59, 50), jump=True)
@@ -174,7 +180,7 @@ async def test_bedtime_from_the_config_pokes_then_rings(tmp_path, ui):
     [ringing] = rings()
     assert Path(ringing["sound"]).match("alarm-clock.mp3") and Path(ringing["media"]).match("bugcat/good_night.gif")
     assert bedtime.current == "past_midnight"  # it rings until you close it
-    assert asked["context"] == "Lock the screen and go to sleep?"
+    assert asked["context"] == "Shall I lock the screen so you can get some sleep?"
     await ui.click(None, asked)  # no answer: asked again
     await run(local(6, 0, 0, 20))
     await run(local(6, 0, 0, 30))
@@ -185,30 +191,25 @@ async def test_bedtime_from_the_config_pokes_then_rings(tmp_path, ui):
     assert {"type": "lock"} in ui.sent and bedtime.current == "idle"
 
 
-async def test_capture_asks_once_a_shallow_window_and_hands_the_note_to_notes(tmp_path, ui):
-    e = Engine(shipped(tmp_path, "capture", "note_sorter", variables=[("session.active", False), ("shutdown_done", False), ("active", True),
-                                                                ("app_name", '"Mail"'), ("app_title", '"Unsorted"'), ("depth", 0.5)]))
+async def test_capture_asks_once_a_distraction_stretch_and_hands_the_note_to_notes(tmp_path, ui):
+    e = Engine(shipped(tmp_path, "capture", "note_sorter", variables=[("session.active", False), ("shutdown_done", False), ("active", True), ("depth", 1)]))
     run = runner(e)
-    await run(local(5, 10, 0))
-    await run(local(5, 10, 0, 10))
-    assert not ui.questions()  # not 15 seconds on it yet
-    await run(local(5, 10, 0, 30))
-    await run(local(5, 10, 0, 40))  # on it 15 seconds: asked at the next cycle
+    await run(local(5, 9, 54))
+    await run(local(5, 10, 0))  # at work
+    await run(local(5, 10, 4), depth=0)
+    assert not ui.questions()  # not 5 minutes in distractions yet
+    await run(local(5, 10, 5, 30))
     [question] = ui.questions()
-    assert question["context"].startswith("Anything worth noting from Mail?") and question["options"] is None
+    assert question["context"].startswith("Something on your mind?") and question["options"] is None
     await ui.click("reply to Sam about Friday")
     assert [n["content"] for n in read("Unsorted")] == ["reply to Sam about Friday"]  # in at once, for notes to sort
-    await run(local(5, 10, 0, 50))
-    urgency = await asked(ui, 2)  # the note's own: how urgent, no jev
-    assert urgency["context"] == "“reply to Sam about Friday”\n\nDeal with this now?" and ui.labels(urgency) == ["OK"]
-    await ui.click(None)  # later
-    await run(local(5, 10, 1, 0))
-    assert read("Unsorted")[0]["urgency"] == 0.5 and Program.registry["note_sorter"].current in ("idle", "due")  # weighed: no jev
-    await run(local(5, 10, 3, 0))
-    assert len(ui.questions()) == 2  # once a window
-    await run(local(5, 10, 3, 10), app_title='"Sam: Friday?"')
-    await run(local(5, 10, 3, 40))
-    assert len(ui.questions()) == 3  # another window: asked again
+    await run(local(5, 10, 6))
+    assert read("Unsorted")[0]["urgency"] == 0.5 and len(ui.questions()) == 1  # weighed quietly: not urgent, nothing asked
+    await run(local(5, 10, 30))
+    assert len(ui.questions()) == 1  # once a stretch
+    await run(local(5, 10, 32), depth=1)  # back to work: the stretch is over
+    await run(local(5, 10, 40), depth=0)
+    assert len(ui.questions()) == 2  # another stretch, past the quiet gap: asked again
 
 
 async def test_the_shutdown_from_the_config(tmp_path, ui):
@@ -231,55 +232,62 @@ async def test_the_shutdown_from_the_config(tmp_path, ui):
     urgent = []
 
     await run(clock[0], shutdown_requested=True)  # asked for (Monday)
-    assert (await asked())["context"].startswith("Wrap up your day")
+    assert (await asked())["context"].startswith("Anything still on your mind?")
     await ui.click("email the supervisor")
     assert (await asked())["context"] == "Anything else?"
     await ui.click("book the room")
     assert (await asked())["context"] == "Anything else?"
     await ui.click(None)  # that's all
-    when = await asked()
-    assert when["context"].startswith("When do you want to come back and sort")
-    assert ui.labels(when) == ["Now", "7:00", "7:30", "8:00", "8:30", "9:00", "9:30", "10:00", "10:30", "11:00", "11:30", "12:00"]
-    await ui.click("8:00")
-    summary = await asked()
-    assert [n["content"] for n in read("Unsorted")] == ["email the supervisor", "book the room"]  # for notes to sort
-    assert [u.split("\n")[0] for u in urgent] == ["“email the supervisor”", "“book the room”"]  # each note's urgency
-    assert summary["context"] == "Today: 2.5 h of deep work.\nTomorrow starts with ."
-    await ui.click("OK")
-    await run(clock[0] + timedelta(seconds=10)), await run(clock[0] + timedelta(seconds=20))
+    for _ in range(6):
+        clock[0] += timedelta(seconds=10)
+        await run(clock[0])
+    [wrap] = [m for m in ui.sent if m.get("title") == "That's a wrap"]  # a word, nothing to answer
+    assert wrap["text"] == "2.5 h of deep work today. Tomorrow is a clean slate. Enjoy your evening."
+    assert [n["content"] for n in read("Unsorted")] == ["email the supervisor", "book the room"] and not urgent  # not urgent: nothing asked tonight
     assert shutdown.current == "idle" and Stream.registry["shutdown_done"].current() is True
-    assert [due(n) for n in read("Unsorted")] == [local(6, 8, 0)] * 2  # tomorrow at 8:00, each set by shutdown
+    assert [due(n) for n in read("Unsorted")] == [local(6, 4, 0)] * 2  # sorted tomorrow
     await run(local(6, 9, 0), jump=True)
     assert Stream.registry["shutdown_done"].current() is False  # a new day
 
 
+def mornings(tmp_path):
+    e = Engine(shipped(tmp_path, "morning", variables=[("active", False), ("session.active", False), ("session.requested", False),
+                                                       ("next_task", '"“Thesis” (about 40 min)"'), ("shutdown_change", "''")]))
+    return Program.registry["morning"], runner(e)
+
+
 async def test_the_morning_from_the_config(tmp_path, ui):
-    e = Engine(shipped(tmp_path, "morning", variables=[("active", False), ("session.active", False),
-                                                       ("session.requested", False), ("todays_work", "\"Thesis first.\"")]))
-    morning, run = Program.registry["morning"], runner(e)
+    morning, run = mornings(tmp_path)
     await run(local(6, 3, 0))
     await run(local(6, 6, 59), jump=True)  # asleep since 03:00
     await run(local(6, 7, 0), active=True)  # picked up the laptop
     greeting = ui.questions()[-1]
-    assert "Thesis first." in greeting["context"] and "60 min" in ui.labels(greeting)
-    await ui.click("15 min")  # 15 minutes and a 5-minute buffer: until 07:20
+    assert greeting["context"].startswith("Good morning! First up: “Thesis” (about 40 min).")
+    assert ui.labels(greeting) == ["Start now", "15 min first", "30 min first", "60 min first"]
+    await ui.click("15 min first")  # 15 minutes and a little more: until 07:20
     await run(local(6, 7, 1))
-    assert morning.current == "routine"
-    await run(local(6, 7, 5))
-    await run(local(6, 7, 9), active=False)  # in the shower: away after 3 minutes
-    assert morning.current == "away"
-    await run(local(6, 7, 10), active=True)  # back early
-    assert ui.questions()[-1]["context"] == "Finished your morning routine?"
-    await ui.click("Later")  # a minute more: until 07:21
-    await run(local(6, 7, 20))
-    await run(local(6, 7, 21, 30))
-    assert morning.current == "overdue" and ui.questions()[-1]["context"].startswith("Morning routine time is over")
+    assert morning.current == "settling"
+    await run(local(6, 7, 19))
+    assert len(ui.questions()) == 1  # left alone meanwhile
+    await run(local(6, 7, 20, 30))
+    assert ui.questions()[-1]["context"] == "That's your morning time. First up: “Thesis” (about 40 min). Shall we start?"
     await ui.click("Start session")
-    await run(local(6, 7, 22))
-    assert Stream.registry["session.requested"].value is True  # the session program starts it
-    assert morning.current == "done"
+    await run(local(6, 7, 21))
+    assert Stream.registry["session.requested"].value is True and morning.current == "idle"  # the session program starts it
     await run(local(7, 6, 0), jump=True, active=False)  # a new day
-    assert morning.current == "idle"
+    assert morning.current == "idle" and len(ui.questions()) == 2
+
+
+async def test_a_late_start_is_greeted_by_the_time_of_day(tmp_path, ui):
+    morning, run = mornings(tmp_path)
+    await run(local(6, 11, 0))
+    await run(local(6, 14, 59), jump=True)  # away since 11:00
+    await run(local(6, 15, 0), active=True)
+    hello = ui.questions()[-1]
+    assert hello["context"].startswith("Good afternoon!") and ui.labels(hello) == ["Start now"]  # no morning routine at 15:00
+    await ui.click(None)
+    await run(local(6, 15, 1))
+    assert morning.current == "idle" and len(ui.questions()) == 1  # nothing more today
 
 
 # --- classify: what the window in focus is -------------------------------------------------
@@ -318,7 +326,7 @@ async def test_classify_asks_whether_to_track_an_app_then_what_it_is(tmp_path, u
     await run(local(5, 10, 1, 0))
     assert not ui.questions()  # not a minute on it yet
     await run(local(5, 10, 1, 30))
-    assert (await asked(ui, 1))["context"] == "You're using “Krita”, which I haven't track yet. Track it?"
+    assert (await asked(ui, 1))["context"] == "You're on “Krita”, which I haven't seen before. Count it in your day?"
     await ui.click("OK")
     await run(local(5, 10, 2, 20))  # tracked: jev asked, 90% sure, its label next
     sure = await asked(ui, 2)
@@ -334,7 +342,7 @@ async def test_classify_asks_an_app_just_tracked_its_label_at_once_wherever_you_
     run = runner(classifying(tmp_path, known))
     await run(local(5, 10, 0))
     await run(local(5, 10, 1, 30))
-    assert (await asked(ui, 1))["context"] == "You're using “Krita”, which I haven't track yet. Track it?"
+    assert (await asked(ui, 1))["context"] == "You're on “Krita”, which I haven't seen before. Count it in your day?"
     await run(local(5, 10, 1, 40), app_name="Terminal")  # off to another window, then OK
     await ui.click("OK")
     await run(local(5, 10, 1, 50))
@@ -439,7 +447,7 @@ async def test_a_task_put_off_again_and_again_is_asked_whats_in_the_way(tmp_path
         await ui.click("Later")
     assert turns.count("“Write the intro”") == 3 and "“Fix the figures”" in turns
     assert asked_["context"].startswith("You've put off “Write the intro” (about 40 min) 3 times, and it's due")  # no reminder: a question
-    assert asked_["context"].endswith(". What's in the way?")
+    assert asked_["context"].endswith(" No judgment, just curious: what's in the way?")
     await ui.click("It's too big")
     await run(now + timedelta(minutes=at + 1))
     assert [n["content"] for n in read("Todo")] == [
@@ -461,15 +469,15 @@ async def test_a_task_away_from_the_computer_is_planned_for_and_one_stuck_asks_w
     board.add_row(board.get_row(intro) | {"offline": True})
     await run(now)
     asked_ = await questions(ui, 1, run, now + timedelta(minutes=2))
-    assert asked_["context"] == ("“Write the intro” (about 40 min) is due tomorrow. It's done away from the computer: "
-                                 "set an alarm, or block time for it?")
+    assert asked_["context"] == ("“Write the intro” (about 40 min) is due tomorrow. It's one for away from the computer: "
+                                 "want to set a time for it?")
     await ui.click("I've planned it")
     await run(now + timedelta(minutes=3))
     assert Stream.registry["work.task"].value is None  # no session for it: it rests a day
 
     board.add_row(board.get_row(figures) | {"spent": 60})
     asked_ = await questions(ui, 2, run, now + timedelta(minutes=125))
-    assert asked_["context"] == "You've spent 60 min on “Fix the figures” (about 30 min). What's in the way?"
+    assert asked_["context"] == "You've spent 60 min on “Fix the figures” (about 30 min). No judgment, just curious: what's in the way?"
     await ui.click("It just needs more time")
     await run(now + timedelta(minutes=126))
     assert [t["estimate"] for t in store.board.tasks.current() if t["id"] == figures] == [75]  # what's spent, and half its estimate more
@@ -556,26 +564,22 @@ async def test_the_inbox_is_sorted_at_the_time_shutdown_chose(tmp_path, ui):
     add("Unsorted", "a focus timer that learns my rhythm")
     add("Unsorted", "call the bank\nabout the card")  # at once: both in
     assert [n["content"] for n in read("Unsorted")] == ["a focus timer that learns my rhythm", "call the bank\nabout the card"]
-    for i in (1, 2):  # how urgent each is: later
-        await run(local(5, 21, 0, 10 * i))
-        await asked(ui, i)
-        await ui.click(None, ui.questions()[i - 1])
     await run(local(5, 21, 0, 30))
     assert [(n["guess"], n["conf"], n["urgency"]) for n in read("Unsorted")] == [("Idea", 0.75, 0.5)] * 2  # guessed as they were noted
     await sort_inbox_at(local(5, 22, 0))  # shutdown's
     await run(local(5, 21, 59, 50), jump=True)
-    assert len(ui.questions()) == 2  # not their time yet
+    assert not ui.questions()  # weighed quietly, not urgent, and not their time yet
 
     await run(local(5, 22, 0, 10))  # jev's bucket, guessed as it was noted, an idea 75% sure
-    question = await asked(ui, 3)
-    assert question["context"] == "“a focus timer that learns my rhythm”\n\nI'm pretty sure this goes under Idea. Right?"
+    question = await asked(ui, 1)
+    assert question["context"] == "“a focus timer that learns my rhythm”\n\nI'd file this under Idea. Right?"
     assert ui.labels(question) == ["Todo", "Idea", "Thought"] and question["show"]["selected"] == 1
     await ui.click("Idea")
     await run(local(5, 22, 0, 40))
     [idea] = read("Idea")
     assert idea["content"] == "a focus timer that learns my rhythm"  # as it was noted
 
-    question = await asked(ui, 4)  # the next one
+    question = await asked(ui, 2)  # the next one
     assert question["context"].startswith("“call the bank\nabout the card”")  # as it was noted
     await ui.click("Todo")
     await run(local(5, 22, 1, 10))
@@ -597,17 +601,15 @@ async def test_the_inbox_waits_while_youre_away(tmp_path, ui):
     await run(local(5, 10, 0))
     add("Unsorted", "buy a gift")
     await run(local(5, 10, 0, 10))
-    await asked(ui, 1)
-    await ui.click(None)  # how urgent: later
     await sort_inbox_at(local(5, 10, 0))  # its time: now
     await run(local(5, 10, 1, 0))
-    assert len(ui.questions()) == 1  # away
+    assert not ui.questions()  # away
     await run(local(5, 10, 1, 10), active=True)
     await run(local(5, 10, 1, 30))
-    assert (await asked(ui, 2))["context"].startswith("“buy a gift”\n\nIs this a todo, an idea")
+    assert (await asked(ui, 1))["context"].startswith("“buy a gift”\n\nIs this something to do, an idea to keep")
 
 
-async def test_a_note_to_deal_with_now_is_sorted_then_one_for_later_waits(tmp_path, ui):
+async def test_an_urgent_note_is_asked_about_now_and_one_that_can_wait_waits_quietly(tmp_path, ui):
     from proki.channels import Channels, jev
 
     await jev.serve(Channels.bus, SayingJev({"right away": [0.9, 0.1]}))  # urgent, then not
@@ -616,20 +618,18 @@ async def test_a_note_to_deal_with_now_is_sorted_then_one_for_later_waits(tmp_pa
     add("Unsorted", "renew the visa, it expires Friday")
     await run(local(5, 10, 0, 10))
     urgency = await asked(ui, 1)
-    assert urgency["context"] == "“renew the visa, it expires Friday”\n\nThis sounds urgent. Deal with it now?"
+    assert urgency["context"] == "“renew the visa, it expires Friday”\n\nThis sounds urgent. Sort it now?"
     await ui.click("OK")
     question = await asked(ui, 2)  # its bucket, at once: no cycle waited for. No bucket from jev
-    assert question["context"].startswith("“renew the visa, it expires Friday”\n\nIs this a todo, an idea")
+    assert question["context"].startswith("“renew the visa, it expires Friday”\n\nIs this something to do, an idea to keep")
     await ui.click(None)  # later: this note, in 2 hours
     await run(local(5, 10, 0, 30))
     assert due(read("Unsorted")[0]) > local(5, 11, 59)
 
     add("Unsorted", "try a standing desk")
     await run(local(5, 10, 0, 50))
-    assert (await asked(ui, 3))["context"].endswith("This can probably wait. Deal with it now anyway?")
-    await ui.click(None)  # later: with the others, 04:00
     await run(local(5, 10, 1, 20))
-    assert len(ui.questions()) == 3 and [n["content"] for n in read("Unsorted")] == ["renew the visa, it expires Friday", "try a standing desk"]
+    assert len(ui.questions()) == 2 and [n["content"] for n in read("Unsorted")] == ["renew the visa, it expires Friday", "try a standing desk"]
     assert due(read("Unsorted")[1]) == local(6, 4, 0)
 
 
@@ -867,7 +867,7 @@ async def test_the_reminder_counts_whats_open_and_suggests_a_task(tmp_path, ui, 
     now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
     run = reminding(tmp_path, store, session=True)  # no reminder
     await run(now)
-    assert find_variable("next_task").value == "a clean slate: no tasks yet"
+    assert find_variable("next_task").value == ""  # no tasks yet
     tasks(store)
     await run(now + timedelta(minutes=2))
     assert find_variable("tasks_open").value == 2 and find_variable("next_task").value == "“Write the intro” (about 40 min)"

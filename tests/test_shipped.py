@@ -62,9 +62,9 @@ def test_a_new_default_comes_in_and_a_removed_one_stays_away(db, tmp_path):
     e = Engine(programs_folder(tmp_path, json.loads((settings.SHIPPED_DIR / "main.json").read_text())))  # no programs yet
     shipped.update(e.model)
     assert {"day", "suggest", "bedtime"} <= set(Program.registry)  # new: in
-    e.model.remove("program", {"name": "evening"})
+    e.model.remove("program", {"name": "budget"})
     shipped.update(e.model)
-    assert "evening" not in Program.registry  # you removed it: it stays so
+    assert "budget" not in Program.registry  # you removed it: it stays so
 
 
 def test_a_file_goes_back_to_its_default(db):

@@ -22,12 +22,15 @@
     {"name": "session.active", "value": false, "desc": "whether a focus session is running"},
     {"name": "session.requested", "value": false, "desc": "set to start a focus session (the tray, or a program)"},
     {"name": "session.stop_requested", "value": false, "desc": "set to stop the focus session"},
+    {"name": "nudged_at", "value": 0, "desc": "when Proki last spoke up on its own (minutes since 1970)"},
+    {"name": "nudge_gap", "value": 30, "type": "number", "desc": "minutes Proki stays quiet between the questions it asks on its own: one left unanswered makes the wait twice as long"},
     {"name": "focus_goal", "value": 240, "type": "number", "desc": "minutes of focused work you aim for each day"},
     {"name": "focus_lines", "value": "[0.35, 0.5]", "type": {"type": "array", "items": {"type": "number"}}, "desc": "the lines between your focus bands, low to high, 0 to 1: below the first is distraction, above the last focused work"},
     {"name": "note", "type": {"type": "array", "items": {"type": "object", "properties": {"title": {"type": "string"}, "content": {"type": "string"}, "bucket": {"type": "string", "enum": ["Unsorted", "Todo", "Idea", "Thought"]}, "due": {"type": "number"}, "plan_after": {"type": "number"}, "guess": {"type": "string"}, "conf": {"type": "number"}, "urgency": {"type": "number"}, "link": {"type": "string"}}}}, "desc": "what you noted, the first first: its title (none: untitled), its content, bucket (Unsorted, Todo, Idea or Thought), due (when it's sorted), plan_after (when the planner may ask again), jev's guess, conf and urgency (none: not weighed), and link: where it was dealt with, a page's path (none: not yet)"}
   ],
   "signals": [
     {"name": "today", "expr": "time - daytime - (daytime < 240) * 1440", "desc": "minutes since 1970 at the start of today (a day ends at 04:00)"},
+    {"name": "may_nudge", "expr": "time - nudged_at >= nudge_gap", "desc": "whether Proki has been quiet long enough to speak up on its own"},
     {"name": "active", "expr": "ts_max(keys_pressed + mouse_click + mouse_scroll + mouse_move, 3) > 0", "desc": "any key, click, scroll or mouse move in the last 3 minutes"},
     {"name": "engaged", "expr": "ts_mean(active, 2)", "desc": "how much of the last 2 minutes you were active, 0 to 1"},
     {"name": "deep_share", "expr": "ts_mean(depth, 2)", "desc": "how deep the work in focus was over the last 2 minutes, 0 to 1"},

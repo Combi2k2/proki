@@ -166,7 +166,7 @@ async def test_a_programs_detail_goes_state_by_state(tmp_path):
     focusing = next(s for s in detail["states"] if s["name"] == "focusing")
     slipping = next(b for b in focusing["next"] if b["goto"] == "slipping")
     assert [r["name"] for r in slipping["rules"]] == ["session_low_focus", "session_not_recovering"]
-    assert slipping["rules"][0]["lhs"] == "focus_2m" and slipping["conds"] == []
+    assert slipping["rules"][0]["lhs"] == "focus_2m" and [c["expr"] for c in slipping["conds"]] == ["time - slipped_at >= 10"]
     done_yet = next(b for b in focusing["next"] if b["goto"] == "done_yet")
     assert {"expr": "not asked_done", "value": True} in done_yet["conds"]  # the program's own, as written
     starting = next(s for s in detail["states"] if s["name"] == "starting")

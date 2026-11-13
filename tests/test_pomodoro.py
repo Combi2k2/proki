@@ -33,20 +33,22 @@ async def test_a_requested_session_runs_and_stops_when_asked(tmp_path, ui):
     await run(local(5, 10, 0))
     await run(local(5, 10, 1), **{"session.requested": True})
     assert program.current == "focusing" and value("session.active") and not value("session.requested")
-    assert ui.sent[-1]["text"].startswith("Focus session started")
+    assert ui.sent[-1]["text"].startswith("Session on.")
     await run(local(5, 10, 21))
     assert 20 <= value("session.minutes") <= 21
     await run(local(5, 10, 22), **{"session.stop_requested": True})
+    assert ui.sent[-1]["title"] == "Session done" and ui.sent[-1]["text"].startswith("21 minutes of real focus")  # a word on it
+    await run(local(5, 10, 22, 10))
     assert program.current == "idle" and not value("session.active") and not value("session.stop_requested")
 
 
-async def test_slipping_focus_is_poked_once_a_minute(tmp_path, ui):
+async def test_slipping_focus_is_poked_once_in_ten_minutes(tmp_path, ui):
     program, run = session(tmp_path)
     await run(local(5, 10, 0), **{"session.requested": True})
     await run(local(5, 10, 5))
-    await run(local(5, 10, 7, 30), focus_2m=0.1)
-    pokes = [m for m in ui.sent if m["type"] == "poke" and "slipping" in m["text"]]
-    assert len(pokes) == 3  # 10:05:10, then each minute it stays low
+    await run(local(5, 10, 16), focus_2m=0.1)
+    pokes = [m for m in ui.sent if m["type"] == "poke" and m["title"] == "Drifting?"]
+    assert len(pokes) == 2  # 10:05:10, then 10 minutes on while it stays low
 
 
 async def test_past_25_minutes_a_dip_asks_whether_its_done(tmp_path, ui):
@@ -54,7 +56,7 @@ async def test_past_25_minutes_a_dip_asks_whether_its_done(tmp_path, ui):
     await run(local(5, 10, 0), **{"session.requested": True})
     await run(local(5, 10, 30), focus_2m=0.1)
     [asked] = ui.questions()
-    assert asked["context"] == "Your focus has dropped. Is this session done?"
+    assert asked["context"] == "Your focus has dipped. Is this one done?"
     await ui.click("Stop session")
     await run(local(5, 10, 31))
     assert not value("session.active")
@@ -77,7 +79,7 @@ async def test_away_pokes_with_a_sound_and_ten_minutes_end_it(tmp_path, ui):
     assert value("session.active")
     await run(local(5, 10, 15, 30))
     assert program.current == "idle" and not value("session.active")
-    assert ui.sent[-1]["text"].startswith("Your focus session ended")
+    assert ui.sent[-1]["text"].startswith("Your session ended while you were away")
 
 
 async def test_a_session_from_before_a_restart_is_over(tmp_path, ui):
@@ -96,4 +98,10 @@ async def test_after_50_minutes_its_time_to_wrap_up(tmp_path, ui):
     await run(local(5, 10, 49))
     assert not ui.questions()
     await run(local(5, 10, 51))
-    assert ui.questions()[-1]["context"] == "50 minutes of focus. Time to wrap up and take a real break."
+    asked = ui.questions()[-1]
+    assert asked["context"].startswith("50 minutes of focus. Good stuff. Time for a real break")
+    await ui.click("Later")
+    await run(local(5, 11, 15))
+    assert ui.questions()[-1] is asked  # Later: not again for 25 minutes
+    await run(local(5, 11, 17))
+    assert ui.questions()[-1]["context"].startswith("76 minutes of focus")

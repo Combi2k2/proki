@@ -41,7 +41,7 @@ def test_every_shipped_signal_compiles_and_runs():
     global_ = {name for name in signals if top(name)}
     scoped = [*shipped.variables, *shipped.rules]
     assert {s.name for s in [*shipped.inputs, *(s for s in [*shipped.signals, *shipped.variables] if s.scope == "global")]} == global_ == named
-    assert {"answer", "asked_done", "on_shallow", "snoozed_until"} <= {name.split(".")[-1] for name in signals if not top(name)}  # the programs' and states' own
+    assert {"answer", "asked_done", "distracted", "snoozed_until"} <= {name.split(".")[-1] for name in signals if not top(name)}  # the programs' and states' own
     assert {s.full() for s in shipped.rules} == set(Rule.registry) and all(s.scope != "program" or s.program for s in scoped)
     assert signals["focus_history"].persist and signals["focus_history"].window == timedelta(days=7)
 

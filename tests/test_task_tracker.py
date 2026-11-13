@@ -171,7 +171,7 @@ async def test_past_its_estimate_its_checked_on_and_done_is_done(ui, board, trac
     for m in range(42):
         await minute(m)
     check = await asked(ui, 1)
-    assert check["context"] == "Still on “Write the intro”? That's 40 min so far, past its estimate."
+    assert check["context"] == "“Write the intro” is taking longer than planned (40 min so far). That happens. Still on it?"
     await ui.click("Done")
     await minute(42)
     assert [t["status"] for t in board.tasks.current() if t["id"] == intro] == ["done"]
@@ -198,7 +198,7 @@ async def test_back_from_a_break_its_checked_on(ui, board, tracker):
     await minute(1), await minute(2)
     find_variable("active").set(True)  # back
     await minute(3)
-    assert (await asked(ui, 1))["context"] == "Still on “Fix the figures”?"
+    assert (await asked(ui, 1))["context"] == "Welcome back. Still on “Fix the figures”?"
     await ui.click("Still on it")
     await minute(4)
     assert value_of(board, "spent", figures) == 2 and held() == figures  # the minute before, and the wait

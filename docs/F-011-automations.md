@@ -19,8 +19,12 @@ The routines behind every prompt: read them, switch them off, and change them.
 - A program is drawn as a graph you can arrange; the live view shows the state now and when
   it next wakes.
 - Every change is checked before it's kept, and one that breaks something is refused.
-- Proki ships 16 programs (`proki/programs/config/`). One you never changed follows Proki's
+- Proki ships 15 programs (`proki/programs/config/`). One you never changed follows Proki's
   updates; one you changed stays yours. Reset brings it back to its default.
+- The questions Proki asks on its own (a session suggestion, a reminder, a new app's label…)
+  share one quiet gap: `nudge_gap`, 30 minutes by default, in the global settings. One you leave
+  unanswered makes the next wait twice as long. Questions you start yourself, a session's own,
+  and bedtime don't wait for it.
 - Pin a working version as its default, keep editing, and reset back to it; unpin to return
   to Proki's. A pinned program keeps yours through Proki's updates.
 
