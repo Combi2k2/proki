@@ -30,7 +30,7 @@ else
   watcher_python=build/input-venv/bin/python
   watcher_exe=aw-watcher-input
 fi
-uv pip install --python "$watcher_python" -r packaging/input-watcher.txt   # each package at the version it was tried with
+uv pip install --python "$watcher_python" --no-deps -r packaging/input-watcher.txt   # each package at the version it was tried with; the list has them all, so none is looked up again
 "$watcher_python" -m PyInstaller packaging/input-watcher.py --name aw-watcher-input \
   --distpath build/engine/proki-engine --workpath build/input-pyinstaller --specpath build \
   --collect-submodules aw_watcher_afk --collect-submodules pynput --noconfirm

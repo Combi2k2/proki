@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14,       made: "ui/app/target/release/bundle/dmg/*.dmg" }
+          - { os: macos-15,       made: "ui/app/target/release/bundle/dmg/*.dmg" }
           - { os: windows-latest, made: "ui/app/target/release/bundle/nsis/*.exe" }
     runs-on: ${{ matrix.os }}
     env:

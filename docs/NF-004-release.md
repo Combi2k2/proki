@@ -12,7 +12,7 @@ A macOS `.dmg` and a Windows installer, built by CI from a version tag.
 - ActivityWatch's input watcher is frozen separately (its dependencies clash with the engine's)
   and shipped in the app; the launcher installs ActivityWatch if it's missing.
 - The macOS app is ad-hoc signed and verified.
-- CI runs the Python tests and the TypeScript check, then builds on macOS 14 and Windows.
+- CI runs the Python tests and the TypeScript check, then builds on macOS 15 and Windows.
 - Push a `v*` tag for a release that carries both installers; run it by hand for a test build.
 
 ## Limits
