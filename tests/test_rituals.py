@@ -564,7 +564,10 @@ async def test_the_inbox_is_sorted_at_the_time_shutdown_chose(tmp_path, ui):
     add("Unsorted", "a focus timer that learns my rhythm")
     add("Unsorted", "call the bank\nabout the card")  # at once: both in
     assert [n["content"] for n in read("Unsorted")] == ["a focus timer that learns my rhythm", "call the bank\nabout the card"]
-    await run(local(5, 21, 0, 30))
+    for at in range(1, 7):  # jev answers on its own thread: a cycle at a time until both are weighed
+        await run(local(5, 21, 0, 10 * at - 1))
+        if all(n["urgency"] is not None for n in read("Unsorted")):  break
+        await asyncio.sleep(0.05)
     assert [(n["guess"], n["conf"], n["urgency"]) for n in read("Unsorted")] == [("Idea", 0.75, 0.5)] * 2  # guessed as they were noted
     await sort_inbox_at(local(5, 22, 0))  # shutdown's
     await run(local(5, 21, 59, 50), jump=True)
