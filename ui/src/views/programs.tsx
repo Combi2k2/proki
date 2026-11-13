@@ -203,6 +203,23 @@ function Over({ state, title, before, end, onBack, onClose, children }: { state:
   )
 }
 
+/** The automations in groups, each by a tag: the one most have first (`first`), then, among the rest, the one most have first or second, then the one most have at all; what's left is
+ * the last group, with no tag. A group is named by its tag (none: the last). Each group keeps the order given. */
+function grouped<T extends { program: { tags: string[] } }>(items: T[]): { tag: string | null; items: T[] }[] {
+  const groups: { tag: string | null; items: T[] }[] = []
+  let rest = items
+  for (const depth of [1, 2, Infinity]) {
+    const count = new Map<string, number>()
+    rest.forEach(({ program }) => new Set(program.tags.slice(0, depth)).forEach((t) => count.set(t, (count.get(t) ?? 0) + 1)))
+    const [best] = [...count].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
+    if (!best) break
+    const has = ({ program }: T) => program.tags.slice(0, depth).includes(best[0])
+    groups.push({ tag: best[0], items: rest.filter(has) })
+    rest = rest.filter((x) => !has(x))
+  }
+  return rest.length ? [...groups, { tag: null, items: rest }] : groups
+}
+
 function GlobalScope({ reference, onGo, onLoad }: { reference: Reference; onGo: (p: Path) => void; onLoad: () => void }) {
   const { specs, error, setError, change, act } = useSpecs<GlobalSpecs>(null, true, onLoad)
   const [creating, setCreating] = useState(false)
@@ -250,12 +267,17 @@ function GlobalScope({ reference, onGo, onLoad }: { reference: Reference; onGo: 
       </div>
 
       {shown.length === 0 && <p className="text-sm text-muted-foreground">No automation matches.</p>}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3">  {/* each card 270–360px wide: its least ¾ of its most */}
-        {shown.map(({ program }) => (
-          <ProgramCard key={program.name} program={program} tag={tag} onOpen={() => onGo({ program: program.name, state: null })}
-                       onSwitch={(to) => switchOn(program.name, to)} onTag={(t) => setTag(t === tag ? null : t)} />
-        ))}
-      </div>
+      {grouped(shown).map((group, i) => (  // a hairline between the groups, none of them titled: the tag a group is by is a label for a screen reader, and a hover
+        <div key={group.tag ?? "other"} role="group" aria-label={group.tag ? `#${group.tag}` : "Other"} title={group.tag ? `#${group.tag}` : undefined} className="flex flex-col gap-6">
+          {i > 0 && <hr className="border-t" />}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-3">  {/* each card 270–360px wide: its least ¾ of its most */}
+            {group.items.map(({ program }) => (
+              <ProgramCard key={program.name} program={program} tag={tag} onOpen={() => onGo({ program: program.name, state: null })}
+                           onSwitch={(to) => switchOn(program.name, to)} onTag={(t) => setTag(t === tag ? null : t)} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
