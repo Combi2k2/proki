@@ -19,11 +19,11 @@
 
 <a id="download"></a>
 <p align="center">
-  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.3/proki_0.1.3_aarch64.dmg">
+  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.4/Proki_0.1.4_aarch64.dmg">
     <img src="https://img.shields.io/badge/Download-macOS-24292F?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" />
   </a>
   &nbsp;
-  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.3/proki_0.1.3_x64-setup.exe">
+  <a href="https://github.com/Combi2k2/proki/releases/download/v0.1.4/Proki_0.1.4_x64-setup.exe">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" />
   </a>
 </p>
